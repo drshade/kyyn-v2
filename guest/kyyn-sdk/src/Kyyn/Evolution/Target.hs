@@ -107,7 +107,7 @@ record (TargetBinding mappings _ _ encode _ encodeRecipe) (Typed.KnowledgeBase r
   fields <- recordFields shape
   validateMappings fields mappings
   values <- case encoded of Object object -> Right (Keys.toList object); _ -> failure "Target Root must encode a record"
-  unless (sort (map Key.toText (map fst values)) == sort (map fst fields)) (failure "Target Root encoding differs from its shape")
+  unless (sort (map (Key.toText . fst) values) == sort (map fst fields)) (failure "Target Root encoding differs from its shape")
   residual <- traverse (\(name,field) -> do
     value <- required (Key.fromText name) values
     pure (name,RecordedValue field value)) [(name,field) | (name,field) <- fields, name `notElem` map snd mappings]
@@ -160,7 +160,7 @@ envelopeId (RecordedValue shape (Object object))
   | StoredRecord [("id",StoredText),("value",_)] <- canonicalShape shape
   , values <- Keys.toList object
   , sort (map fst values) == ["id","value"]
-  , Just (String name) <- lookup "id" values = either failure Right (parseFactId (name))
+  , Just (String name) <- lookup "id" values = either failure Right (parseFactId name)
 envelopeId _ = failure "Invalid fact envelope"
 
 recipeContext :: FactId -> Either EvolutionFailure a -> Either EvolutionFailure a

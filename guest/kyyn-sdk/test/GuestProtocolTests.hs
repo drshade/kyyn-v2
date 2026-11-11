@@ -218,7 +218,7 @@ call executable value = callRaw executable (Lazy.toStrict (encode value))
 
 callRaw :: (FilePath,[String]) -> Bytes.ByteString -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
 callRaw (executable,arguments) metadata = Process.readProcess (Process.setStdin (Process.byteStringInput
-  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame metadata))))))
+  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame metadata)))))
   (Process.proc executable arguments))
 
 invoke :: (FilePath,[String]) -> Value -> IO Value
