@@ -102,7 +102,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (absent == Right (Right Nothing)) (fail "Absent selection did not return Nothing")
   cacheExists <- doesDirectoryExist cache
   unless (not cacheExists) (fail "Reading an absent candidate created its cache")
-  execute (saveCandidate candidate) >>= right
+  _ <- execute (saveCandidate candidate) >>= right
   ignoreRule <- Bytes.readFile ignoreFile
   unless (ignoreRule == "*\n") (fail "Cache is not self-ignoring")
   Bytes.writeFile ignoreFile "*\n# Preserve authored cache ignore rules\n"
