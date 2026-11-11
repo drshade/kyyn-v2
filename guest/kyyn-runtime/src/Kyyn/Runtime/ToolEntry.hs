@@ -2,7 +2,7 @@
 module Kyyn.Runtime.ToolEntry
   ( toolEntry, exchangeCaptured, exchangeEvidenceList, exchangeEvidenceRead ) where
 
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Agentic.Aeson (fromAeson)
@@ -56,7 +56,7 @@ exchangeEvidenceRead transport requestId connector instanceName key = do
     (Wire.record (instanceFields connector instanceName ++ [("id",Wire.encodeWith identityCodec key)]))
     (eitherCodec (Wire.optionalCodec (evidenceCodec payload)))
 
-instanceFields :: ConnectorIdentity -> Text -> [(String,JSValue)]
+instanceFields :: ConnectorIdentity -> Text -> [(String,Value)]
 instanceFields (ConnectorIdentity plugin connector) instanceName =
   [("plugin",Wire.encodeWith Wire.textCodec plugin),("connectorType",Wire.encodeWith Wire.textCodec connector),
    ("instance",Wire.encodeWith Wire.textCodec instanceName)]

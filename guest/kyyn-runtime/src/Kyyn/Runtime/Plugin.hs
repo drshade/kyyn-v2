@@ -12,7 +12,7 @@ import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 
 withOptionsCodec :: Codec config -> Codec options -> Codec (config, Maybe options)
 withOptionsCodec configCodec optionsCodec = Codec encode decode
@@ -123,12 +123,12 @@ evidenceExchange payloadCodec (ReadEvidence (EvidenceSnapshot snapshot) key) = m
   (record [("snapshot",encodeWith textCodec snapshot),("id",encodeWith identityCodec key)])
   (eitherCodec (optionalCodec (evidenceCodec payloadCodec)))
 
-exchange :: Transport -> Integer -> String -> String -> JSValue -> Codec a -> IO a
+exchange :: Transport -> Integer -> String -> String -> Value -> Codec a -> IO a
 exchange transport identity capability method arguments codec = do
   (value,body) <- exchangeBody transport identity capability method arguments B.empty
   if B.null body then either fail pure (decodeWith codec value) else fail "Unexpected raw body"
 
-exchangeBody :: Transport -> Integer -> String -> String -> JSValue -> B.ByteString -> IO (JSValue,B.ByteString)
+exchangeBody :: Transport -> Integer -> String -> String -> Value -> B.ByteString -> IO (Value,B.ByteString)
 exchangeBody transport identity capability method arguments body = do
   writeValueFrame transport (record [("tag",encodeWith stringCodec "HostRequest"),("id",encodeWith integerCodec identity),
     ("capability",encodeWith stringCodec capability),("method",encodeWith stringCodec method),("arguments",arguments)]) body
@@ -140,7 +140,7 @@ exchangeBody transport identity capability method arguments body = do
     if tag == "HostResponse" && actual == identity then (,) <$> field "result" (Codec id Right) values <*> pure raw
     else Left "Unexpected host response tag or request ID"
 
-emit :: Transport -> JSValue -> IO ()
+emit :: Transport -> Value -> IO ()
 emit transport value = writeValueFrame transport value B.empty
 
 identityCodec :: Codec EvidenceId

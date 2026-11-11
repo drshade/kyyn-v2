@@ -12,7 +12,7 @@ import Kyyn.Plugin.Sink (Sink, SinkError)
 import Kyyn.Types.Diagnostic (ValidationReport)
 import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.Runtime.Contract (runtimeCodec, fromWire)
+import Kyyn.Runtime.Contract (runtimeCodec)
 import Kyyn.Runtime.Entry (Adapter(..), pureAdapter)
 import Kyyn.Runtime.PluginHost (executeLoginAction)
 import Kyyn.Runtime.Sink (executeSinkAction)
@@ -25,7 +25,7 @@ configurationEntry name sources validate = do
   let run value = do
         configuration <- decode config value
         report <- encodeReportValue (validate configuration)
-        pure (toAeson (fromWire report))
+        pure report
   pure (pureAdapter (Invocation name (describe sources config)) run)
 
 loginEntry :: forall config. Contract config => Text -> [Text]

@@ -9,8 +9,10 @@ module Kyyn.Evolution.Target
 import Control.Monad (foldM, unless)
 import Data.List (sort, nub)
 import Data.Text (Text)
-import qualified Data.Text as Text
-import Text.JSON.Types (JSValue(..), fromJSObject, toJSObject, fromJSString)
+import Data.Aeson (Value(..), toJSON)
+import qualified Data.Aeson.KeyMap as Keys
+import Data.Foldable (toList)
+import qualified Data.Aeson.Key as Key
 import Kyyn.Edit (Edit)
 import Kyyn.Edit.Internal (execStateT)
 import Kyyn.Types.Fact (Fact(..), FactId(..), parseFactId)
@@ -83,7 +85,7 @@ project (TargetBinding mappings shape decode _ decodeRecipe _) (StoredSnapshot r
     (failure "Stored collections not declared in target; remove or rename them explicitly")
   values <- traverse (\(name,expected) -> do
     value <- required name residual
-    checkedValue expected value >>= \encoded -> pure (Text.unpack name,encoded)) residualFields
+    checkedValue expected value >>= \encoded -> pure (Key.fromText name,encoded)) residualFields
   populated <- traverse (\(logical,field) -> do
     expected <- required field fields
     element <- case expected of StoredList inner -> Right inner; _ -> failure "Target collection must be a list"
@@ -93,8 +95,8 @@ project (TargetBinding mappings shape decode _ decodeRecipe _) (StoredSnapshot r
       actual <- envelopeId value
       unless (identity == actual) (failure "Fact envelope identity differs from membership")
       checkedValue element value) members
-    pure (Text.unpack field,JSArray encoded)) mappings
-  root <- decode (RecordedValue (canonicalShape shape) (JSObject (toJSObject (values ++ populated))))
+    pure (Key.fromText field,toJSON encoded)) mappings
+  root <- decode (RecordedValue (canonicalShape shape) (Object (Keys.fromList (values ++ populated))))
   checkIds recipes
   states <- traverse (\(Fact identity value) -> Fact identity <$> recipeContext identity (decodeRecipe value)) recipes
   pure (Typed.KnowledgeBase root states)
@@ -104,19 +106,19 @@ record (TargetBinding mappings _ _ encode _ encodeRecipe) (Typed.KnowledgeBase r
   RecordedValue shape encoded <- encode root
   fields <- recordFields shape
   validateMappings fields mappings
-  values <- case encoded of JSObject object -> Right (fromJSObject object); _ -> failure "Target Root must encode a record"
-  unless (sort (map Text.pack (map fst values)) == sort (map fst fields)) (failure "Target Root encoding differs from its shape")
+  values <- case encoded of Object object -> Right (Keys.toList object); _ -> failure "Target Root must encode a record"
+  unless (sort (map Key.toText (map fst values)) == sort (map fst fields)) (failure "Target Root encoding differs from its shape")
   residual <- traverse (\(name,field) -> do
-    value <- required (Text.unpack name) values
+    value <- required (Key.fromText name) values
     pure (name,RecordedValue field value)) [(name,field) | (name,field) <- fields, name `notElem` map snd mappings]
   collections <- traverse (\(logical,field) -> do
     fieldShape <- required field fields
-    value <- required (Text.unpack field) values
+    value <- required (Key.fromText field) values
     members <- case (fieldShape,value) of
-      (StoredList element,JSArray entries) -> traverse (\entry -> do
+      (StoredList element,Array entries) -> traverse (\entry -> do
         let recorded = RecordedValue element entry
         identity <- envelopeId recorded
-        pure (Fact identity recorded)) entries
+        pure (Fact identity recorded)) (toList entries)
       _ -> failure "Target collection encoding is not a list"
     checkIds members
     pure (logical,members)) mappings
@@ -124,7 +126,7 @@ record (TargetBinding mappings _ _ encode _ encodeRecipe) (Typed.KnowledgeBase r
   states <- traverse (\(Fact identity state) -> Fact identity <$> recipeContext identity (encodeRecipe state)) recipes
   pure (StoredSnapshot residual collections states)
 
-checkedValue :: StoredShape -> RecordedValue -> Either EvolutionFailure JSValue
+checkedValue :: StoredShape -> RecordedValue -> Either EvolutionFailure Value
 checkedValue expected (RecordedValue actual value)
   | canonicalShape expected == canonicalShape actual = Right value
   | otherwise = failure "Stored value shape differs from target shape"
@@ -154,11 +156,11 @@ checkIds values = do
   mapM_ (\(FactId name) -> either failure (const (Right ())) (parseFactId name)) ids
 
 envelopeId :: RecordedValue -> Either EvolutionFailure FactId
-envelopeId (RecordedValue shape (JSObject object))
+envelopeId (RecordedValue shape (Object object))
   | StoredRecord [("id",StoredText),("value",_)] <- canonicalShape shape
-  , values <- fromJSObject object
+  , values <- Keys.toList object
   , sort (map fst values) == ["id","value"]
-  , Just (JSString name) <- lookup "id" values = either failure Right (parseFactId (Text.pack (fromJSString name)))
+  , Just (String name) <- lookup "id" values = either failure Right (parseFactId (name))
 envelopeId _ = failure "Invalid fact envelope"
 
 recipeContext :: FactId -> Either EvolutionFailure a -> Either EvolutionFailure a

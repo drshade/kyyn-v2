@@ -9,10 +9,22 @@ import qualified Kyyn.Types.Contract as Contract
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
-import Text.JSON.Types (JSValue(..), toJSString, fromJSString)
+import Data.Aeson (Value(..))
+import qualified Agentic.Value as Agentic
+import Kyyn.Contract.Wire (checkedToWire, fromWire)
+import Data.Either (isLeft)
+import qualified Data.Text as Text
 
 main :: IO ()
 main = do
+  assert "model bridge rejects duplicate fields before Aeson conversion"
+    (isLeft (checkedToWire (Agentic.Object [("a",Agentic.Bool True),("a",Agentic.Bool False)])))
+  assert "model bridge rejects nonfinite numbers"
+    (isLeft (checkedToWire (Agentic.Number (0/0))) && isLeft (checkedToWire (Agentic.Number (1/0))))
+  assert "model bridge retains arbitrary integer precision"
+    (fmap fromWire (checkedToWire (Agentic.Integer (10 ^ (100 :: Int) + 1))) ==
+      Right (Agentic.Integer (10 ^ (100 :: Int) + 1)))
+
   let ident = RecipeId "syncTodos"
       key = FactId "syncTodos"
       definition = openRecipe unitRecipeType "Review relevant evidence"
@@ -77,7 +89,7 @@ main = do
     Right (KnowledgeBase 7 [secondValue,Fact key (storeRecipe stringDefinition "Fresh")]))
   let malformed = case secondValue of
         Fact name (StoredRecipe method typeName fingerprint _) ->
-          Fact name (StoredRecipe method typeName fingerprint (JSArray []))
+          Fact name (StoredRecipe method typeName fingerprint (Array mempty))
       withMalformed = KnowledgeBase (7 :: Integer) [firstValue, malformed]
   assert "editing a recipe does not decode another recipe's state" (execute
     (updateRecipe boolType ident boolDefinition Right) withMalformed == Right withMalformed)
@@ -86,15 +98,15 @@ main = do
   putStrLn "Typed recipe creation, migration, isolation, removal and atomic refusal passed."
 
 boolType :: RecipeType Bool
-boolType = RecipeType "Flags.State" "flags-contract" StoredBool JSBool decode
+boolType = RecipeType "Flags.State" "flags-contract" StoredBool Bool decode
   where
-    decode (JSBool value) = Right value
+    decode (Bool value) = Right value
     decode _ = Left "Expected Bool"
 
 stringType :: RecipeType String
-stringType = RecipeType "Notes.State" "notes-contract" StoredText (JSString . toJSString) decode
+stringType = RecipeType "Notes.State" "notes-contract" StoredText (String . Text.pack) decode
   where
-    decode (JSString value) = Right (fromJSString value)
+    decode (String value) = Right (Text.unpack value)
     decode _ = Left "Expected String"
 
 renamedType :: RecipeType state -> RecipeType state

@@ -1,24 +1,26 @@
-module Kyyn.Contract.Wire (toWire, fromWire) where
+module Kyyn.Contract.Wire (toWire, fromWire, checkedToWire) where
 
 import qualified Agentic.Value as A
-import qualified Data.Text as Text
-import Text.JSON.Types
+import Agentic.Aeson (toAeson, fromAeson)
+import Data.Aeson (Value)
+import Data.List (nub)
 
-toWire :: A.Value -> JSValue
-toWire value = case value of
-  A.Null -> JSNull
-  A.Bool b -> JSBool b
-  A.String text -> JSString (toJSString (Text.unpack text))
-  A.Integer n -> JSRational False (fromInteger n)
-  A.Number n -> JSRational False (toRational n)
-  A.Array values -> JSArray (map toWire values)
-  A.Object values -> JSObject (toJSObject [(Text.unpack name,toWire inner) | (name,inner) <- values])
+toWire :: A.Value -> Value
+toWire = either error id . checkedToWire
 
-fromWire :: JSValue -> A.Value
-fromWire value = case value of
-  JSNull -> A.Null
-  JSBool b -> A.Bool b
-  JSString text -> A.String (Text.pack (fromJSString text))
-  JSRational _ n -> A.Number (fromRational n)
-  JSArray values -> A.Array (map fromWire values)
-  JSObject fields -> A.Object [(Text.pack name,fromWire inner) | (name,inner) <- fromJSObject fields]
+fromWire :: Value -> A.Value
+fromWire = fromAeson
+
+-- Check association lists before KeyMap construction can discard duplicate keys,
+-- and floating-point values before converting them to Scientific.
+checkedToWire :: A.Value -> Either String Value
+checkedToWire value = check value >> pure (toAeson value)
+  where
+    check (A.Number n)
+      | isNaN n || isInfinite n = Left "Expected finite model number"
+    check (A.Array values) = mapM_ check values
+    check (A.Object values)
+      | length names /= length (nub names) = Left "duplicate object keys"
+      | otherwise = mapM_ (check . snd) values
+      where names = map fst values
+    check _ = Right ()

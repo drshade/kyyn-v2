@@ -1,23 +1,22 @@
 module Kyyn.Plumbing.Protocol.ModelTurn (decodeRequest, encodeReply, failureMessage) where
 
+import Kyyn.Types.Wire (validateWire)
 import qualified Agentic.Runtime as A
-import Data.Aeson (Value, encode, eitherDecodeStrict)
+import Data.Aeson (Value)
 import Data.Aeson.Types (Parser)
-import qualified Data.ByteString.Lazy as Lazy
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Model (ModelFailure(..))
 import Kyyn.Domain.Secret (secretNameText)
 import qualified Kyyn.Runtime.Json as Wire
 import qualified Kyyn.Runtime.ModelWire as Wire
 
 decodeRequest :: Value -> Parser A.Conversation
-decodeRequest value = either fail pure $ Wire.parseValue (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value))))
-  >>= Wire.decodeWith Wire.conversationCodec
+decodeRequest value = either fail pure $ validateWire value >> Wire.decodeWith Wire.conversationCodec value
 
 encodeReply :: Either ModelFailure A.Turn -> Either String Value
-encodeReply reply = Wire.printValue (Wire.encodeWith Wire.replyCodec (either (Left . failureMessage) Right reply))
-  >>= eitherDecodeStrict . Text.encodeUtf8 . Text.pack
+encodeReply reply = do
+  let value = Wire.encodeWith Wire.replyCodec (either (Left . failureMessage) Right reply)
+  validateWire value
+  pure value
 
 failureMessage :: ModelFailure -> String
 failureMessage failure = case failure of

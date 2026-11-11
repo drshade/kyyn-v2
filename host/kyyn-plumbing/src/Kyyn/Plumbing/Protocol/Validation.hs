@@ -1,7 +1,8 @@
 module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport) where
 
+import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
-import Data.Aeson (Value, Object, eitherDecodeStrict, withObject, withArray, parseJSON, (.:))
+import Data.Aeson (Value, Object, withObject, withArray, parseJSON, (.:))
 import Data.Aeson.Types (Parser, parseEither)
 import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
@@ -12,7 +13,7 @@ import qualified Data.Text as Text
 import Kyyn.Domain.Diagnostic
 
 decodeReport :: Bytes.ByteString -> Either String ValidationReport
-decodeReport bytes = eitherDecodeStrict bytes >>= parseEither parseReport
+decodeReport bytes = decodeWire bytes >>= parseEither parseReport
 
 parseReport :: Value -> Parser ValidationReport
 parseReport = withArray "ValidationReport" (fmap ValidationReport . traverse diagnostic . toList)

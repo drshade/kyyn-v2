@@ -2,8 +2,9 @@ module Kyyn.Plumbing.Protocol.PluginMessages
   ( PluginFrame(..), PluginCall(..), decodeFrame, decodeCall, decodeFrameWith, encodeResponse, initialInput
   , parseResult, parseChanges, changesShape, evidenceValue, success, failure ) where
 
+import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
-import Data.Aeson (Value(..), Object, object, (.=), (.:), eitherDecodeStrict, encode, withObject, withArray, parseJSON)
+import Data.Aeson (Value(..), Object, object, (.=), (.:), encode, withObject, withArray, parseJSON)
 import Data.Aeson.Types (Parser, parseEither)
 import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
@@ -34,7 +35,7 @@ decodeCall capability method arguments = case (capability, method) of
   _ -> fail "Unsupported plugin capability or method"
 
 decodeFrameWith :: (String -> String -> Value -> Parser call) -> Bytes.ByteString -> Either String (PluginFrame call)
-decodeFrameWith parseCall bytes = eitherDecodeStrict bytes >>= parseEither (withObject "plugin frame" $ \o -> do
+decodeFrameWith parseCall bytes = decodeWire bytes >>= parseEither (withObject "plugin frame" $ \o -> do
   tag <- o .: "tag"
   case tag :: String of
     "Completed" -> exactFields ["tag","result"] o >> Completed <$> o .: "result"

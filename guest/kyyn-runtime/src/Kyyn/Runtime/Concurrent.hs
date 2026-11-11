@@ -7,17 +7,17 @@ module Kyyn.Runtime.Concurrent
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Transport
 import Kyyn.Types.Program
 import Kyyn.Types.Plugin (EvidenceSnapshot(..))
 
-type Reply = (JSValue,Bytes.ByteString)
-data WireRequest = WireRequest String String JSValue Bytes.ByteString
+type Reply = (Value,Bytes.ByteString)
+data WireRequest = WireRequest String String Value Bytes.ByteString
 data Exchange a = Exchange WireRequest (Reply -> Either String a)
 
-metadataExchange :: String -> String -> JSValue -> Codec a -> Exchange a
+metadataExchange :: String -> String -> Value -> Codec a -> Exchange a
 metadataExchange capability method arguments codec = Exchange
   (WireRequest capability method arguments Bytes.empty) $ \(value,body) ->
     if Bytes.null body then decodeWith codec value else Left "Unexpected raw body"
@@ -149,14 +149,14 @@ exchangeRound transport grouped requests = do
         pure [(result,raw)]
       _ -> Left "Invalid singleton exchange"
 
-requestPart :: Bool -> Integer -> WireRequest -> JSValue
+requestPart :: Bool -> Integer -> WireRequest -> Value
 requestPart grouped identity (WireRequest capability method arguments body) = record
   ([("id",encodeWith integerCodec identity),("capability",encodeWith stringCodec capability),
     ("method",encodeWith stringCodec method),("arguments",arguments)] ++
     if grouped then [("bodyLength",encodeWith integerCodec (toInteger (Bytes.length body)))]
       else [("tag",encodeWith stringCodec "HostRequest")])
 
-splitReplies :: [Integer] -> [JSValue] -> Bytes.ByteString -> Either String [Reply]
+splitReplies :: [Integer] -> [Value] -> Bytes.ByteString -> Either String [Reply]
 splitReplies [] [] raw | Bytes.null raw = Right []
                       | otherwise = Left "Trailing batch response body"
 splitReplies (identity:rest) (value:values) raw = do
@@ -170,5 +170,5 @@ splitReplies (identity:rest) (value:values) raw = do
   ((result,body):) <$> splitReplies rest values remaining
 splitReplies _ _ _ = Left "Incomplete batch reply"
 
-identityCodec :: Codec JSValue
+identityCodec :: Codec Value
 identityCodec = Codec id Right

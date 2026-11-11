@@ -2,6 +2,7 @@
 module Kyyn.Runtime.Guest (Entry, targetEvolutionEntry, recipeStateEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
+import Kyyn.Types.Wire (decodeWire)
 import Kyyn.Evolution (RecipeDefinition)
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
@@ -9,13 +10,13 @@ import qualified Data.ByteString as Bytes
 import Data.List (nub)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Agentic.Aeson (toAeson, fromAeson)
+import Agentic.Aeson (fromAeson)
 import Kyyn.Contract
 import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Diagnostic (ValidationReport)
 import Kyyn.Types.Query (Query)
-import Kyyn.Runtime.Contract (runtimeCodec, fromWire, toWire)
+import Kyyn.Runtime.Contract (runtimeCodec)
 import Kyyn.Plugin (CapturedRead)
 import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
 import Kyyn.Runtime.Plugin (executeCapturedReadAction)
@@ -37,7 +38,7 @@ validationEntry metadata sources validate = do
       run value = do
         root <- either (Left . Text.unpack) Right (compiled.codec.decode (fromAeson value))
         report <- encodeReportValue (validate root)
-        pure (toAeson (fromWire report))
+        pure report
   pure (pureEntry (ValidatorEntry "validate" description) run)
 
 queryEntry :: forall root args result. (Contract root, Contract args, Contract result)
@@ -54,8 +55,8 @@ queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (r
       run value = do
         QueryInvocation rootValue argumentsValue <- Json.parseEither Json.parseJSON value
         reply <- executeQuery (runtimeCodec root.codec) (runtimeCodec arguments.codec) (runtimeCodec result.codec)
-          selected (toWire (fromAeson rootValue)) (toWire (fromAeson argumentsValue))
-        pure (toAeson (fromWire reply))
+          selected rootValue argumentsValue
+        pure reply
   pure (pureEntry description run)
 
 capturedReadEntry :: forall args payload result. (Contract args, Contract payload, Contract result)
@@ -129,7 +130,7 @@ runGuest exports selected = do
   withTransport $ \transport -> do
     (metadata,body) <- readFrame transport
     unless (Bytes.null body) (fail "Unexpected invocation body")
-    request <- either fail pure (Json.eitherDecodeStrict' metadata)
+    request <- either fail pure (decodeWire metadata)
     case request of
       Describe -> writeReply transport (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
       Invoke name argument -> case [run | (selectedName,run) <- concatMap entryActions built, selectedName == name] of

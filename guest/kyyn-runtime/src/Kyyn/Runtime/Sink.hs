@@ -37,7 +37,7 @@ executeSink :: Codec config -> Codec options -> Codec input -> Codec result -> o
 executeSink configCodec optionsCodec inputCodec resultCodec defaults publish = withTransport $ \transport -> do
   request <- readJson transport >>= either fail pure . parseValue
   case decodeWith stringCodec request of
-    Right "Defaults" -> either fail (writeJson transport) (printValue (encodeWith optionsCodec defaults))
+    Right "Defaults" -> writeValue transport (encodeWith optionsCodec defaults)
     _ -> do
       members <- either fail pure (fields ["config","options","input"] request)
       config <- either fail pure (field "config" configCodec members)

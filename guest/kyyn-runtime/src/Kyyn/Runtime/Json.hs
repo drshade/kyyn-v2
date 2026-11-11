@@ -4,87 +4,43 @@ module Kyyn.Runtime.Json
   , record, fields, field, tagged, variant, at
   ) where
 
-import Data.List (sort)
-import Text.JSON.Types
-import Text.JSON.String
+import Data.List (sort, nub)
+import Data.Aeson (Value(..), toJSON)
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as Keys
+import Data.Foldable (toList)
+import qualified Data.ByteString as Bytes
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import Kyyn.Types.Wire (parseWire, encodeWire, scalarText)
 
-data Codec a = Codec (a -> JSValue) (JSValue -> Either String a)
+data Codec a = Codec (a -> Value) (Value -> Either String a)
 
-encodeWith :: Codec a -> a -> JSValue
+encodeWith :: Codec a -> a -> Value
 encodeWith (Codec enc _) = enc
 
-decodeWith :: Codec a -> JSValue -> Either String a
+decodeWith :: Codec a -> Value -> Either String a
 decodeWith (Codec _ dec) = dec
 
-parseValue :: String -> Either String JSValue
-parseValue input = runGetJSON readJSValue input >>= profile
+parseValue :: String -> Either String Value
+parseValue input = scalarText input >>= parseWire . T.encodeUtf8
 
-printValue :: JSValue -> Either String String
-printValue value = do
-  checked <- profile value
-  pure (showJSValue checked "")
+printValue :: Value -> Either String String
+printValue value = T.unpack . T.decodeUtf8 . Bytes.concat <$> printChunks value
 
--- Validate and encode incrementally. String escaping remains the JSON library's
--- responsibility; only container punctuation is emitted here.
-printChunks :: JSValue -> [Either String String]
-printChunks JSNull = [Left "null is outside the wire profile"]
-printChunks (JSRational _ _) = [Left "numbers must use strings"]
-printChunks (JSBool value) = [Right (showJSValue (JSBool value) "")]
-printChunks (JSString value) = stringChunks (fromJSString value)
-printChunks (JSArray values) = Right "[" : separated (map printChunks values) ++ [Right "]"]
-printChunks (JSObject object) = Right "{" : separated (members [] (fromJSObject object)) ++ [Right "}"]
-  where
-    members _ [] = []
-    members seen ((key,value):rest)
-      | key `elem` seen = members seen rest
-      | otherwise = (stringChunks key ++ Right ":" : printChunks value) : members (key:seen) rest
-
-separated :: [[Either String String]] -> [Either String String]
-separated [] = []
-separated [value] = value
-separated (value:rest) = value ++ Right "," : separated rest
-
-stringChunks :: String -> [Either String String]
-stringChunks value = Right "\"" : parts value
-  where
-    parts [] = [Right "\""]
-    parts characters =
-      let (part,rest) = splitAt 1024 characters
-          encoded = do
-            checked <- scalarText part
-            let quoted = showJSValue (JSString (toJSString checked)) ""
-            pure (take (length quoted - 2) (drop 1 quoted))
-      in encoded : parts rest
-
-profile :: JSValue -> Either String JSValue
-profile JSNull = Left "null is outside the wire profile"
-profile (JSRational _ _) = Left "numbers must use strings"
-profile (JSBool b) = Right (JSBool b)
-profile (JSString s) = JSString . toJSString <$> scalarText (fromJSString s)
-profile (JSArray values) = JSArray <$> mapM profile values
-profile (JSObject obj) = do
-  retained <- mapM checkField (firstKeys [] (fromJSObject obj))
-  pure (JSObject (toJSObject retained))
-  where
-    checkField (key, value) = (,) <$> scalarText key <*> at key (profile value)
-    firstKeys _ [] = []
-    firstKeys seen ((key,value):rest)
-      | key `elem` seen = firstKeys seen rest
-      | otherwise = (key,value) : firstKeys (key:seen) rest
-
-scalarText :: String -> Either String String
-scalarText value
-  | any (\c -> c >= '\xD800' && c <= '\xDFFF') value = Left "surrogate character is outside the wire profile"
-  | otherwise = Right value
+printChunks :: Value -> Either String [Bytes.ByteString]
+printChunks = encodeWire
 
 at :: String -> Either String a -> Either String a
 at location = either (Left . ((location ++ ": ") ++)) Right
 
 stringCodec :: Codec String
-stringCodec = Codec (JSString . toJSString) decodeString
+stringCodec = Codec encodeString decodeString
   where
-    decodeString (JSString s) = scalarText (fromJSString s)
+    encodeString characters = case scalarText characters of
+      Left message -> error message
+      Right text -> String text
+    decodeString (String s) = Right (T.unpack s)
     decodeString _ = Left "expected string"
 
 integerCodec :: Codec Integer
@@ -97,24 +53,22 @@ integerCodec = Codec (encodeWith stringCodec . show) decodeInteger
         _ -> Left "expected canonical integer string"
 
 textCodec :: Codec T.Text
-textCodec = Codec (encodeWith stringCodec . T.unpack) decodeText
+textCodec = Codec String decodeText
   where
-    decodeText value = do
-      characters <- decodeWith stringCodec value
-      let packed = T.pack characters
-      packed `seq` Right packed
+    decodeText (String text) = Right text
+    decodeText _ = Left "expected string"
 
 boolCodec :: Codec Bool
-boolCodec = Codec JSBool decodeBool
+boolCodec = Codec Bool decodeBool
   where
-    decodeBool (JSBool b) = Right b
+    decodeBool (Bool b) = Right b
     decodeBool _ = Left "expected boolean"
 
 listCodec :: Codec a -> Codec [a]
-listCodec codec = Codec (JSArray . map (encodeWith codec)) decodeList
+listCodec codec = Codec (toJSON . map (encodeWith codec)) decodeList
   where
-    decodeList (JSArray values) = sequence
-      [at ("[" ++ show i ++ "]") (decodeWith codec value) | (i,value) <- zip [0 :: Int ..] values]
+    decodeList (Array values) = sequence
+      [at ("[" ++ show i ++ "]") (decodeWith codec value) | (i,value) <- zip [0 :: Int ..] (toList values)]
     decodeList _ = Left "expected list"
 
 optionalCodec :: Codec a -> Codec (Maybe a)
@@ -129,28 +83,31 @@ optionalCodec codec = Codec enc dec
         ("Some", Just a) -> Just <$> at "Some.value" (decodeWith codec a)
         _ -> Left "expected None or Some with one value"
 
-record :: [(String, JSValue)] -> JSValue
-record = JSObject . toJSObject
+record :: [(String, Value)] -> Value
+record values
+  | length names /= length (nub names) = error "duplicate record keys"
+  | otherwise = Object (Keys.fromList [(Key.fromText (either error id (scalarText key)),value) | (key,value) <- values])
+  where names = map fst values
 
-fields :: [String] -> JSValue -> Either String [(String, JSValue)]
-fields expected (JSObject obj)
+fields :: [String] -> Value -> Either String [(String, Value)]
+fields expected (Object obj)
   | sort expected == sort (map fst actual) = Right actual
   | otherwise = Left ("expected fields " ++ show expected ++ "; received " ++ show (map fst actual))
-  where actual = fromJSObject obj
+  where actual = [(Key.toString key,value) | (key,value) <- Keys.toList obj]
 fields _ _ = Left "expected object"
 
-field :: String -> Codec a -> [(String, JSValue)] -> Either String a
+field :: String -> Codec a -> [(String, Value)] -> Either String a
 field name codec values = at name $ case lookup name values of
   Nothing -> Left "missing field"
   Just value -> decodeWith codec value
 
-tagged :: String -> Maybe JSValue -> JSValue
+tagged :: String -> Maybe Value -> Value
 tagged name Nothing = record [("tag", encodeWith stringCodec name)]
 tagged name (Just value) = record [("tag", encodeWith stringCodec name), ("value", value)]
 
-variant :: JSValue -> Either String (String, Maybe JSValue)
-variant (JSObject obj) = do
-  let values = fromJSObject obj
+variant :: Value -> Either String (String, Maybe Value)
+variant (Object obj) = do
+  let values = [(Key.toString key,value) | (key,value) <- Keys.toList obj]
   name <- field "tag" stringCodec values
   case sort (map fst values) of
     ["tag"] -> Right (name, Nothing)

@@ -6,7 +6,7 @@ import qualified Agentic.Runtime as A
 import qualified Agentic.Schema as S
 import qualified Agentic.Value as A
 import Kyyn.Runtime.Json
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 
 mapped :: (a -> b) -> (b -> a) -> Codec a -> Codec b
 mapped forward backward codec = Codec (encodeWith codec . backward) (fmap forward . decodeWith codec)
@@ -18,7 +18,7 @@ pairCodec left a right b = Codec
     fs <- fields [left,right] v
     (,) <$> field left a fs <*> field right b fs)
 
-payload :: String -> Codec a -> a -> JSValue
+payload :: String -> Codec a -> a -> Value
 payload name codec = tagged name . Just . encodeWith codec
 
 -- Library values include raw provider responses, independent of public KB schemas.

@@ -206,11 +206,19 @@ check executable = do
     object ["operation" .= ("describe" :: String), "argument" .= root]] $ \requestValue -> do
       (status,_,_) <- call executable requestValue
       unless (status /= ExitSuccess) (fail "Malformed invocation accepted")
+  forM_ ["{\"operation\":\"describe\",\"operation\":\"describe\"}",
+    "{\"operation\":\"describe\",\"\\u006fperation\":\"describe\"}",
+    "{\"operation\":\"invoke\",\"entry\":\"validate\",\"argument\":{\"items\":[{\"id\":\"a\",\"value\":{\"amount\":\"12.34\",\"amount\":\"12.34\"}}]}}"] $ \metadata -> do
+      (status,_,_) <- callRaw executable metadata
+      unless (status /= ExitSuccess) (fail "Duplicate-key invocation accepted")
   putStrLn "Compiled guest describe/invoke and rejection checks passed."
 
 call :: (FilePath,[String]) -> Value -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
-call (executable,arguments) value = Process.readProcess (Process.setStdin (Process.byteStringInput
-  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value)))))))
+call executable value = callRaw executable (Lazy.toStrict (encode value))
+
+callRaw :: (FilePath,[String]) -> Bytes.ByteString -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
+callRaw (executable,arguments) metadata = Process.readProcess (Process.setStdin (Process.byteStringInput
+  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame metadata))))))
   (Process.proc executable arguments))
 
 invoke :: (FilePath,[String]) -> Value -> IO Value

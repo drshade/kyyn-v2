@@ -6,7 +6,7 @@ import Agentic.Schema (Schema)
 import qualified Agentic.Value as A
 import qualified Data.Text as Text
 import Kyyn.Runtime.Json
-import Text.JSON.Types (JSValue(..))
+import Data.Aeson (Value(..))
 
 -- | Exact basis points on the guest wire; reject invalid input before clamping.
 probabilityCodec :: Codec Probability
@@ -27,10 +27,10 @@ modelProbabilityCodec = Codec encode decode
   where
     A.Codec _ encodeProbability decodeProbability = upstream
     encode p = case encodeProbability p of
-      A.Number n -> JSRational False (toRational n)
+      A.Number n -> Number (realToFrac n)
       _ -> error "Upstream Probability codec did not encode a number"
-    decode (JSRational _ r)
+    decode (Number r)
       | isNaN n || isInfinite n = Left "Expected finite probability"
       | otherwise = either (Left . Text.unpack) Right (decodeProbability (A.Number n))
-      where n = fromRational r
+      where n = realToFrac r
     decode _ = Left "Expected numeric model probability"

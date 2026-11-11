@@ -6,7 +6,6 @@ import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON)
 import Data.Aeson.Types (parseEither, parseJSON)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (sort)
-import Agentic.Aeson (toAeson)
 import Kyyn.Runtime.Entry (Entry, pureEntry)
 import Kyyn.Types.Guest (GuestEntry(..), EvolutionContracts(..), describeContract)
 import Kyyn.Types.Evolution (Rationale(..))
@@ -16,7 +15,6 @@ import Kyyn.Runtime.Evolution (knowledgeBaseCodec, rejectionValue)
 import Kyyn.Recipe.Evolution (RecipeEvolution(..))
 import Control.Monad.Trans.State.Strict (StateT(..), runStateT)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Runtime.Contract (fromWire)
 import Control.Monad (unless)
 import qualified Data.Text as Text
 import Kyyn.Contract
@@ -118,11 +116,11 @@ targetEntry name (metadata,sources) recipes recipeBased choose = do
         evolution <- choose argument
         input <- fromSnapshotWire snapshot
         case evaluateEvolution binding (Rationale explanation []) evolution input of
-          Left rejection -> toAeson . fromWire <$> rejectionValue rejection
+          Left rejection -> rejectionValue rejection
           Right (result,observations) -> do
             steps <- traverse encodeObservation observations
             pure (object ["tag" .= String "Succeeded", "value" .= object
-              ["after" .= toAeson (fromWire (Wire.encodeWith codec result)), "steps" .= steps]])
+              ["after" .= Wire.encodeWith codec result, "steps" .= steps]])
   pure (pureEntry (EvolutionEntry name selected) run)
   where
     encodeObservation (Observation origin (Rationale explanation evidence) before after) = do

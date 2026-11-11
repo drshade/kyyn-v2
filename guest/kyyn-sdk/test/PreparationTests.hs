@@ -8,7 +8,7 @@ import Control.Monad (unless)
 import Data.Either (isLeft)
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Text.JSON.Types (JSValue(..))
+import Data.Aeson (Value(..))
 import Kyyn.Contract (Contract)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
@@ -40,8 +40,8 @@ main = do
       reason = Rationale "Explicit migration" []
       field = TargetField "total" :: TargetField [Fact New] Integer
       recipe = RecipeDefinition (OpenAgent "new")
-        (RecipeType "New.State" "target" StoredBool JSBool
-          (\value -> case value of JSBool result -> Right result; _ -> Left "expected boolean"))
+        (RecipeType "New.State" "target" StoredBool Bool
+          (\value -> case value of Bool result -> Right result; _ -> Left "expected boolean"))
       action = do
         migrateCollection reason "people" target convert
         values <- readCollection "people"

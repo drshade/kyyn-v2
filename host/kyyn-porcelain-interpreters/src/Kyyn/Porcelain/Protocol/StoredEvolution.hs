@@ -3,9 +3,10 @@
 -- or historical contract participates in evaluation or projection verification.
 module Kyyn.Porcelain.Protocol.StoredEvolution (executeStoredEvolution) where
 
+import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (Value, Object, object, (.=), (.:), withObject, withArray, eitherDecodeStrict')
+import Data.Aeson (Value, Object, object, (.=), (.:), withObject, withArray)
 import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.Aeson.Key (Key)
@@ -75,7 +76,7 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
       let Rationale explanation _ = reason
       bytes <- ExceptT (Right <$> executeEntry entry (object (["snapshot" .= wire,"explanation" .= explanation] ++
         ["recipe" .= identity | name == "Evolution.evolution", Just (RecipeId identity) <- [selectedRecipe]])))
-      decoded <- either bad pure (eitherDecodeStrict' bytes >>= parseEither reply)
+      decoded <- either bad pure (decodeWire bytes >>= parseEither reply)
       case decoded of
         Left (EvolutionFailure diagnostics) -> throwE diagnostics
         Right (value,steps) -> do
