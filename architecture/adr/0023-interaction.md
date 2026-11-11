@@ -46,7 +46,10 @@ can be composed from a name.
 
 Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
 selects a draft for that page, and its links carry the parameter; without it the
-page shows the accepted KB. The server's `--evolution` option applies only to
+page shows the accepted KB. A draft evolution page is the exception: its record
+links and existence checks always use that evolution's last checked candidate,
+regardless of the incoming selector. An accepted evolution's archived report
+retains the selected KB context for its record links. The server's `--evolution` option applies only to
 domain views under `/kb/`.
 
 Draft facts, types, declarations and query results come from the evolution's

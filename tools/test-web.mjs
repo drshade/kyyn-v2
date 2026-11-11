@@ -1,6 +1,8 @@
 // Installed domain-view journey: unchecked/live draft pages, checked query data,
 // last-successful candidate after failed checks, accepted refresh, asset confinement,
 // browser helper semantics and guest build reuse after view-only edits.
+// Inspection: saved candidate schema/facts, context selection, escaped source,
+// reference links, removed records, read-only routes and accepted refresh.
 // Host validation and non-view freshness are deliberately deferred to #304.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -52,10 +54,10 @@ module Schema where
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: Text } deriving (Eq, Show, Generic, Contract)
+data Todo = Todo { title :: Text, related :: [FactId] } deriving (Eq, Show, Generic, Contract)
 data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show, Generic, Contract)
 metadata :: SchemaMetadata
-metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
+metadata = SchemaMetadata [RoleDecl "title" "Display title" Title] [FieldRole "Schema.Todo" "title" "title"] [CollectionDecl "todos" "todos" [("related","todos")]]
 `);
   write(path.join(target,'src/Report.hs'),`module Report where
 import Data.Text (Text)
@@ -70,9 +72,10 @@ metadata = SchemaMetadata [] [] []
 titles :: Input -> Query Output
 titles () = do
   facts <- readCollection todos
-  pure [t | Fact _ (Todo t) <- facts]
+  pure [t | Fact _ (Todo t _) <- facts]
 `);
   const change=path.join(d.path,'change/Evolution.hs');
+  write(path.join(target,'src/Notes.txt'),'<script>alert(1)</script> & source');
   const evolution=`{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
@@ -81,10 +84,26 @@ import qualified Schema
 import qualified Kyyn.Workspace.Target as Target
 evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) $ edit (Rationale "First task" [])
-  (within Target.todos (append (Fact (FactId "one") (Schema.Todo "First lesson"))))
+  (within Target.todos (append (Fact (FactId "one") (Schema.Todo "First lesson" []))))
 `;
   write(change,'broken evolution');
   const preview=await serve(['--evolution',d.id]);
+  const page=async (url,status=200)=> {
+    const response=await request(preview,url,{},status);
+    assert.match(response.headers.get('content-type'),/^text\/html/);
+    const text=await response.text();
+    assert(text.includes('<nav>'));assert(text.includes('>Index</a>'));
+    return text;
+  };
+  assert((await page('/')).includes('Accepted KB'),'Inspection ignores server --evolution');
+  assert((await page('/evolutions/'+d.id+'?evolution='+d.id)).includes('no checked candidate'));
+  assert((await page('/collections/todos?evolution='+d.id,409)).includes('No successfully checked candidate'));
+  await page('/?evolution='+d.id+'&evolution='+d.id,400);
+  await page('/?evolution=../bad',400);
+  const methodError=await request(preview,'/',{method:'POST'},405);
+  assert.match(methodError.headers.get('content-type'),/^text\/html/);
+  assert((await methodError.text()).includes('supports GET only'));
+  await page('/unknown',404);
   const busy=spawnSync(executable,['--kb',kb,'--json','web','serve','--port',new URL(preview).port],{env,encoding:'utf8',timeout:30000});
   assert.equal(busy.status,1,busy.stderr+busy.stdout);
   const busyResponse=JSON.parse(busy.stdout);
@@ -112,6 +131,35 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   write(manifest,m.replace('views/training/index.html','index.html'));
   await request(preview,'/kb/',{},400);write(manifest,m);
   write(change,evolution);cli(['evolution','check',d.id]);
+  const selected='?evolution='+d.id;
+  const index=await page('/'+selected);
+  assert(index.includes('/collections/todos'+selected));
+  const listed=await page('/collections/todos'+selected);
+  assert(listed.includes('First lesson'));assert(listed.includes('/records/todos/one'+selected));
+  const record=await page('/records/todos/one'+selected);
+  assert(record.includes('<dt>title</dt>'));assert(record.includes('First lesson'));
+  const typ=await page('/types/Schema.Todo'+selected);
+  assert(typ.includes('related'));assert(typ.includes('Display title'));
+  const report=await page('/evolutions/'+d.id+selected);
+  assert(report.includes('saved capture'));assert(report.includes('First lesson'));
+  assert(report.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));assert(!report.includes('<script>alert'));
+  assert(report.includes('/records/todos/one'+selected));
+  assert(report.includes('<dt>title</dt>'),'Step records use labelled fields');
+  assert(report.includes('Target schema projection'));assert(!report.includes('TargetProjection'));
+  assert(report.includes('class="diff-removed"'));assert(report.includes('class="diff-added"'));
+  assert(report.includes('- data Root = Root'));assert(report.includes('+ data Todo = Todo'));
+  assert(report.includes('unchanged lines'));assert(report.includes('class="diff-context"'));
+  const direct=await page('/evolutions/'+d.id);
+  assert(direct.includes('href="/records/todos/one'+selected+'"'));
+  assert((await page('/records/todos/one'+selected)).includes('First lesson'));
+  const missingRecord=await page('/records/todos/missing'+selected,404);
+  assert(missingRecord.includes('Unknown record:'));assert(missingRecord.includes('href="/'+selected+'"'));
+  await page('/types/Unknown'+selected,404);
+  await page('/collections/todos',404);
+  // Inspection does not alter the checked candidate or authored files.
+  const tracked=spawnSync('git',['-C',kb,'status','--porcelain'],{encoding:'utf8'}).stdout;
+  await page('/records/todos/one'+selected);await page('/evolutions/'+d.id+selected);
+  assert.equal(spawnSync('git',['-C',kb,'status','--porcelain'],{encoding:'utf8'}).stdout,tracked);
   const candidates=path.join(kb,'.kyyn/candidates');
   assert.equal(fs.readFileSync(path.join(candidates,'checked',d.id),'utf8'),fs.readFileSync(path.join(candidates,'latest',d.id),'utf8'),'Checked candidate should reuse the saved directory');
   assert.deepEqual((await query(preview,'titles',{})).result,['First lesson']);
@@ -138,6 +186,13 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   write(change,evolution.replace('First lesson','Rejected lesson'));
   cli(['evolution','check',d.id],1);
   assert.deepEqual((await query(preview,'titles',{})).result,['First lesson']);
+  assert((await page('/records/todos/one'+selected)).includes('First lesson'));
+  assert(!(await page('/evolutions/'+d.id+selected)).includes('Rejected lesson'));
+  const schemaFile=path.join(target,'src/Schema.hs'),savedSchema=fs.readFileSync(schemaFile,'utf8');
+  write(schemaFile,'broken schema');
+  assert((await page('/types/Schema.Todo'+selected)).includes('related'));
+  assert((await page('/records/todos/one'+selected)).includes('First lesson'));
+  write(schemaFile,savedSchema);
   write(change,'broken again');
   assert((await (await request(preview,'/kb/views/training/')).text()).includes('Edited'));
   await request(preview,'/kb/views/training/%2e%2e%2f%2e%2e%2fkb.dhall',{},404);
@@ -153,9 +208,34 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   assert(!(await (await request(accepted,'/kb/views/training/')).text()).includes('UNCOMMITTED'));
   fs.writeFileSync(acceptedPage,committedPage);
   const e=cli(['evolution','new','next-lesson']);
-  write(path.join(e.path,'change/Evolution.hs'),evolution.replace('"one"','"two"').replace('First lesson','Second lesson'));
+  write(path.join(e.path,'change/Evolution.hs'),evolution.replace('"one"','"two"').replace('First lesson','Second lesson').replace('Schema.Todo "Second lesson" []','Schema.Todo "Second lesson" [FactId "one"]'));
   cli(['evolution','check',e.id]);cli(['evolution','ready',e.id]);cli(['evolution','accept',e.id]);
   assert.deepEqual((await query(accepted,'titles',{})).result,['First lesson','Second lesson']);
+  const second=await (await request(accepted,'/records/todos/two')).text();
+  assert(second.includes('href="/records/todos/one"'));
+  assert((await (await request(accepted,'/evolutions/'+d.id)).text()).includes('First lesson'));
+  const removed=cli(['evolution','new','remove-task']);
+  write(path.join(removed.path,'change/Evolution.hs'),`module Evolution where
+import Kyyn.Workspace.Evolution
+import Kyyn.Schema
+import qualified Schema
+import qualified Kyyn.Workspace.Target as Target
+evolution :: Evolution Schema.Root
+evolution = prepare (pure ()) $ edit (Rationale "Remove second task" [])
+  (within Target.todos (remove (FactId "two")))
+`);
+  cli(['evolution','check',removed.id]);
+  const suffix='?evolution='+removed.id;
+  const deleted=await (await request(accepted,'/evolutions/'+removed.id)).text();
+  const overridden=await (await request(accepted,'/evolutions/'+removed.id+'?evolution='+d.id)).text();
+  assert(overridden.includes('Draft '+removed.id));
+  assert(deleted.includes('href="/records/todos/one'+suffix+'"'));
+  assert(deleted.includes('<dt>title</dt>'));
+  assert(deleted.includes('Second lesson'));assert(deleted.includes('Absent'));
+  assert(!deleted.includes('href="/records/todos/two'+suffix+'"'));
+  await request(accepted,'/records/todos/two'+suffix,{},404);
+  assert((await (await request(accepted,'/records/todos/two')).text()).includes('Second lesson'));
+  console.log('Installed inspection pages: context selection, checked snapshots, reference links, deletions, escaping and read-only GETs passed.');
   console.log('Installed live draft views, last checked data, accepted refresh and view-only build reuse passed.');
 } finally {
   await Promise.all(children.map(async c=>{if(c.exitCode===null){c.kill('SIGTERM');await once(c,'exit');}}));
