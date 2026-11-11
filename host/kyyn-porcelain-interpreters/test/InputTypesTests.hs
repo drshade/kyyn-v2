@@ -6,6 +6,7 @@ import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
 import qualified Data.ByteString as Bytes
 import Data.Either (isLeft)
+import Kyyn.Build.Language (guestLanguageFlags)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.StoredSnapshot
 import Kyyn.Domain.FileTree (files)
@@ -36,7 +37,7 @@ main = do
       createDirectoryIfMissing True (takeDirectory destination)
       Bytes.writeFile destination bytes
     (exit,output,errors) <- readProcessWithExitCode "cabal"
-      (["exec","--","ghc","-fno-code","-Wall","-Werror","-package","kyyn-sdk","-i" ++ directory,
+      (["exec","--","ghc"] ++ guestLanguageFlags ++ ["-fno-code","-Wall","-Werror","-package","kyyn-sdk","-i" ++ directory,
         "-outputdir",directory] ++ [directory </> relativeName path | (path,_) <- files tree]) ""
     assert ("Generated declarations do not compile: " ++ output ++ errors) (exit == ExitSuccess)
   let reject label shape = assert label (isLeft (scaffoldInputTypes "base" (StoredSnapshot [] [("items",[fact shape])] [])))

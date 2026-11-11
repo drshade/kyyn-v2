@@ -133,6 +133,6 @@ test-suite input-types
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types,
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-guest-build,
     kyyn-porcelain-interpreters, aeson, bytestring, directory, filepath,
     process, temporary ==1.3
