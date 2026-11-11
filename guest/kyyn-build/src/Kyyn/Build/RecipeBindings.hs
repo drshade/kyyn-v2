@@ -15,7 +15,7 @@ writeRecipeBindings = writeTargetEvolutionBindings
 writeBindings :: FilePath -> [FilePath] -> Reference -> SchemaMetadata -> IO ()
 writeBindings generated roots selectedRoot (SchemaMetadata _ _ collections) = do
   let root = Text.unpack (referenceName selectedRoot)
-      header name = ["{-# LANGUAGE TemplateHaskell, DeriveGeneric, DerivingStrategies, DeriveAnyClass, EmptyCase, DataKinds, TypeApplications, OverloadedStrings #-}",
+      header name = ["{-# LANGUAGE TemplateHaskell #-}",
         "module " ++ name ++ " where"]
   write "Kyyn.Workspace.FactEdits" (unlines
     (header "Kyyn.Workspace.FactEdits" ++ ["import qualified " ++ Text.unpack (referenceModule selectedRoot)] ++
@@ -24,7 +24,7 @@ writeBindings generated roots selectedRoot (SchemaMetadata _ _ collections) = do
       "import qualified Kyyn.Evolution.Proposal as Proposal",
       "$(rootEdits ''" ++ root ++ " " ++ show [(Text.unpack name,Text.unpack field) | CollectionDecl name field _ <- collections] ++ ")"]))
   write "KyynFactEditCodec" (unlines
-    (["{-# LANGUAGE EmptyCase, TypeApplications #-}", "module KyynFactEditCodec where",
+    ([ "module KyynFactEditCodec where",
       "import Kyyn.Runtime.Json (Codec(..))", "import Kyyn.Workspace.FactEdits (RootEdit)",
       "import qualified Kyyn.Runtime.Bindings as Bindings", "rootCodec :: Codec RootEdit"] ++
      if null collections then ["rootCodec = Codec (\\value -> case value of {}) (\\_ -> Left \"This Root has no fact collections\")"]
@@ -52,7 +52,7 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
   let selected = Text.unpack (referenceName root)
       path = generated </> "Kyyn/Workspace/Evolution.hs"
   writeFile path (unlines
-    (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
+    ([
       "module Kyyn.Workspace.Evolution (module Kyyn.Recipe, module Kyyn.Edit, Rationale(..), EvidenceRef(..), identityEvolution, Root, RecipeState, recipeEdit) where",
       "import Data.Text (Text)", "import Kyyn.Recipe hiding (recipeEdit)", "import qualified Kyyn.Recipe as Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..))",
       "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Bindings"] ++
@@ -62,7 +62,7 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
       "recipeEdit = Recipe.recipeEdit",
       "identityEvolution :: RecipeEvolution Root RecipeState", "identityEvolution = mempty"]))
   writeFile (generated </> "KyynRecipeStateCodec.hs") (unlines
-    ["{-# LANGUAGE TypeApplications #-}","module KyynRecipeStateCodec (rootCodec) where",
+    ["module KyynRecipeStateCodec (rootCodec) where",
      "import Kyyn.Workspace.Evolution (RecipeState)","import qualified Kyyn.Runtime.Bindings as Bindings",
      "import Kyyn.Runtime.Json (Codec)", "rootCodec :: Codec RecipeState",
      "rootCodec = either (error . show) id (Bindings.contractCodec @RecipeState)"])
@@ -70,7 +70,7 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
   forM_ ["Target"] $ \endpoint -> do
     let name = "Kyyn.Workspace." ++ endpoint
     writeFile (generated </> "Kyyn/Workspace" </> endpoint ++ ".hs") (unlines
-      (["{-# LANGUAGE DataKinds, TypeApplications, OverloadedStrings #-}","module " ++ name ++ " where",
+      (["module " ++ name ++ " where",
         "import qualified " ++ Text.unpack (referenceModule root),
         "import Kyyn.Edit (Collection)", "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics"] ++
        [Text.unpack field ++ " = Bindings.collection " ++ show label ++ " (Optics.field @" ++ show field ++ " @" ++ selected ++ ")"

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Fixture.Plugin where
 import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 connectors :: [Connector]

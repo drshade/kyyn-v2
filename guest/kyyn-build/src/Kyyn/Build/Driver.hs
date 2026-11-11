@@ -369,7 +369,7 @@ buildEvolutionFull compiler libdir generated basePackages destination references
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
-    (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
+    (["module KyynGuestEntry where",
       "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)", "import qualified Kyyn.Runtime.TargetEvolution as TargetEvolution", "import qualified Kyyn.Runtime.Bindings as RuntimeBindings"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
@@ -401,7 +401,7 @@ inspectRoot compiler libdir generated stage packages roots schema annotations = 
       entry = generated </> entryName ++ ".hs"
   (rootSources,_) <- inspectExports libdir roots packages [moduleName schema]
   writeFile entry (unlines
-    (["{-# LANGUAGE TypeApplications #-}","module " ++ entryName ++ " where",
+    (["module " ++ entryName ++ " where",
       "import Kyyn.Contract", "import qualified Data.Aeson as Json",
       "import qualified Data.ByteString.Lazy as Bytes"] ++
      map ("import qualified " ++) rootModules ++
@@ -443,7 +443,7 @@ bindings manifest (SchemaMetadata _ _ collections) = do
   unless (all (validField . (\(CollectionDecl _ field _) -> field)) collections)
     (Left "Collection metadata must name a Haskell record field")
   pure (unlines
-    (["{-# LANGUAGE DataKinds, TypeApplications, OverloadedStrings #-}",
+    ([
       "{-# OPTIONS_GHC -Wno-missing-signatures #-}",
       "module KyynQueryBindings where", "import GHC.Records (getField)",
       "import qualified Kyyn.Types.Query as Query",

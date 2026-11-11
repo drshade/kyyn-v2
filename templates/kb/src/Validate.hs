@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Validate where
 
 import qualified Schema

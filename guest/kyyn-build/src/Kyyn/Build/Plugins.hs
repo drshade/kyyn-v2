@@ -52,7 +52,7 @@ bootstrapPlugins compile generated sources = do
       result = generated </> "registrations.json"
       aliases = zip sources [0 :: Int ..]
   writeFile entry (unlines
-    (["{-# LANGUAGE OverloadedStrings #-}","module KyynGuestRegistrations where",
+    (["module KyynGuestRegistrations where",
       "import qualified Data.Aeson as Json", "import qualified Data.ByteString.Lazy as Bytes",
       "import Data.Text (Text)", "import Kyyn.Types.Plugin (Connector)"] ++
      ["import qualified " ++ Text.unpack source.entryModule ++ " as P" ++ show index | (source,index) <- aliases] ++

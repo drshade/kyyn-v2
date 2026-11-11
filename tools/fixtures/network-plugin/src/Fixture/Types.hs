@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Fixture.Types where
 import GHC.Generics (Generic)
 import Kyyn.Schema (Contract)

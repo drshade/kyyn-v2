@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Types.Fact (Fact(..))

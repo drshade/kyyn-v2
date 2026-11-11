@@ -50,7 +50,7 @@ writeRecipeHandles libdir generated packages sourceRoots root handles = do
   mapM_ (\handle -> case handle of
     StateHandle required reference name -> do
       selected <- either fail pure (qualifiedReference True (Text.pack reference))
-      write name (["{-# LANGUAGE TemplateHaskell, TypeApplications, OverloadedStrings #-}","module " ++ name ++ " where",
+      write name (["{-# LANGUAGE TemplateHaskell #-}","module " ++ name ++ " where",
         "import Language.Haskell.TH (mkName)","import Kyyn.Build.RecipeTypes (optionalStateDefinition)",
         "import Kyyn.Evolution (RecipeType)","import qualified Kyyn.Runtime.Bindings as Bindings",
         "import qualified " ++ Text.unpack (referenceModule selected)] ++
@@ -71,7 +71,7 @@ writeRecipeHandles libdir generated packages sourceRoots root handles = do
       (closure,exports) <- inspectExports libdir roots packages [reference]
       let candidates = nub [Text.unpack symbol.exportName | entry <- exports, symbol <- entry.moduleExports, symbol.exportKind == ExportValue]
           candidate value = "(" ++ show value ++ ",mkName " ++ show (reference ++ "." ++ value) ++ "," ++ show (reference ++ "." ++ value) ++ ")"
-      write name (["{-# LANGUAGE TemplateHaskell, TypeApplications, OverloadedStrings #-}","module " ++ name ++ " where",
+      write name (["{-# LANGUAGE TemplateHaskell #-}","module " ++ name ++ " where",
         "import Language.Haskell.TH (mkName)", "import Kyyn.Build.RecipeTypes (flowDefinitions)",
         "import qualified Kyyn.Recipe as Recipe", "import Kyyn.Evolution (RecipeDefinition)",
         "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified " ++ Text.unpack (referenceModule root),

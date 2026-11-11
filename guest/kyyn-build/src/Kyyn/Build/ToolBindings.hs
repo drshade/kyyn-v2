@@ -21,7 +21,7 @@ writeToolBindings generated roots plugins = do
         [method.implementation | (_index,_plugin,_connector,method) <- methods]
   modules <- traverse (fmap (Text.unpack . referenceModule) . either fail pure . qualifiedReference False) references
   write "KyynToolCalls" (unlines
-    (["{-# LANGUAGE TemplateHaskell, GADTs, FlexibleContexts, TypeOperators #-}",
+    (["{-# LANGUAGE TemplateHaskell #-}",
       "module KyynToolCalls where", "import Kyyn.Build.Captured", "import Language.Haskell.TH (mkName)"] ++
       map ("import qualified " ++) (nub modules) ++
       ["$(toolCalls (mkName \"Calls\")",
@@ -54,7 +54,7 @@ writeToolBindings generated roots plugins = do
   let bindings = [selected.instanceBinding | (_,selected,_) <- configured]
   unless (length bindings == length (nub bindings)) (fail "Connector bindings must be unique across the KB")
   write "Kyyn.Connectors" (unlines
-    (["{-# LANGUAGE OverloadedStrings #-}","module Kyyn.Connectors where",
+    (["module Kyyn.Connectors where",
       "import Kyyn.Types.Program (Program)","import Kyyn.Types.Plugin (ConnectorInstance(..))",
       "import qualified KyynToolCalls as Calls", "type Tool = Program Calls.Calls"] ++
      concat [[Text.unpack selected.instanceBinding ++ " :: ConnectorInstance Calls." ++ tag index,
@@ -64,7 +64,7 @@ writeToolBindings generated roots plugins = do
        actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector]))
   write "Kyyn.Agentic" agenticModule
   write "KyynGuestDispatch" (unlines
-    (["{-# LANGUAGE GADTs, OverloadedStrings #-}","module KyynGuestDispatch (dispatch) where",
+    (["module KyynGuestDispatch (dispatch) where",
       "import qualified KyynToolCalls as Calls", "import Kyyn.Types.Plugin (ConnectorInstance(..))",
       "import Kyyn.Types.Guest (ConnectorIdentity(..), CapturedMethodIdentity(..))",
       "import Kyyn.Runtime.ToolEntry", "import Kyyn.Runtime.Transport (Transport)",

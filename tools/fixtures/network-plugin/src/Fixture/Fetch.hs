@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Fixture.Fetch where
 import qualified Data.Text as Text
 import Fixture.Types

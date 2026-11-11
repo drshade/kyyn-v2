@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Fixture.Login where
 import Fixture.Types
 import Kyyn.Plugin.Host

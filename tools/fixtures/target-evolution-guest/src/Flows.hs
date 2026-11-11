@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DerivingStrategies, DeriveAnyClass #-}
 module Flows (review, State(..), oldFlow, OldState(..)) where
 import GHC.Generics (Generic)
 import Agentic.Contract (Contract)

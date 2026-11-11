@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Progress (State(..)) where
 
 import GHC.Generics (Generic)

@@ -107,7 +107,6 @@ KB modules use GHC2024 plus `OverloadedStrings`, `DeriveAnyClass`,
 use the same defaults. Module pragmas can enable or disable extensions locally.
 
 ```haskell
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
 module Schema where
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -128,7 +127,6 @@ The existing `Schema.Root` and `Schema.metadata` references in `target/kb.dhall`
 already select this module. Replace `target/src/Validate.hs` with:
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Validate where
 import qualified Data.Text as Text
 import Schema
@@ -145,7 +143,6 @@ validate (Root todos) = ValidationReport
 Write `change/Evolution.hs`:
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
@@ -460,8 +457,7 @@ authoring a flow. Use record-dot access for upstream library records.
 Define model-facing types with upstream Agentic's `Contract` and GHC `Generic`:
 
 ```haskell
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
+
 import Agentic.Contract (Contract)
 import Data.Text (Text)
 import GHC.Generics (Generic)

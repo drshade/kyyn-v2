@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Input.Previous where
 import GHC.Generics (Generic)
 import Kyyn.Contract (Contract)

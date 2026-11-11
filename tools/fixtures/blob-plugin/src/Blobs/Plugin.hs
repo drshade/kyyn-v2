@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Blobs.Plugin where
 import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 connectors :: [Connector]
