@@ -220,9 +220,9 @@ Both `checkCandidate` and `checkRootAt` obtain examples through RootStore's
 root therefore retains their meaning after the authoring workspace becomes an
 archive. Deleting or weakening an example is an ordinary visible root change.
 
-Human-authored executable examples use a concrete, data-based form. An
+Executable examples use a concrete, data-based form. An
 example names a registered snapshot query, its typed arguments and expected
-typed result. Free-text review notes are different objects. The host does not
+typed result. The host does not
 know the query's Haskell types, so it checks these values against its descriptor:
 
 ```haskell

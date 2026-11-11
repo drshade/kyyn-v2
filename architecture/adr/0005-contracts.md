@@ -15,7 +15,7 @@ pipe does not decide which definition owns the schema.
 Use one **checked contract algebra** as the internal input to structural checking,
 binding/codec generation, collection routing, JSON Schema, Dhall config types and
 generic presentation.
-Generic presentation here means host-generated workbench presentation, not a
+Generic presentation here means host-generated inspection-page presentation, not a
 required vocabulary for KB-owned HTML/JavaScript views. The `views` manifest list
 is source/navigation metadata under [ADR 0008](0008-authoring.md#domain-view-authoring);
 it creates no view contract, typed parameters or query-dependency declarations.

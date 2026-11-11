@@ -615,13 +615,13 @@ Surfaces do not compose root opening, validation or evolution execution themselv
 
 ### KB-owned domain views
 
-The Web surface has two distinct audiences. The host-owned authoring workbench
-exposes model, evidence and evolution operations for authors and reviewers.
+Web serves two kinds of page. Host-owned inspection pages let an agent show a
+person the model, facts, queries and evolutions of any KB.
 KB-owned domain views present results to readers who never author a KB. A domain
 view is ordinary HTML and JavaScript, not a host-defined widget vocabulary, a
-guest HTML renderer or an extension to the workbench. The workbench is not a
-prerequisite for serving domain views. [ADR 0023](0023-interaction.md) owns the
-workbench collaboration loop; [ADR 0008](0008-authoring.md) owns view declarations.
+guest HTML renderer or an extension to the inspection pages.
+[ADR 0023](0023-interaction.md) owns the inspection pages;
+[ADR 0008](0008-authoring.md) owns view declarations.
 
 `kyyn-v2 web serve [--port PORT] [--evolution ID]` serves one selected KB until
 stopped. Bind to `127.0.0.1`, default port 8080; `--port 0` asks the OS for an
@@ -635,7 +635,6 @@ The domain-view routes are:
 
 | Method and address | Meaning |
 | --- | --- |
-| `GET /` | Redirect to `/kb/` while no workbench is selected there |
 | `GET /kb/` | Host-generated index of declared view names, descriptions and links; identifies accepted or draft context |
 | `GET /kb/views/<name>/` | The declared entry page |
 | `GET /kb/views/<name>/<asset-path>` | A view file relative to that entry page's directory |
@@ -767,10 +766,9 @@ No default-view declaration or view-to-query dependency registry is introduced.
 #### Boundary and verification
 
 Domain views are trusted KB-authored pages. The local read-only server does not
-promise browser network confinement or isolation between authored pages. It does
-not host workbench mutation endpoints. Workbench/domain-view origin isolation and
-static publishing are separate decisions, not hidden prerequisites for this
-surface. Do not enable permissive cross-origin access to the local query endpoint;
+promise browser network confinement or isolation between authored pages. It
+hosts no mutation endpoints. Static publishing is a separate decision, not a
+hidden prerequisite for this surface. Do not enable permissive cross-origin access to the local query endpoint;
 loopback binding is not a claim of hosted or multi-tenant security. Before serving
 any route, require exactly one valid `Host` authority matching `127.0.0.1` or
 `localhost` and the actual bound port (the HTTP default port may be implicit only
@@ -794,7 +792,7 @@ wrong port. Exercise the helper's query errors, encoded
 view links, undeclared-name failure and URL-parameter behavior. These checks do
 not require the workbench, static publishing or a view/query type-link checker.
 
-### MCP and authoring workbench
+### MCP and inspection pages
 
 The CLI's `plugin connector method list/show` resolves registered readers and
 inspects their Haskell contracts without invoking a reader. Both allow
@@ -842,25 +840,12 @@ capture does not declare a task complete. [ADR 0014](0014-evidence.md) owns this
 boundary. The [user guide](../../docs/guide.md) describes the authoring workflows.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
-The authoring workbench is designed for human understanding, high-level design, exploration and
-review. MCP is designed for agent discovery, technical authoring and reliable
-execution. Both expose the central loop: inspect the model, explore facts, try
-examples, propose changes, compare consequences and resolve problems. An agent
-can review and a human can inspect source or perform a precise technical action.
-Presentation emphasis must not become a rigid actor-permission split.
+MCP and CLI are how an agent discovers, authors, checks and accepts. Web's
+inspection pages are how the agent shows that work to a person; they are
+read-only and defined in [ADR 0023](0023-interaction.md). Both read the same
+state through the same operations.
 
-The first local workbench shows selected outputs, records/model, tools/examples,
-evolution comparison and source/operation status. It must support contributing
-design feedback and examples, not only observing or approving an agent's work.
-These are useful content, not a prescribed pane layout or generic dashboard
-framework. Anchor the first UI in one reporting journey: inspect a number and
-its assumption, contribute a counterexample, compare the candidate, and inspect
-diagnostics. Add only the model/record navigation needed to understand that loop.
-MCP exposes the same relevant state, including review feedback, without requiring
-screen scraping. See ADR 0023 for the shared objects and handoff behavior.
-No chat harness, full IDE or arbitrary frontend-plugin framework is a prerequisite.
-
-Workbench record browsing uses host-side checked structural values and snapshot
+Record browsing uses host-side checked structural values and snapshot
 store operations. Titles, timelines and badges consume the checked role metadata
 from `CheckedContract` under ADR 0005, not a separate reading or re-inspection of
 authored source. Structural filtering/sorting does not require a fresh guest
@@ -893,14 +878,14 @@ Reject CLI-only as a workaround for an internal codec problem, and reject MCP-on
 as the core application API. User confirmation/delegation belongs to explicit
 operation intent/configuration, not assumptions that one transport is human and
 another cannot be. Initially local single-owner use; do not imply multi-tenant web
-security. Bind locally and protect the control surface from unrelated web origins.
+security. Bind locally.
 
 ## Verification
 
-The same request via CLI/MCP/web produces the same domain result and transition.
-Interface coverage follows user journeys, not mechanically identical buttons
-and endpoints. Web and MCP are designed and tested in each end-to-end slice,
-not bolted on after a CLI implementation has fixed the product's shape.
+The same request via CLI or MCP produces the same domain result and transition,
+and Web shows the same state. Interface coverage follows user journeys, not
+mechanically identical commands and pages.
 Listing evolutions does not build or start guests or plugins. A fresh agent can discover
 one relevant tool without receiving the entire installed catalog. A human can
-explain a report change without reading protocol envelopes or Haskell internals.
+follow a report change from the pages an agent links, without reading protocol
+envelopes.
