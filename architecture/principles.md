@@ -202,8 +202,15 @@ example, a successful send followed by a failed local save needs an actionable
 warning about checking the destination before retrying, not a statement about
 "truth boundaries". Communicate what is known and what the user can do next.
 
+Say it once, in the fewest words that let the reader act. This covers ADRs, the
+guide, CLI output, diagnostics, Issues and PR descriptions as much as UI copy.
+Describe what the system does. Name a rejected alternative once, where the
+decision is made, not as a refrain of things we did not build. Cut a sentence
+that restates its neighbour and a caveat that changes no one's decision. Added
+text has to earn its place: length is a cost the reader pays every time.
+
 During review ask: who needs this sentence, and what does it help them understand
-or do here? If its only purpose is to demonstrate that the author remembered a
+or do here? Ask what can be removed as well as whether what remains is correct. If its only purpose is to demonstrate that the author remembered a
 design decision, remove it. Record any still-needed rationale in the ADR without
 duplicating it throughout the implementation or UI.
 
