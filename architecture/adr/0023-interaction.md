@@ -25,10 +25,12 @@ provides the shared design/review loop described below; those controls are not
 required chrome around a domain view. [ADR 0018](0018-surfaces.md#kb-owned-domain-views)
 owns live serving, draft selection and the explicitly included browser helper.
 
-An author previews a domain view with `web serve --evolution ID` after checking
-its evolution. That preview shows captured candidate source and data together;
-it is not acceptance and does not require a graphical evolution editor or
-side-by-side comparison. View parameters are plain URL parameters, checked only
+An author previews a domain view with `web serve --evolution ID`, independently
+of whether the evolution checks. Pages/assets reflect live target edits on browser
+refresh; queries require a usable checked candidate. This mixed authoring preview
+is explicitly a draft, not proof that its current page and candidate data agree.
+Acceptance still requires a fresh check after page edits. Preview does not require
+a graphical evolution editor or side-by-side comparison. View parameters are plain URL parameters, checked only
 when used as named-query arguments. Do not impose a typed view vocabulary,
 view-to-query declarations, type-link checking or a default-view setting.
 

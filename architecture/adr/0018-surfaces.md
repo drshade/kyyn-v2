@@ -638,16 +638,17 @@ The domain-view routes are:
 | `GET /` | Redirect to `/kb/` while no workbench is selected there |
 | `GET /kb/` | Host-generated index of declared view names, descriptions and links; identifies accepted or draft context |
 | `GET /kb/views/<name>/` | The declared entry page |
-| `GET /kb/views/<name>/<asset-path>` | A captured file relative to that entry page's directory |
+| `GET /kb/views/<name>/<asset-path>` | A view file relative to that entry page's directory |
 | `POST /kb/queries/<name>` | Invoke a named query with its JSON argument in the request body |
 | `GET /kb/kyyn.js` | The explicitly included browser helper script |
 
 Redirect a declared view's URL without its trailing slash to the slash form so
 relative asset links resolve consistently. Unknown routes, views and assets are
 404 diagnostics, not a fallback index page. Unsupported methods are 405 with the
-allowed methods. Page directories are not listed. Resolve declared pages and
-assets only within the selected immutable source tree and the view's directory;
-reject absolute paths, traversal components and symlinks. Never serve the checkout,
+allowed methods. Page directories are not listed. Resolve accepted pages and assets only within the captured source tree; resolve
+draft pages and assets only within the selected target/views tree. In both modes,
+restrict reads to the declared view's directory;
+reject absolute paths, traversal components and symlinks. Never expose a general checkout,
 `.kyyn/`, stored facts or recipe state as a filesystem tree. The declaration's
 source-relative page path must be beneath its dedicated `views/<directory>/`
 subtree and selects the asset directory, not arbitrary host paths. The `views/`
@@ -657,7 +658,7 @@ Serve HTML, JavaScript, CSS, JSON, common images and fonts with their correspond
 media types; unknown file extensions use `application/octet-stream`. Host-generated
 index text is HTML-escaped. URL components are encoded independently.
 
-#### Selecting one source and data context
+#### Accepted snapshots and live draft pages
 
 Normal requests resolve the accepted revision afresh. Each request selects its
 root once and uses that root's captured source, declarations, query contracts and
@@ -667,17 +668,40 @@ guest build reuse remains valid and is not query-result caching. Static files an
 query responses use `Cache-Control: no-store` so browser caching does not hide a
 newly accepted source or result.
 
-`--evolution ID` selects the latest saved checked candidate for that workspace.
-Use its captured target source and evaluated data together, under ADR 0010's
-capture rules. Missing, invalid or stale candidates return diagnostics naming
-`kyyn-v2 evolution check ID` as the next step. Serving never evaluates an
-evolution, marks it Ready or accepts it. Successful rechecking makes the new
-candidate available on the next request. Draft pages and query responses identify
-the evolution and base revision; they are never labelled as accepted knowledge.
+`--evolution ID` serves the draft's declared pages and assets directly from
+`target/views/`. Resolve the view declarations from the draft's `target/kb.dhall`
+without compiling or checking its Haskell/evolution. The index, page files and
+`kyyn.js` catalogue remain available before any successful evolution check and
+when a check fails. They require a readable view declaration and an existing,
+confined file; malformed declarations or missing files still return diagnostics.
+Edit HTML/CSS/JavaScript, refresh the browser, and see the edit without a check.
+There is no automatic browser refresh or file-watcher requirement.
+
+Draft queries separately use the latest saved successfully checked candidate.
+Before invoking a query, compare its captured evaluation inputs with the current
+workspace, excluding only `target/views/` files. All other captured inputs,
+including the base, evolution metadata, change helpers, Haskell, configuration
+and `kb.dhall`, must still match. A missing, invalid or stale query candidate
+returns 409 with `kyyn-v2 evolution check ID` as the next step. This affects query
+requests, not the ability to view a draft page. Never substitute accepted facts
+or a failed candidate's result, and never silently rerun the evolution.
+Successful rechecking makes that candidate available on the next query request.
+
+Live page files can be newer than the queried candidate. This is a labelled
+authoring preview, not a claim that page and data were checked together. No
+view/query compatibility check detects type-compatible semantic disagreements.
+The index and response context identify the draft; static responses carry the
+evolution ID and base revision in `X-Kyyn-Evolution` and `X-Kyyn-Revision` headers
+without injecting page markup.
 An accepted evolution is no longer a draft selection: restart without
 `--evolution` to browse the accepted root.
 
-This is request-level consistency, not a browser-session snapshot. A page loaded
+This preview-only freshness comparison does not change ADR 0010 capture or
+acceptance. Pages/assets remain part of the complete checked candidate and
+accepted source. Acceptance still requires all captured inputs to match,
+including `target/views/`: after page edits, check again before accepting.
+
+Accepted browsing has request-level consistency, not a browser-session snapshot. A page loaded
 before acceptance may make its next query after acceptance; that request uses the
 new accepted root. Separate requests may therefore have different contexts.
 No implicit revision pin, snapshot session, live-update channel or result cache is
@@ -709,7 +733,7 @@ snapshot token. `result` is the query's value without
 adding fields to authored records. Preserve the shared diagnostic codes/messages
 and locations. Successful queries use 200; malformed JSON, unsupported argument
 values and checked application refusals use 400; unknown query/view/asset uses
-404; an unavailable or stale draft uses 409; operational failures use 500.
+404; an unavailable or stale draft query candidate uses 409; operational failures use 500.
 Unsupported request media types use 415. Failure returns diagnostics rather than
 an empty successful value. Static-file successes contain file bytes; HTTP errors
 use the same JSON diagnostic envelope.
@@ -755,12 +779,15 @@ host/port authorities with 400. Do not trust forwarded-host headers. This preven
 DNS rebinding from presenting another hostname as the local query origin.
 
 An installed journey must start from the guide and CLI discovery: declare a view
-in an evolution, check it, serve its draft, fetch the page and `kyyn.js`, call a
-named query, and receive ordinary diagnostics for wrong arguments and an unknown
-query. Accept and verify the accepted data/page; change accepted head while the
-server runs and verify refresh observes it. Verify that edits in the working tree
-are not served, stale drafts request a new check, and asset traversal cannot read
-outside the captured view source. Reject page declarations outside dedicated
+in an evolution, serve its page and `kyyn.js` before checking, and confirm queries
+report that no checked candidate exists. Check it, call a named query, and receive
+ordinary diagnostics for wrong arguments and an unknown query. Edit HTML/CSS and
+see the changes on refresh without checking; queries still use the checked data.
+Break guest/evolution source: pages remain available while queries request a new
+check. Verify that page edits still require checking before acceptance. Accept and verify the accepted data/page; change accepted head while the
+server runs and verify refresh observes it. Verify that accepted serving ignores working-tree
+edits and asset traversal cannot read outside the selected view directory in
+either captured or live-draft mode. Reject page declarations outside dedicated
 `views/` subdirectories and prove a view-only edit reuses the guest build. Test
 Host-header rejection, including a foreign hostname resolving to loopback and a
 wrong port. Exercise the helper's query errors, encoded
