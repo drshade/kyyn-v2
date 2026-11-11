@@ -4,6 +4,7 @@ module Kyyn.Composition.Web (serveWeb) where
 import Control.Monad (when)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value(Null), object, (.=))
+import Data.List (stripPrefix)
 import Kyyn.Configuration
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Contract (contractId, contractShape)
@@ -12,7 +13,7 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope, relativePath, relativeName, directoryScope, scopedPath)
+import Kyyn.Domain.Path (DirectoryScope, relativePath, relativeName)
 import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(..))
@@ -65,25 +66,23 @@ serveWeb host scope port draft
                 path <- checked (Store.workspaceLocation workspace)
                 let Repository scope' = repository
                 manifestPath <- child path "manifest.dhall"
-                bytes <- ExceptT (Right <$> FileSystem.readBytes scope' manifestPath)
-                key <- checked (relativePath "manifest.dhall")
-                manifestTree <- checked (fileTree [(key,bytes)])
-                WorkspaceSnapshot (WorkspaceManifest base _ _ state _) _ _ _ <-
-                  ExceptT (WorkspaceStore.readWorkspaceSnapshot manifestTree)
-                when (state == Accepted) (throwE [errorDiagnostic "web.accepted" "Restart without --evolution to browse the accepted root"])
                 pageManifest <- child path "target/kb.dhall"
-                manifest <- ExceptT (Right <$> FileSystem.readOptionalBytes scope' pageManifest)
                 viewPath <- child path "target/views"
-                viewScope <- checked (directoryScope (scopedPath scope' viewPath))
-                present <- ExceptT (Right <$> FileSystem.directoryExists viewScope)
-                views <- if present then ExceptT (Right <$> FileSystem.readTree viewScope) else checked (fileTree [])
-                tree <- pageTree manifest views
+                captured <- ExceptT (Right <$> FileSystem.readSelectedTree scope' [manifestPath,pageManifest,viewPath])
+                local <- rebase (relativeName path ++ "/") captured
+                WorkspaceSnapshot (WorkspaceManifest base _ _ state _) tree _ _ <-
+                  ExceptT (WorkspaceStore.readWorkspaceSnapshot local)
+                when (state == Accepted) (throwE [errorDiagnostic "web.accepted" "Restart without --evolution to browse the accepted root"])
                 pure (base,tree)
             views <- ExceptT (RootStore.readViews tree)
             pure (ViewSource (context base) views tree)
           pure (either (Left . operationalFailure) (either (Left . refusal) Right) result)
     checked value = either (throwE . pure . errorDiagnostic "web.source") pure value
     child path suffix = checked (relativePath (relativeName path ++ "/" ++ suffix))
+    rebase prefix tree = do
+      entries <- traverse (\(path,bytes) -> (,bytes) <$> checked (relativePath path))
+        [(path,bytes) | (key,bytes) <- files tree, Just path <- [stripPrefix prefix (relativeName key)]]
+      checked (fileTree entries)
     pageTree manifest views = do
       entries <- traverse (\(path,bytes) -> (,bytes) <$> checked (relativePath ("views/" ++ relativeName path))) (files views)
       key <- checked (relativePath "kb.dhall")

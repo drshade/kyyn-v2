@@ -106,6 +106,9 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   const link = path.join(target,'views/training/outside.txt');fs.symlinkSync(secret,link);
   const denied = await request(preview,'/kb/views/training/outside.txt',{},500);
   assert(!(await denied.text()).includes('NOT A VIEW'));fs.unlinkSync(link);
+  const movedTarget=path.join(temporary,'moved-target');fs.renameSync(target,movedTarget);
+  fs.symlinkSync(movedTarget,target);await request(preview,'/kb/views/training/',{},500);
+  fs.unlinkSync(target);fs.renameSync(movedTarget,target);
   write(manifest,m.replace('views/training/index.html','index.html'));
   await request(preview,'/kb/',{},400);write(manifest,m);
   write(change,evolution);cli(['evolution','check',d.id]);
