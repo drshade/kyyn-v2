@@ -287,7 +287,7 @@ const interpreterModules = {
   'Kyyn.Runtime.Model': ['Kyyn.Runtime.Transport', 'Agentic.Runtime', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire', 'Kyyn.Runtime.Plugin'],
   'Kyyn.Runtime.Judgement': ['Kyyn.Runtime.Transport', 'Agentic.Questions', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.JudgementWire', 'Kyyn.Runtime.Plugin'],
   'Kyyn.Runtime.JudgementWire': ['Agentic.Questions', 'Data.Text', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire'],
-  'Kyyn.Porcelain.Protocol.ModelConfiguration': ['Data.Bifunctor', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Model', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.ModelConfiguration'],
+  'Kyyn.Porcelain.Protocol.ModelConfiguration': ['Data.Aeson', 'Data.Aeson.KeyMap', 'Data.Bifunctor', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Model', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.ModelConfiguration'],
   'Kyyn.Plumbing.Interpreter.ModelTurn': ['Agentic.OpenAI', 'Agentic.Anthropic', 'Agentic.Runtime',
     'Agentic.Settings', 'Control.Exception', 'Data.Char', 'Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Model', 'Kyyn.Plumbing.Capability.ModelTurn', 'Kyyn.Plumbing.Capability.SecretStore', 'Network.HTTP.Client'],

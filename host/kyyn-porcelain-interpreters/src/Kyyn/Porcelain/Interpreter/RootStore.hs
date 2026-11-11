@@ -53,7 +53,7 @@ runRootStore = interpret $ \_ -> \case
       source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' bytes))
       (_,value) <- ExceptT (Dhall.inferValue source)
       fields <- record value
-      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs","views"]) (Keys.keys fields)) "Unexpected kb.dhall field"
+      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs","views","model"]) (Keys.keys fields)) "Unexpected kb.dhall field"
       _ <- ExceptT (Dhall.decodeValue (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),

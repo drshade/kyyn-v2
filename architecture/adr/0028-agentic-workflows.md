@@ -76,7 +76,8 @@ The host does not execute returned tool calls: the guest loop does so through
 the supplied typed tool bodies. Internal library values are not an additional
 KB-authored wire schema.
 
-The optional `root/model.dhall` selects one provider/model and a secret-store key:
+The optional `model` field in `root/kb.dhall` selects one provider/model and a
+secret-store key. Its value is this record:
 
 ```dhall
 { provider = < OpenAI | Anthropic >.Anthropic
@@ -86,7 +87,9 @@ The optional `root/model.dhall` selects one provider/model and a secret-store ke
 ```
 
 This is accepted-root configuration, changed through an evolution. Root checking
-rejects malformed configuration; absence is valid until a tool requests a model.
+rejects malformed configuration; omitting the field is valid until a tool requests
+a model. Model settings belong with the other authored KB declarations; actual
+credentials remain in the secret store.
 Tool preparation captures the selection with its source tree; each turn uses
 that captured selection, not a fresh read of the working checkout. `root tool show`
 displays the provider/model and secret name. No separate profile registry is needed. Its

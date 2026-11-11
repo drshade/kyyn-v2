@@ -9,4 +9,5 @@
     }
   ]
 , tools = [{ name = "draft", description = "Nested recorded model turns", implementation = "Tools.draft", inputType = "Tools.Input", resultType = "Tools.Output" }, { name = "assess", description = "Applicative recorded judgement", implementation = "Tools.assess", inputType = "Tools.Input", resultType = "Tools.Input" }]
+, model = { provider = < OpenAI | Anthropic >.Anthropic, model = "fixture-model", credential = "MODEL_KEY" }
 }

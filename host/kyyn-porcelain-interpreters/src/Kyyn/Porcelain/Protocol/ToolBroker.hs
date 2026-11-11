@@ -44,7 +44,7 @@ executeToolProgramCaptured program plugins model captured arguments = runExceptT
     conversation decodeToolFrame program arguments $ \case
       ToolJudgement request -> Judgement.judge request >>= either protocolFailure pure . Judgement.encodeReply
       ToolModel request -> case model of
-        Nothing -> pure (failure "No model configured; add root/model.dhall through an evolution")
+        Nothing -> pure (failure "No model configured; add the model field in root/kb.dhall through an evolution")
         Just configuration -> Model.takeModelTurn configuration request >>= either protocolFailure pure . Model.encodeReply
       ToolCall plugin kind instanceName methodName value -> answerPlugin plugins plugin kind instanceName methodName value
       ToolEvidenceList plugin kind instanceName -> do

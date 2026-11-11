@@ -47,7 +47,7 @@ parseManifest source = do
   _ <- first show (TypeCheck.typeOf closed)
   fields <- record (D.normalize closed)
   let required = ["schemaType","schemaMetadata","validator","queries","tools","views"]
-  unless (sort (Map.keys fields) `elem` [sort required,sort ("outputs":required)])
+  unless (all (`elem` Map.keys fields) required && all (`elem` (required ++ ["outputs","model"])) (Map.keys fields))
     (Left "Unexpected or missing kb.dhall fields")
   checkList (textRecord ["name","description","implementation","inputType","inputMetadata","resultType","resultMetadata"])
     =<< field "queries" fields

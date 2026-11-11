@@ -212,6 +212,9 @@ checkInspection = do
   case parseManifest validManifest of
     Left problem -> fail problem
     Right _ -> pure ()
+  case parseManifest ("(" <> validManifest <> ") // { model = { provider = < OpenAI | Anthropic >.Anthropic, model = \"fixture\", credential = \"KEY\" } }") of
+    Left problem -> fail problem
+    Right _ -> pure ()
   let rejects source = case parseManifest source of
         Left _ -> pure ()
         Right _ -> fail "Malformed manifest accepted"
