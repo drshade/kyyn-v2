@@ -12,14 +12,14 @@ executable kyyn-v2
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
     Kyyn.Composition.Tools Kyyn.Composition.Queries Kyyn.Composition.Outputs Kyyn.Composition.Recipes Kyyn.Composition.Taps
     Kyyn.Composition.Secrets Kyyn.Composition.Timings Kyyn.Composition.SyncTimings Kyyn.Composition.Timing Kyyn.Composition.RootBrowsing
-    Kyyn.Build Kyyn.Guide Kyyn.Web Kyyn.Composition.Web
+    Kyyn.Build Kyyn.Guide Kyyn.Web Kyyn.Composition.Web Kyyn.Web.Inspection Kyyn.Composition.Inspection
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts
   build-depends: base >=4.22 && <4.23, kyyn-sdk, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
     kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-surfaces,
     effectful-core ==2.6.1.0, directory, filepath, time, transformers, aeson, bytestring, text,
-    optparse-applicative >=0.18.1 && <0.20, template-haskell, wai, warp, http-types, network, mime-types
+    optparse-applicative >=0.18.1 && <0.20, template-haskell, wai, warp, http-types, network, mime-types, lucid
 
 test-suite installed-journey
   type: exitcode-stdio-1.0
