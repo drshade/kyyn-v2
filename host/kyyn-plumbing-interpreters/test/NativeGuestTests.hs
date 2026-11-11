@@ -69,7 +69,7 @@ main = do
     let run action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
           . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection $ action
     checked <- run (describeGuest program) >>= right >>= right
-    unless (map G.entryName (checkedEntries checked) == ["validate","total"]) (fail "Wrong checked native entries")
+    unless (concatMap G.entryNames (checkedEntries checked) == ["validate","total"]) (fail "Wrong checked native entries")
     validator <- case [entry | entry <- compiledEntries program checked,
       G.ValidatorEntry{} <- [entryDescription entry]] of
       [entry] -> pure entry

@@ -58,8 +58,8 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
-    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0, agentic ==0.2.1.0, json ==0.11
+  build-depends: base >=4.22 && <4.23, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
+    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson >=2.2.4 && <2.3, agentic ==0.2.1.0, json ==0.11
 
 test-suite frames
   type: exitcode-stdio-1.0

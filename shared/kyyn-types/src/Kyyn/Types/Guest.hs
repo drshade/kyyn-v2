@@ -196,7 +196,12 @@ entryNames (ConnectorEntry _ (SourceEntries config acquisition authentication ca
   map (invocationName . capturedInvocation) captured
 entryNames (ConnectorEntry _ (SinkEntries config publication options)) =
   [invocationName config,invocationName publication,invocationName options]
-entryNames entry = [entryName entry]
+entryNames (ValidatorEntry name _) = [name]
+entryNames (EvolutionEntry name _) = [name]
+entryNames (RecipeEntry name _ _) = [name]
+entryNames (ToolEntry name _ _ _) = [name]
+entryNames (QueryEntry name _) = [name]
+entryNames (ContractEntry name _) = [name]
 
 instance ToJSON contract => ToJSON (Invocation contract) where
   toJSON (Invocation name contract) = object ["entryName" .= name,"contract" .= contract]

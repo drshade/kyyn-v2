@@ -27,8 +27,8 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, deepseq, filepath, kyyn-types, bytestring, text,
-    aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1, containers
+  build-depends: base >=4.22 && <4.23, deepseq, filepath, kyyn-types, bytestring, text,
+    aeson >=2.2.4 && <2.3, cryptohash-sha256 ==0.11.102.1, containers
 
 test-suite contract-roles
   type: exitcode-stdio-1.0
@@ -36,7 +36,7 @@ test-suite contract-roles
   main-is: ContractRoleTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types
 
 
 test-suite snapshot-reports
@@ -45,4 +45,4 @@ test-suite snapshot-reports
   main-is: SnapshotReportTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, aeson

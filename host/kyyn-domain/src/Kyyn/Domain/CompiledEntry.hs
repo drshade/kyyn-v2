@@ -13,7 +13,7 @@ import Kyyn.Types.Guest (GuestEntry(..))
 data CompiledEntry = CompiledEntry CompiledProgram CheckedEntry Text deriving (Eq, Show)
 
 compiledEntries :: CompiledProgram -> CheckedGuest -> [CompiledEntry]
-compiledEntries program guest = [CompiledEntry program entry (G.entryName entry) | entry <- checkedEntries guest, runnable entry]
+compiledEntries program guest = [CompiledEntry program entry name | entry <- checkedEntries guest, runnable entry, name <- G.entryNames entry]
   where
     runnable ConnectorEntry{} = False
     runnable ContractEntry{} = False

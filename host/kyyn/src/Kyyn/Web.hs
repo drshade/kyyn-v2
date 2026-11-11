@@ -12,6 +12,7 @@ import qualified Data.Text.Encoding as Text
 import Language.Haskell.TH.Syntax (addDependentFile, lift, runIO, loc_filename)
 import qualified Language.Haskell.TH.Syntax as TH
 import Network.HTTP.Types
+import Network.HTTP.Types.Header (hAllow)
 import Network.Mime (defaultMimeLookup)
 import Network.Socket hiding (socket)
 import qualified Network.Socket as Socket

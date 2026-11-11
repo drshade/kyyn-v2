@@ -16,7 +16,7 @@ main = do
   libdir <- case lines compiler of [path] -> pure path; _ -> fail "Missing compiler libdir"
   withSystemTempDirectory "kyyn-source-inventory" $ \directory -> do
     let after = directory </> "evolution.hs"
-    writeFile after "module Evolution where\nimport Shared (type T)\nunfinished =\n"
+    writeFile after "{-# LANGUAGE NoFieldSelectors #-}\nmodule Evolution where\nimport Shared (type T)\nunfinished =\n"
     header <- moduleHeader libdir after
     unless (header == ("Evolution",["Shared"])) (fail ("Wrong partial module inventory: " ++ show header))
     let inputs = directory </> "inputs"

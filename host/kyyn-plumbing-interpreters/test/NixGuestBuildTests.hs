@@ -55,7 +55,7 @@ main = do
       description <- ExceptT (describeGuest program)
       pure (program,description)
     (program,description) <- right result >>= right
-    unless (map G.entryName (checkedEntries description) == ["validate","total"]) (fail "Wrong built entries")
+    unless (concatMap G.entryNames (checkedEntries description) == ["validate","total"]) (fail "Wrong built entries")
     unless (program.identity.sourcesDigest == sourceIdentity sources) (fail "Capture identity changed")
     reused <- runWith settings { nixExecutable = "/not-a-nix-executable" } (compileGuest sources) >>= right >>= right
     unless (reused == program) (fail "Retained real Nix output was not reused across interpreter instances")
