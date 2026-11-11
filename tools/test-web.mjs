@@ -88,13 +88,21 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
 `;
   write(change,'broken evolution');
   const preview=await serve(['--evolution',d.id]);
-  const page=async (url,status=200)=> (await request(preview,url,{},status)).text();
+  const page=async (url,status=200)=> {
+    const response=await request(preview,url,{},status);
+    assert.match(response.headers.get('content-type'),/^text\/html/);
+    const text=await response.text();
+    assert(text.includes('<nav>'));assert(text.includes('>Index</a>'));
+    return text;
+  };
   assert((await page('/')).includes('Accepted KB'),'Inspection ignores server --evolution');
   assert((await page('/evolutions/'+d.id+'?evolution='+d.id)).includes('no checked candidate'));
-  await page('/collections/todos?evolution='+d.id,409);
+  assert((await page('/collections/todos?evolution='+d.id,409)).includes('No successfully checked candidate'));
   await page('/?evolution='+d.id+'&evolution='+d.id,400);
   await page('/?evolution=../bad',400);
-  await request(preview,'/',{method:'POST'},405);
+  const methodError=await request(preview,'/',{method:'POST'},405);
+  assert.match(methodError.headers.get('content-type'),/^text\/html/);
+  assert((await methodError.text()).includes('supports GET only'));
   await page('/unknown',404);
   const busy=spawnSync(executable,['--kb',kb,'--json','web','serve','--port',new URL(preview).port],{env,encoding:'utf8',timeout:30000});
   assert.equal(busy.status,1,busy.stderr+busy.stdout);
@@ -136,7 +144,16 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   assert(report.includes('saved capture'));assert(report.includes('First lesson'));
   assert(report.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));assert(!report.includes('<script>alert'));
   assert(report.includes('/records/todos/one'+selected));
-  await page('/records/todos/missing'+selected,404);
+  assert(report.includes('<dt>title</dt>'),'Step records use labelled fields');
+  assert(report.includes('Target schema projection'));assert(!report.includes('TargetProjection'));
+  assert(report.includes('class="diff-removed"'));assert(report.includes('class="diff-added"'));
+  assert(report.includes('- data Root = Root'));assert(report.includes('+ data Todo = Todo'));
+  assert(report.includes('unchanged lines'));assert(report.includes('class="diff-context"'));
+  const direct=await page('/evolutions/'+d.id);
+  assert(direct.includes('href="/records/todos/one'+selected+'"'));
+  assert((await page('/records/todos/one'+selected)).includes('First lesson'));
+  const missingRecord=await page('/records/todos/missing'+selected,404);
+  assert(missingRecord.includes('Unknown record:'));assert(missingRecord.includes('href="/'+selected+'"'));
   await page('/types/Unknown'+selected,404);
   await page('/collections/todos',404);
   // Inspection does not alter the checked candidate or authored files.
@@ -209,7 +226,11 @@ evolution = prepare (pure ()) $ edit (Rationale "Remove second task" [])
 `);
   cli(['evolution','check',removed.id]);
   const suffix='?evolution='+removed.id;
-  const deleted=await (await request(accepted,'/evolutions/'+removed.id+suffix)).text();
+  const deleted=await (await request(accepted,'/evolutions/'+removed.id)).text();
+  const overridden=await (await request(accepted,'/evolutions/'+removed.id+'?evolution='+d.id)).text();
+  assert(overridden.includes('Draft '+removed.id));
+  assert(deleted.includes('href="/records/todos/one'+suffix+'"'));
+  assert(deleted.includes('<dt>title</dt>'));
   assert(deleted.includes('Second lesson'));assert(deleted.includes('Absent'));
   assert(!deleted.includes('href="/records/todos/two'+suffix+'"'));
   await request(accepted,'/records/todos/two'+suffix,{},404);

@@ -337,13 +337,16 @@ URL-encode each name or ID as a path segment. For example,
 `/records/people/alex?evolution=000009-update-people` shows a draft record.
 `?evolution=ID` selects the last successfully checked candidate for inspection
 pages; without it they show the accepted KB. Links retain that selection.
+A draft evolution page selects its own candidate for changed-record links,
+even when opened without a selector or from another draft. Only records still
+present in that candidate receive links.
 The server's `--evolution` flag selects **only domain views under `/kb/`**.
 
 An unchecked evolution still has an explanation and a live source comparison.
 After a successful check, its source comparison and step report use that saved
 capture, including when later edits or checks fail. Record and type pages also
-use the saved candidate. Source comparisons are labelled and show each changed
-file before and after; removed and intermediate records remain in the step
+use the saved candidate. Source comparisons are labelled and show line additions/removals with
+unchanged lines collapsed; added and removed files show their whole content; removed and intermediate records remain in the step
 report even when there is no current record to link to. Archived evolution
 reports show their recorded values; record links open the explicitly shown KB
 context, not a historical snapshot.

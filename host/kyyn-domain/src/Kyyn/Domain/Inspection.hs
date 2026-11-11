@@ -1,5 +1,5 @@
 module Kyyn.Domain.Inspection
-  ( SnapshotInspection(..), EvolutionInspection(..), SourceChange(..) ) where
+  ( SnapshotInspection(..), EvolutionInspection(..), SourceOrigin(..), SourceChange(..) ) where
 
 import Data.Aeson (Value)
 import Data.ByteString (ByteString)
@@ -16,5 +16,6 @@ data SnapshotInspection = SnapshotInspection GitRevision (Maybe EvolutionId) Roo
 data SourceChange = SourceChange RelativePath (Maybe ByteString) (Maybe ByteString)
   deriving (Eq, Show)
 
--- The Bool identifies captured source versus live, never-checked workspace source.
-data EvolutionInspection = EvolutionInspection WorkspaceManifest Bool (Maybe EvolutionReport) [SourceChange]
+data SourceOrigin = SavedCapture | LiveWorkspace deriving (Eq, Show)
+
+data EvolutionInspection = EvolutionInspection WorkspaceManifest SourceOrigin (Maybe EvolutionReport) [SourceChange]

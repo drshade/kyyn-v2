@@ -19,7 +19,7 @@ executable kyyn-v2
   build-depends: base >=4.22 && <4.23, kyyn-sdk, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
     kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-surfaces,
     effectful-core ==2.6.1.0, directory, filepath, time, transformers, aeson, bytestring, text,
-    optparse-applicative >=0.18.1 && <0.20, template-haskell, wai, warp, http-types, network, mime-types, lucid
+    optparse-applicative >=0.18.1 && <0.20, template-haskell, wai, warp, http-types, network, mime-types, lucid, Diff
 
 test-suite installed-journey
   type: exitcode-stdio-1.0

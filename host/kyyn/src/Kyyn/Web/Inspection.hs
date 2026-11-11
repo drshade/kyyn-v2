@@ -1,7 +1,8 @@
 module Kyyn.Web.Inspection
-  ( InspectionRoute(..), renderInspection, inspectionLink ) where
+  ( InspectionRoute(..), renderInspection, renderInspectionError, inspectionLink ) where
 
 import Control.Monad (forM_)
+import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
 import Data.Aeson (Value(..), encode)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
@@ -21,10 +22,13 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.Git (revisionName)
 import Kyyn.Domain.Inspection
+import Kyyn.Domain.Recipe (RecipeDefinition(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.SnapshotReport
-import Kyyn.Domain.StoredSnapshot (RecordedValue(..))
-import Kyyn.Domain.Workspace (WorkspaceManifest(..))
+import Kyyn.Domain.StoredSnapshot (RecordedValue(..), RecordedRecipe(..))
+import Kyyn.Domain.Workspace (WorkspaceManifest(..), EvolutionState(..))
 import qualified Kyyn.Types.Contract as Contract
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Fact (FactId(..))
@@ -62,6 +66,24 @@ renderInspection selected snapshot route summaries evolution = do
   pure $ document selected snapshot title body
   where missing kind name = Left [errorDiagnostic "inspection.unknown" ("Unknown " ++ kind ++ ": " ++ name)]
 
+renderInspectionError :: Maybe EvolutionId -> [Diagnostic] -> Html ()
+renderInspectionError selected diagnostics =
+  document selected (Left diagnostics) "Page unavailable" (diagnosticsBody diagnostics)
+
+stateLabel :: EvolutionState -> Text
+stateLabel Draft = "Draft"
+stateLabel Ready = "Ready for review"
+stateLabel Accepted = "Accepted"
+
+affordanceLabel :: Affordance -> Text
+affordanceLabel Title = "title"
+affordanceLabel Timeline = "timeline"
+affordanceLabel Badge = "badge"
+
+originLabel :: StepOrigin -> Text
+originLabel Authored = "Authored change"
+originLabel TargetProjection = "Target schema projection"
+
 inspectionLink :: Maybe EvolutionId -> [Text] -> Text
 inspectionLink selected segments = "/" <> Text.intercalate "/" (map escaped segments) <>
   maybe "" (\identity -> "?evolution=" <> escaped (Text.pack (evolutionIdName identity))) selected
@@ -73,7 +95,7 @@ document selected snapshot title content = doctypehtml_ $ do
     meta_ [charset_ "utf-8"]
     meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1"]
     title_ (toHtml title)
-    style_ ("body{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#202832}a{color:#245a94}nav{display:flex;gap:1rem}h1{line-height:1.2}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #ddd;vertical-align:top}dt{font-weight:600}dd{margin-bottom:1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f7;padding:1rem}details{margin:1rem 0}.context{color:#556}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:1rem;min-width:0}.comparison>div{min-width:0}@media(max-width:700px){.comparison{grid-template-columns:1fr}}" :: Text)
+    style_ ("body{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#202832}a{color:#245a94}nav{display:flex;gap:1rem}h1{line-height:1.2}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #ddd;vertical-align:top}dt{font-weight:600}dd{margin-bottom:1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f7;padding:1rem}details{margin:1rem 0}.context{color:#556}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:1rem;min-width:0}.comparison>div{min-width:0}.diff-added{background:#e5f5e8}.diff-removed{background:#fbe7e7}.diff-context pre{color:#667}@media(max-width:700px){.comparison{grid-template-columns:1fr}}" :: Text)
   body_ $ do
     nav_ $ do
       a_ [href_ (inspectionLink selected [])] "Index"
@@ -91,7 +113,7 @@ indexBody selected snapshot summaries = do
   h2_ "Evolutions"
   ul_ $ forM_ summaries $ \(EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName name) state) -> li_ $ do
     a_ [href_ (inspectionLink selected ["evolutions",Text.pack (evolutionIdName identity)])] (toHtml name)
-    toHtml (" · " ++ show state)
+    toHtml (" · " <> stateLabel state)
   case snapshot of
     Left diagnostics -> diagnosticsBody diagnostics
     Right (SnapshotInspection _ _ root _) -> do
@@ -177,7 +199,7 @@ typeBody selected root target = do
             _ -> toHtml (haskellType typ)
           td_ $ toHtml $ fromMaybe "" (field >>= (\f -> lookup (Text.pack f) documents))
   forM_ (roles root target) $ \(field,role,description,affordance) ->
-    p_ (toHtml (field <> " · " <> role <> " (" <> Text.pack (show affordance) <> ") · " <> description))
+    p_ (toHtml (field <> " · " <> role <> " (" <> affordanceLabel affordance <> ") · " <> description))
 
 -- Documentation is taken from the checked contract, not parsed from source.
 typeFields :: Text -> Contract.Description -> [(Text,Text)]
@@ -200,36 +222,73 @@ typeFields wanted description = case description of
     fields inner = typeFields wanted inner
 
 evolutionBody :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> EvolutionInspection -> Html ()
-evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ explanation state _) captured report changes) = do
+evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ explanation state _) source report changes) = do
   p_ (toHtml explanation)
-  p_ (toHtml (show state ++ " · base " ++ revisionName base))
-  p_ (if captured then "Source and report: saved capture." else "Source: live workspace; no checked candidate.")
+  p_ (toHtml (stateLabel state <> " · base " <> Text.pack (revisionName base)))
+  p_ $ case source of
+    SavedCapture -> "Source and report: saved capture."
+    LiveWorkspace -> "Source: live workspace; no checked candidate."
   h2_ "Steps"
   case report of
     Nothing -> p_ "No checked step report."
     Just (EvolutionReport _ steps) -> forM_ (zip [1 :: Int ..] steps) $ \(number,SnapshotStep origin (Rationale why evidence) changed) -> section_ $ do
-      h3_ (toHtml (show number ++ " · " ++ show origin))
+      h3_ (toHtml (Text.pack (show number) <> " · " <> originLabel origin))
       p_ (toHtml why)
-      forM_ evidence (p_ . toHtml . show)
+      forM_ evidence evidenceBody
       forM_ changed $ \change -> case change of
         SnapshotFactChange name (FactId identity) before after -> do
-          h4_ $ case snapshot >>= (\s -> collection s (Text.unpack name)) of
-            Right (_,_,rows) | identity `elem` map fst rows -> a_ [href_ (inspectionLink selected ["records",name,identity])] (toHtml (name <> "/" <> identity))
-            _ -> toHtml (name <> "/" <> identity)
+          h4_ $ recordLink name identity (name <> "/" <> identity)
           comparison (recorded before) (recorded after)
         SnapshotFieldChange name before after -> h4_ (toHtml name) >> comparison (recorded before) (recorded after)
-        SnapshotMembershipChange name before after -> h4_ (toHtml (name <> " membership")) >> comparison (showValue before) (showValue after)
-        SnapshotRecipeChange (FactId name) before after -> h4_ (toHtml ("Recipe " <> name)) >> comparison (showValue before) (showValue after)
+        SnapshotMembershipChange name before after -> h4_ (toHtml (name <> " membership")) >> comparison (members name <$> before) (members name <$> after)
+        SnapshotRecipeChange (FactId name) before after -> h4_ (toHtml ("Recipe " <> name)) >> comparison (recipeBody selected <$> before) (recipeBody selected <$> after)
   h2_ "Source changes"
   if null changes then p_ "No source changes." else forM_ changes $ \(SourceChange path before after) -> details_ $ do
     summary_ (toHtml (relativeName path))
-    comparison (Text.decodeUtf8With lenientDecode <$> before) (Text.decodeUtf8With lenientDecode <$> after)
+    sourceDiff (Text.decodeUtf8With lenientDecode <$> before) (Text.decodeUtf8With lenientDecode <$> after)
   where
-    recorded = fmap (\(RecordedValue _ value) -> scalarText value)
-    showValue :: Show a => Maybe a -> Maybe Text
-    showValue = fmap (Text.pack . show)
+    recorded = fmap (\(RecordedValue shape value) -> renderValue selected shape value)
+    recordLink :: Text -> Text -> Text -> Html ()
+    recordLink name identity label = case snapshot >>= (\s -> collection s (Text.unpack name)) of
+      Right (_,_,rows) | identity `elem` map fst rows -> a_ [href_ (inspectionLink selected ["records",name,identity])] (toHtml label)
+      _ -> toHtml label
+    members :: Text -> [FactId] -> Html ()
+    members name identities = if null identities then p_ "No records." else
+      ul_ $ forM_ identities $ \(FactId identity) -> li_ (recordLink name identity identity)
 
-comparison :: Maybe Text -> Maybe Text -> Html ()
+evidenceBody :: EvidenceRef -> Html ()
+evidenceBody (EvidenceRef producer instanceName source references) = details_ $ do
+  summary_ "Evidence"
+  dl_ $ do
+    dt_ "Producer"; dd_ (toHtml producer)
+    dt_ "Instance"; dd_ (toHtml instanceName)
+    dt_ "Source"; dd_ (toHtml source)
+    dt_ "References"; dd_ $ ul_ $ forM_ references (li_ . toHtml)
+
+recipeBody :: Maybe EvolutionId -> RecordedRecipe -> Html ()
+recipeBody selected (RecordedRecipe definition (RecordedValue shape value)) = do
+  case definition of
+    OpenRecipe instructions stateType -> do
+      p_ (toHtml instructions)
+      p_ (toHtml ("State type: " <> Text.pack stateType))
+    ClosedRecipe (FlowEntryRef flow) -> p_ (toHtml ("Flow: " <> flow))
+  h5_ "State"
+  renderValue selected shape value
+
+comparison :: Maybe (Html ()) -> Maybe (Html ()) -> Html ()
 comparison before after = div_ [class_ "comparison"] $ do
-  div_ $ h4_ "Before" >> pre_ (toHtml (fromMaybe "Absent" before))
-  div_ $ h4_ "After" >> pre_ (toHtml (fromMaybe "Absent" after))
+  div_ $ h4_ "Before" >> fromMaybe (p_ "Absent") before
+  div_ $ h4_ "After" >> fromMaybe (p_ "Absent") after
+
+sourceDiff :: Maybe Text -> Maybe Text -> Html ()
+sourceDiff Nothing (Just after) = h4_ "Added file" >> pre_ [class_ "diff-added"] (toHtml after)
+sourceDiff (Just before) Nothing = h4_ "Removed file" >> pre_ [class_ "diff-removed"] (toHtml before)
+sourceDiff (Just before) (Just after) = do
+  -- Keep line endings in the comparison so a missing final newline is visible.
+  forM_ (getGroupedDiff (Text.splitOn "\n" before) (Text.splitOn "\n" after)) $ \chunk -> case chunk of
+    First removed -> pre_ [class_ "diff-removed"] (toHtml (Text.unlines (map ("- " <>) removed)))
+    Second added -> pre_ [class_ "diff-added"] (toHtml (Text.unlines (map ("+ " <>) added)))
+    Both unchanged _ -> details_ [class_ "diff-context"] $ do
+      summary_ (toHtml (Text.pack (show (length unchanged)) <> " unchanged lines"))
+      pre_ (toHtml (Text.unlines unchanged))
+sourceDiff Nothing Nothing = mempty

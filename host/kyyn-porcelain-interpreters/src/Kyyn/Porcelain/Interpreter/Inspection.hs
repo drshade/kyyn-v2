@@ -44,19 +44,19 @@ runInspection = interpret $ \_ -> \case
     live@(WorkspaceSnapshot manifest@(WorkspaceManifest _ _ _ state _) _ _ _) <- ExceptT (Store.readWorkspace workspace)
     (WorkspaceSnapshot (WorkspaceManifest base name explanation _ kind) target _ _,saved,report) <-
       case state of
-        Accepted -> (live,True,) <$> ExceptT (Store.readArchivedReport workspace)
+        Accepted -> (live,SavedCapture,) <$> ExceptT (Store.readArchivedReport workspace)
         _ -> do
           candidate <- ExceptT (Store.loadCheckedCandidate workspace)
           pure $ case candidate of
-            Just (Candidate (EvolutionContext _ _ _ snapshot) steps _) -> (snapshot,True,Just steps)
-            Nothing -> (live,False,Nothing)
+            Just (Candidate (EvolutionContext _ _ _ snapshot) steps _) -> (snapshot,SavedCapture,Just steps)
+            Nothing -> (live,LiveWorkspace,Nothing)
     path <- checked (rootLocation kb)
     previous <- ExceptT (Git.readTreeAt repository base (Subtree path))
     let before = filter (not . isRootMaterial . fst) (files previous)
         after = files target
         changes = [SourceChange key old new | key <- sort (nub (map fst before ++ map fst after)),
           let old = lookup key before, let new = lookup key after, old /= new]
-        selectedManifest = if saved then WorkspaceManifest base name explanation state kind else manifest
+        selectedManifest = if saved == SavedCapture then WorkspaceManifest base name explanation state kind else manifest
     -- Lifecycle state is current; explanation/base/source belong to the labelled capture.
     pure (EvolutionInspection selectedManifest saved report changes)
   where checked = either (throwE . pure . errorDiagnostic "inspection.source") pure

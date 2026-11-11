@@ -10,6 +10,8 @@ import Kyyn.Configuration (Host, SelectedKb(..), selectKnowledgeBase)
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.Inspection (EvolutionInspection(..))
+import Kyyn.Domain.Workspace (WorkspaceManifest(..), EvolutionState(..))
 import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Porcelain.Capability.Inspection
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
@@ -19,34 +21,42 @@ import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
-import Kyyn.Surfaces.Result (Response, refusal, operationalFailure)
+import Kyyn.Surfaces.Result (Response(..), refusal, operationalFailure)
 import Kyyn.Web.Inspection
 
 inspectPage :: Host -> DirectoryScope -> [Text] -> [(ByteString,Maybe ByteString)]
-  -> IO (Either Response (Html ()))
+  -> IO (Either (Response,Html ()) (Html ()))
 inspectPage host scope path parameters = case selection of
-  Left diagnostics -> pure (Left (refusal diagnostics))
+  Left diagnostics -> pure (failed Nothing (refusal diagnostics))
   Right (selected,route) -> do
     kbResult <- selectKnowledgeBase host scope
     case kbResult of
-      Left response -> pure (Left response)
+      Left response -> pure (failed selected response)
       Right (SelectedKb kb revision _) -> do
         result <- withRuntimeResult host $ \settings -> runRuntime host settings . runPluginPreparation . runToolPreparation
           . runRootOpening . runWorkspaceStore . runEvolutionStore . runInspection $ runExceptT $ do
-            snapshot <- ExceptT (Right <$> inspectSnapshot kb revision selected)
-            summaries <- case route of
-              IndexPage -> ExceptT (Store.listEvolutions kb AllEvolutions)
-              _ -> pure []
             details <- case route of
               EvolutionPage identity -> Just <$> ExceptT (inspectEvolutionSource (EvolutionWorkspace kb identity))
               _ -> pure Nothing
-            ExceptT (pure (renderInspection selected snapshot route summaries details))
+            -- A draft evolution owns its record context, even when reached from
+            -- the accepted index or a link carrying another draft's selector.
+            let shown = case (route,details) of
+                  (EvolutionPage identity,Just (EvolutionInspection (WorkspaceManifest _ _ _ state _) _ _ _))
+                    | state /= Accepted -> Just identity
+                  _ -> selected
+            snapshot <- ExceptT (Right <$> inspectSnapshot kb revision shown)
+            summaries <- case route of
+              IndexPage -> ExceptT (Store.listEvolutions kb AllEvolutions)
+              _ -> pure []
+            ExceptT (pure (renderInspection shown snapshot route summaries details))
         pure $ case result of
-          Left response -> Left response
-          Right (Left failure) -> Left (operationalFailure failure)
-          Right (Right (Left diagnostics)) -> Left (refusal diagnostics)
+          Left response -> failed selected response
+          Right (Left failure) -> failed selected (operationalFailure failure)
+          Right (Right (Left diagnostics)) -> failed selected (refusal diagnostics)
           Right (Right (Right page)) -> Right page
   where
+    failed selected response@(Response _ _ _ diagnostics) =
+      Left (response,renderInspectionError selected diagnostics)
     selection = do
       selected <- case [value | ("evolution",value) <- parameters] of
         [] -> Right Nothing

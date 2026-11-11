@@ -24,6 +24,7 @@ import System.IO (hFlush, stdout)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (relativeName, relativePath)
+import Kyyn.Web.Inspection (renderInspectionError)
 import Kyyn.Domain.View (ViewDefinition(..))
 import qualified Kyyn.Surfaces.Result as Result
 
@@ -31,7 +32,7 @@ data ViewSource = ViewSource Value [ViewDefinition] FileTree
 
 runServer :: Int -> IO (Either Result.Response ViewSource)
   -> (String -> Value -> IO (Value,Result.Response))
-  -> ([Text.Text] -> Query -> IO (Either Result.Response (Html ()))) -> IO Result.Response
+  -> ([Text.Text] -> Query -> IO (Either (Result.Response,Html ()) (Html ()))) -> IO Result.Response
 runServer port pages query inspect = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
   case opened of
     Left err -> pure (Result.refusal [errorDiagnostic "web.listen"
@@ -53,13 +54,15 @@ runServer port pages query inspect = bracket (try @IOException acquire) (either 
       case result of Left err -> close socket >> ioError err; Right () -> pure socket
     application request respond = do
       result <- try @IOException (route request)
-      respond $ either (\err -> failure status500 "web.io" (displayException err)) id result
+      respond $ either (\err ->
+        if take 1 (pathInfo request) == ["kb"] then failure status500 "web.io" (displayException err)
+        else inspectionError status500 [] "web.io" (displayException err)) id result
     route request
       | take 1 (pathInfo request) /= ["kb"] =
-          if requestMethod request /= methodGet then pure (method "GET") else do
+          if requestMethod request /= methodGet then pure (inspectionError status405 [(hAllow,"GET")] "web.method" "This page supports GET only") else do
             page <- inspect (pathInfo request) (queryString request)
             pure $ case page of
-              Left result -> jsonResponse (resultStatus result) Null result
+              Left (result,html) -> responseLBS (resultStatus result) [(hContentType,"text/html; charset=utf-8"),noStore] (renderBS html)
               Right html -> responseLBS status200 [(hContentType,"text/html; charset=utf-8"),noStore] (renderBS html)
       | ["kb","queries",name] <- pathInfo request =
           if requestMethod request /= methodPost then pure (method "POST")
@@ -134,6 +137,10 @@ noStore = (hCacheControl,"no-store")
 method :: Bytes.ByteString -> Response
 method allowed = responseLBS status405 [(hAllow,allowed),(hContentType,"application/json"),noStore]
   (encode (Result.responseJson (Result.refusal [errorDiagnostic "web.method" "Unsupported method"])))
+inspectionError :: Status -> ResponseHeaders -> String -> String -> Response
+inspectionError status headers code message = responseLBS status
+  ([(hContentType,"text/html; charset=utf-8"),noStore] ++ headers)
+  (renderBS (renderInspectionError Nothing [errorDiagnostic code message]))
 failure :: Status -> String -> String -> Response
 failure status code message = jsonResponse status Null (Result.refusal [errorDiagnostic code message])
 jsonResponse :: Status -> Value -> Result.Response -> Response
