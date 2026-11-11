@@ -303,9 +303,48 @@ under `change/Input/`, with precise omissions/errors for absent or unsupported
 shapes. It never copies old flows, validators or plugin implementations and is
 not a prerequisite for ordinary evolution creation or checking.
 
+### Domain-view authoring
+
+A KB may declare ordinary HTML/JavaScript domain views in `kb.dhall`. This is
+source registration, not a guest function or a structural UI schema:
+
+```haskell
+-- Host representation; paths are relative to the selected root source.
+data ViewDefinition = ViewDefinition
+  { name :: String, description :: String, path :: RelativePath }
+```
+
+```dhall
+views =
+  [ { name = "training_register"
+    , description = "Explore the training register"
+    , path = "views/training-register/index.html"
+    }
+  ]
+```
+
+A KB with no views declares
+`views = [] : List { name : Text, description : Text, path : Text }`.
+Names use the existing connector-binding identifier rule and are unique among
+views, independently of query/tool names. Check declaration shape, names, relative
+paths and existence of the entry page in captured source. The page's directory
+contains its assets. Reject traversal and symlinks; do not parse HTML/JavaScript,
+infer dependencies or require a query declaration to be mentioned by any page.
+A page may include `/kb/kyyn.js` explicitly and use its named-query, navigation
+and URL-parameter functions as defined in [ADR 0018](0018-surfaces.md#kb-owned-domain-views).
+
+Authors edit pages, assets and registrations in an evolution's target. Checking
+captures them with the source; preview serves that candidate rather than live
+worktree files. Queries own domain calculations and checked input/result types.
+Views own presentation, can use ordinary browser libraries, and carry no typed
+parameter declarations or query-usage list. A change to a query does not trigger
+a separate view compatibility check. The host's role-driven generic workbench
+presentation remains distinct from these open authored pages.
+
 ### Shared authoring vocabulary
 
-Pure calculations are reusable from validation, queries and views. Provide a
+Pure calculations are reusable from validation, queries and output renderers.
+Domain views access those calculations through registered queries. Provide a
 small SDK for identified facts, diagnostics, selected existing exact-value library
 types/adapters and evolution composition. Do not create a Kyyn arithmetic library
 in place of evaluating existing Haskell implementations. Use the maintained `lens` library for optics and `generic-lens` for

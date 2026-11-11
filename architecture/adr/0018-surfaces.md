@@ -145,7 +145,7 @@ kyyn
     symbol
       show <module.symbol>
   web
-    serve
+    serve [--port <port>] [--evolution <id>]
   mcp
     serve
   doctor
@@ -613,7 +613,150 @@ require compiling a guest. Host configuration/path resolution and interpretation
 workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
 Surfaces do not compose root opening, validation or evolution execution themselves.
 
-### MCP and Web
+### KB-owned domain views
+
+The Web surface has two distinct audiences. The host-owned authoring workbench
+exposes model, evidence and evolution operations for authors and reviewers.
+KB-owned domain views present results to readers who never author a KB. A domain
+view is ordinary HTML and JavaScript, not a host-defined widget vocabulary, a
+guest HTML renderer or an extension to the workbench. The workbench is not a
+prerequisite for serving domain views. [ADR 0023](0023-interaction.md) owns the
+workbench collaboration loop; [ADR 0008](0008-authoring.md) owns view declarations.
+
+`kyyn-v2 web serve [--port PORT] [--evolution ID]` serves one selected KB until
+stopped. Bind to `127.0.0.1`, default port 8080; `--port 0` asks the OS for an
+available port. Report the actual address after binding. A busy requested port is
+a diagnostic, not a silent move to another port. No global daemon, automatic
+browser launch, public binding or authentication service is required. Use Warp
+and WAI with an explicit router over WAI's decoded `pathInfo`; no Servant API or
+second application engine sits between HTTP and porcelain operations.
+
+The domain-view routes are:
+
+| Method and address | Meaning |
+| --- | --- |
+| `GET /` | Redirect to `/kb/` while no workbench is selected there |
+| `GET /kb/` | Host-generated index of declared view names, descriptions and links; identifies accepted or draft context |
+| `GET /kb/views/<name>/` | The declared entry page |
+| `GET /kb/views/<name>/<asset-path>` | A captured file relative to that entry page's directory |
+| `POST /kb/queries/<name>` | Invoke a named query with its JSON argument in the request body |
+| `GET /kb/kyyn.js` | The explicitly included browser helper script |
+
+Redirect a declared view's URL without its trailing slash to the slash form so
+relative asset links resolve consistently. Unknown routes, views and assets are
+404 diagnostics, not a fallback index page. Unsupported methods are 405 with the
+allowed methods. Page directories are not listed. Resolve declared pages and
+assets only within the selected immutable source tree and the view's directory;
+reject absolute paths, traversal components and symlinks. Never serve the checkout,
+`.kyyn/`, stored facts or recipe state as a filesystem tree. The declaration's
+source-relative page path selects the asset directory, not arbitrary host paths.
+Serve HTML, JavaScript, CSS, JSON, common images and fonts with their corresponding
+media types; unknown file extensions use `application/octet-stream`. Host-generated
+index text is HTML-escaped. URL components are encoded independently.
+
+#### Selecting one source and data context
+
+Normal requests resolve the accepted revision afresh. Each request selects its
+root once and uses that root's captured source, declarations, query contracts and
+data throughout. Acceptance therefore appears on the next refresh; uncommitted
+working-directory edits do not. Queries have no result cache. Existing immutable
+guest build reuse remains valid and is not query-result caching. Static files and
+query responses use `Cache-Control: no-store` so browser caching does not hide a
+newly accepted source or result.
+
+`--evolution ID` selects the latest saved checked candidate for that workspace.
+Use its captured target source and evaluated data together, under ADR 0010's
+capture rules. Missing, invalid or stale candidates return diagnostics naming
+`kyyn-v2 evolution check ID` as the next step. Serving never evaluates an
+evolution, marks it Ready or accepts it. Successful rechecking makes the new
+candidate available on the next request. Draft pages and query responses identify
+the evolution and base revision; they are never labelled as accepted knowledge.
+An accepted evolution is no longer a draft selection: restart without
+`--evolution` to browse the accepted root.
+
+This is request-level consistency, not a browser-session snapshot. A page loaded
+before acceptance may make its next query after acceptance; that request uses the
+new accepted root. Separate requests may therefore have different contexts.
+No implicit revision pin, snapshot session, live-update channel or result cache is
+introduced. A query composing several calculations still uses one selected root
+throughout its execution, as ADR 0017 requires.
+
+#### Query transport and browser API
+
+Only named queries supply KB data to a domain view. No raw collection/fact,
+connector, tool, recipe-run, secret, sink or mutation endpoints are exposed by
+this server. Handlers reuse root selection/checking, query lookup, argument
+checking and `RootExecution.queryRoot` through shared porcelain operations. They
+do not invoke CLI subprocesses or reimplement domain checks. An unknown query
+retains the ordinary `query.unknown` diagnostic; malformed or ill-typed arguments
+retain structural diagnostics from the existing checker. A checked argument is
+constructed only after matching the selected query's input contract.
+
+The POST body is the argument value itself, encoded as `application/json`, not
+Dhall text or a wrapper containing executable source. Unit arguments use `{}`.
+Use the same structural JSON value conventions as query invocation/results,
+including tagged alternatives and exact scalar representations. JavaScript does
+not infer Haskell constructors or coerce URL strings into numbers, dates or unions.
+
+HTTP returns the normal `outcome`, `result` and `diagnostics` response envelope,
+with a separate top-level `context` describing the selected accepted revision or
+draft evolution and its base revision. This context contains `revision` and
+`evolution` (null for accepted browsing); it does not mint a browser-session or
+snapshot token. `result` is the query's value without
+adding fields to authored records. Preserve the shared diagnostic codes/messages
+and locations. Successful queries use 200; malformed JSON, unsupported argument
+values and checked application refusals use 400; unknown query/view/asset uses
+404; an unavailable or stale draft uses 409; operational failures use 500.
+Unsupported request media types use 415. Failure returns diagnostics rather than
+an empty successful value. Static-file successes contain file bytes; HTTP errors
+use the same JSON diagnostic envelope.
+
+The host serves a plain script at `/kb/kyyn.js`. Pages opt in with a normal script
+tag; the host never injects it or rewrites the authored page. It provides exactly
+these author-facing functions (private helper representation is unspecified):
+
+```javascript
+// Resolves to the query value; rejects an Error carrying outcome, diagnostics,
+// HTTP status and selected context on an unsuccessful response.
+await kyyn.query(name, args)
+
+// Returns a URL for a declared view, encoding its URL parameters.
+// Throws for an undeclared name; uses declarations from the script's context.
+kyyn.viewUrl(name, params)
+
+// Returns URLSearchParams for the current page URL.
+kyyn.params()
+```
+
+The script contains the selected view-name catalogue needed by `viewUrl`; it
+contains no query results or raw root. `query` sends JSON to the named endpoint
+and checks both HTTP status and response outcome. Transport/JSON failures reject
+explicitly. `viewUrl` accepts a `URLSearchParams` or a record of string parameter
+values; it does not declare, validate or type those parameters. `params()` permits
+ordinary `.get`, `.getAll` and iteration semantics. The page decides which
+parameters to pass to a query; the host checks types only at that query boundary.
+No default-view declaration or view-to-query dependency registry is introduced.
+
+#### Boundary and verification
+
+Domain views are trusted KB-authored pages. The local read-only server does not
+promise browser network confinement or isolation between authored pages. It does
+not host workbench mutation endpoints. Workbench/domain-view origin isolation and
+static publishing are separate decisions, not hidden prerequisites for this
+surface. Do not enable permissive cross-origin access to the local query endpoint;
+loopback binding is not a claim of hosted or multi-tenant security.
+
+An installed journey must start from the guide and CLI discovery: declare a view
+in an evolution, check it, serve its draft, fetch the page and `kyyn.js`, call a
+named query, and receive ordinary diagnostics for wrong arguments and an unknown
+query. Accept and verify the accepted data/page; change accepted head while the
+server runs and verify refresh observes it. Verify that edits in the working tree
+are not served, stale drafts request a new check, and asset traversal cannot read
+outside the captured view source. Exercise the helper's query errors, encoded
+view links, undeclared-name failure and URL-parameter behavior. These checks do
+not require the workbench, static publishing or a view/query type-link checker.
+
+### MCP and authoring workbench
 
 The CLI's `plugin connector method list/show` resolves registered readers and
 inspects their Haskell contracts without invoking a reader. Both allow
@@ -661,7 +804,7 @@ capture does not declare a task complete. [ADR 0014](0014-evidence.md) owns this
 boundary. The [user guide](../../docs/guide.md) describes the authoring workflows.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
-Web is designed for human understanding, high-level design, exploration and
+The authoring workbench is designed for human understanding, high-level design, exploration and
 review. MCP is designed for agent discovery, technical authoring and reliable
 execution. Both expose the central loop: inspect the model, explore facts, try
 examples, propose changes, compare consequences and resolve problems. An agent
@@ -679,12 +822,12 @@ MCP exposes the same relevant state, including review feedback, without requirin
 screen scraping. See ADR 0023 for the shared objects and handoff behavior.
 No chat harness, full IDE or arbitrary frontend-plugin framework is a prerequisite.
 
-Generic record browsing uses host-side checked structural values and snapshot
+Workbench record browsing uses host-side checked structural values and snapshot
 store operations. Titles, timelines and badges consume the checked role metadata
 from `CheckedContract` under ADR 0005, not a separate reading or re-inspection of
 authored source. Structural filtering/sorting does not require a fresh guest
 invocation for every table interaction. Domain interpretation, policy comparisons
-and business calculations are explicit named guest queries/views; do not duplicate
+and business calculations are explicit named guest queries; do not duplicate
 them in a host query language or browser code. An explicit query evaluates the
 selected snapshot; no query-result cache is required. Displaying an already
 prepared artifact is a separate operation, not an implicit cached query result.

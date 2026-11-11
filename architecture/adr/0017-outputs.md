@@ -25,6 +25,22 @@ invoking a sink changes something outside it and does not itself require an
 evolution. Changing an output's definition or its root-owned sink configuration
 is a KB code/configuration change and follows the ordinary evolution route.
 
+### Domain views and output renderers
+
+KB-owned domain views are interactive HTML/JavaScript pages served by the local
+Web surface in [ADR 0018](0018-surfaces.md#kb-owned-domain-views). Their data comes
+from named queries. They are not output renderers, sink bindings or another guest
+entry-point kind. A domain view and an output renderer can use the same query so
+the calculation has one owner; the page handles presentation and interaction.
+Declaring or refreshing a view never publishes an output.
+
+View registration and files belong to the KB source and change through evolutions,
+as specified in [ADR 0008](0008-authoring.md#domain-view-authoring). There is no
+check linking JavaScript to query types and no declared list of queries used by
+a view. Query argument/result checking remains authoritative at invocation.
+Static publication of domain views is outside this live-view contract; ordinary
+typed output renderers and sink publication retain their existing semantics.
+
 ### Root data and authored declarations
 
 The guest's Root is the concrete state type. Query and renderer implementations
@@ -326,7 +342,9 @@ same content; the operation must not depend on a retained preview. Also update
 using changed inputs and verify the newly selected result, not enforced equality
 with an old preview. Test a structured non-file sink input without a universal
 artifact conversion, failed/uncertain invocation, and explicit repeatable file
-replacement. Keep HTML previews isolated from the workbench's privileged origin.
+replacement. When an authoring workbench exposes privileged operations, keep
+authored HTML previews isolated from its origin. The domain-view-only server in
+ADR 0018 exposes no such workbench operations and promises no view isolation.
 
 Check query arguments and sink options independently; reject invalid values before
 dispatch. Verify omitted options use the declared default, an override changes

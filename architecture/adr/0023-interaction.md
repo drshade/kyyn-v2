@@ -18,7 +18,21 @@ Humans will generally work at the level of meaning, design, examples, results
 and review; agents will generally do more technical construction, code/schema
 editing and repeatable execution. Both can work across those levels.
 
-The initial evolution-authoring workflow is explicit: an agent creates a workspace,
+Web includes a host-owned authoring workbench and KB-owned domain views. Domain
+views are for readers of results: open HTML/JavaScript pages that consume named
+queries. They do not need schema, evidence or evolution controls. The workbench
+provides the shared design/review loop described below; those controls are not
+required chrome around a domain view. [ADR 0018](0018-surfaces.md#kb-owned-domain-views)
+owns live serving, draft selection and the explicitly included browser helper.
+
+An author previews a domain view with `web serve --evolution ID` after checking
+its evolution. That preview shows captured candidate source and data together;
+it is not acceptance and does not require a graphical evolution editor or
+side-by-side comparison. View parameters are plain URL parameters, checked only
+when used as named-query arguments. Do not impose a typed view vocabulary,
+view-to-query declarations, type-link checking or a default-view setting.
+
+The evolution-authoring workflow is explicit: an agent creates a workspace,
 populates its single `evolution` binding and supporting files, trials and refines
 the result, then marks it Ready for review. The human inspects its changes,
 outputs, checks and rationale, requests revisions as needed, and may accept the
@@ -39,7 +53,7 @@ notes support human design feedback without orchestrating the agent that respond
 External schedulers can use the same agent-and-ordinary-operations workflow for
 settled work; agent-less preparation conveniences are not an initial requirement.
 
-| Shared activity | Human-oriented Web | Agent-oriented MCP |
+| Shared activity | Human-oriented workbench | Agent-oriented MCP |
 | --- | --- | --- |
 | Understand the system | Model browser, examples, assumptions, connected views | Exact contracts, documentation, source/binding locations |
 | Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, identified collection reads, reusable calculation tools |

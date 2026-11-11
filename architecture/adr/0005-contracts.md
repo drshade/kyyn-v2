@@ -15,6 +15,13 @@ pipe does not decide which definition owns the schema.
 Use one **checked contract algebra** as the internal input to structural checking,
 binding/codec generation, collection routing, JSON Schema, Dhall config types and
 generic presentation.
+Generic presentation here means host-generated workbench presentation, not a
+required vocabulary for KB-owned HTML/JavaScript views. The `views` manifest list
+is source/navigation metadata under [ADR 0008](0008-authoring.md#domain-view-authoring);
+it creates no view contract, typed parameters or query-dependency declarations.
+Named-query arguments and results still use this checked algebra when a view
+invokes them through [ADR 0018](0018-surfaces.md#kb-owned-domain-views).
+
 It represents the supported shapes and their declared metadata. Each projection
 consumes this representation rather than independently interpreting authored
 source. This is the host-checked description vocabulary, not a new authored language
