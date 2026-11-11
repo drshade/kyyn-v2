@@ -72,7 +72,7 @@ main = do
     schemaSelection <- right (Schema.schemaSource [(p,if relativeName p == "src/Queries.hs"
       then "module Queries where\nunfinished =\n" else bytes) | (p,bytes) <- files tree])
     schema <- run (Schema.inspectSchema schemaSelection) >>= right >>= right
-    unless (map relativeName schema.loadedSources == ["src/Main.hs"])
+    unless (map relativeName schema.loadedSources == ["src/LanguageDefaults.hs","src/Main.hs"])
       (fail "Host schema inspection included metadata-only or unfinished sources")
     api <- run (inspectApiModules tree ["Queries","KyynQueryBindings","Data.Maybe"]) >>= right >>= right
     unless (map G.moduleName api == ["Queries","KyynQueryBindings","Data.Maybe"])
