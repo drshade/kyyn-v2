@@ -250,7 +250,9 @@
         let
           p = project system;
           compiler = haskellPackages.ghcWithPackages (h:
-            [ h.kyyn-sdk h.kyyn-types h.kyyn-guest-build h.aeson h.bytestring h.text ] ++ dependencies h);
+            [ h.kyyn-sdk h.kyyn-types h.kyyn-guest-build
+              h.aeson h.bytestring h.text h.containers h.time
+              h.cryptohash-sha256 h.lens h.generic-lens ] ++ dependencies h);
         in p.pkgs.stdenv.mkDerivation {
           name = "kyyn-guest";
           inherit src;

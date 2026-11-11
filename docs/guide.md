@@ -106,6 +106,26 @@ KB modules use GHC2024 plus `OverloadedStrings`, `DeriveAnyClass`,
 `RecordWildCards`, `BlockArguments` and `MultiWayIf`. Compilation and discovery
 use the same defaults. Module pragmas can enable or disable extensions locally.
 
+The standard guest environment exposes the Kyyn SDK and build support plus
+`aeson` (JSON), `bytestring`, `text`, `containers`, `time`, `cryptohash-sha256`,
+`lens` and `generic-lens`, alongside GHC's bundled libraries. Use these for data
+handling, dates, hashing and typed record updates. For example, import
+`Data.Time`, `Crypto.Hash.SHA256` or `Data.Generics.Product.Fields` directly.
+
+To add another library, edit the `mkGuest` call in the KB's `flake.nix`:
+
+```nix
+value.kyyn-guest = kyyn.lib.mkGuest {
+  inherit system;
+  src = self;
+  dependencies = h: [ h.vector ];
+};
+```
+
+The dependency comes from the pinned package set. Changing library versions means
+changing the flake input or package-set selection and explicitly updating its
+lock; ordinary Kyyn checks never update it for you.
+
 ```haskell
 module Schema where
 import Data.Text (Text)
