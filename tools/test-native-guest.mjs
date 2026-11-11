@@ -1,6 +1,6 @@
 // Installed, prelocked KB initialization and identity evolution through real Nix
 // builds. Covers a missing KB directory, empty Root edit bindings, SDK/workspace
-// discovery and acceptance. No provider credentials or global configuration.
+// discovery, default-library execution and acceptance. No provider credentials or global configuration.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,6 +30,16 @@ try {
   assert(JSON.parse(lock).nodes.root.inputs.kyyn);
   assert.deepEqual(cli('root', 'show').value, {});
   const evolution = cli('evolution', 'new', 'native identity');
+  fs.copyFileSync(new URL('./fixtures/default-libraries/LibraryDefaults.hs', import.meta.url),
+    path.join(evolution.path, 'target/src/LibraryDefaults.hs'));
+  fs.writeFileSync(path.join(evolution.path, 'target/src/Validate.hs'), `module Validate where
+import qualified Schema
+import Kyyn.Validation
+import LibraryDefaults (librariesWork)
+validate :: Schema.Root -> ValidationReport
+validate _ | librariesWork = ValidationReport []
+           | otherwise = error "Default guest libraries did not execute correctly"
+`);
   assert.equal(cli('guest', 'module', 'show', 'Kyyn.Evolution').origin, 'sdk');
   assert.equal(cli('guest', 'module', 'show', 'Kyyn.Workspace.Evolution', '--evolution', evolution.id).origin, 'generated');
   cli('evolution', 'check', evolution.id);
@@ -37,7 +47,7 @@ try {
   assert.equal(cli('evolution', 'accept', evolution.id).accepted, true);
   assert.equal(cli('root', 'check').passed, true);
   assert.equal(fs.readFileSync(path.join(kb, 'root', 'flake.lock'), 'utf8'), lock);
-  console.log('Installed prelocked initialization, guest discovery, identity evolution and accepted-root validation passed.');
+  console.log('Installed prelocked initialization, guest discovery, default libraries, identity evolution and accepted-root validation passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

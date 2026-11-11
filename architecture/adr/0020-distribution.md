@@ -32,6 +32,16 @@ dependencies under ADR 0002. GHC is supplied by that environment, not by a globa
 Cabal setup. Authors may select arbitrary
 Haskell libraries, subject to their chosen compiler/SDK actually building them.
 
+The standard guest environment explicitly exposes the Kyyn SDK and build support,
+`aeson`, `bytestring`, `text`, `containers`, `time`, `cryptohash-sha256`, `lens` and
+`generic-lens`, alongside the compiler's bundled libraries. These cover ordinary
+structured data, collections, time arithmetic, hashing and typed record updates;
+authors should use them instead of implementing those facilities in each KB.
+The locked package set selects their versions. A KB may add dependencies through
+`mkGuest`'s `dependencies` function or select its own `haskellPackages`; neither
+requires a host configuration change. The guide owns the author-facing library
+list and flake example.
+
 Nix is a user prerequisite on Linux, macOS and Windows through WSL2. This is not a
 native Windows execution promise. Installation may require OS permissions, daemon
 setup or authentication; report those requirements explicitly rather than changing
