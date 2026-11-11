@@ -2,12 +2,13 @@
 -- | Structural storage types: deliberately no Haskell identities or semantic roles.
 module Kyyn.Types.StoredShape (StoredShape(..), storedShape, canonicalShape) where
 
-import Data.Aeson (ToJSON, FromJSON(..), genericParseJSON, defaultOptions)
+import Data.Aeson (ToJSON(..), FromJSON(..), genericToJSON, genericParseJSON, defaultOptions, object, (.=), (.:), withObject)
 import Data.List (sortOn, nub)
 import Control.Monad (unless)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Kyyn.Types.Json (optionalValue, parseOptionalValue, exactObject)
 import Kyyn.Types.Contract
 
 -- Integer values travel as exact decimal strings, never floating point numbers.
@@ -17,10 +18,18 @@ data StoredShape
   | StoredList StoredShape | StoredOptional StoredShape
   | StoredUnion [(Text, Maybe StoredShape)]
   deriving (Eq, Show, Generic)
-instance ToJSON StoredShape
+instance ToJSON StoredShape where
+  toJSON (StoredUnion cases) = object
+    ["tag" .= ("StoredUnion" :: Text), "contents" .= [(name,optionalValue value) | (name,value) <- cases]]
+  toJSON shape = genericToJSON defaultOptions shape
 instance FromJSON StoredShape where
   parseJSON value = do
-    shape <- genericParseJSON defaultOptions value
+    tag <- withObject "Stored shape" (.: "tag") value
+    shape <- if tag == ("StoredUnion" :: Text)
+      then exactObject "Stored union" ["tag","contents"] (\fields -> do
+        cases <- fields .: "contents"
+        StoredUnion <$> traverse (\(name,payload) -> (name,) <$> parseOptionalValue payload) cases) value
+      else genericParseJSON defaultOptions value
     either (fail . Text.unpack) (pure . canonicalShape) (check shape)
     where
       check shape = case shape of

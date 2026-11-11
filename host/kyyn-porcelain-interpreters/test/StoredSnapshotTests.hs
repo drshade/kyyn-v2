@@ -5,7 +5,7 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
-import Data.Aeson (Value(..))
+import Data.Aeson (Value(..), toJSON, fromJSON, Result(..))
 import qualified Data.ByteString as Bytes
 import Data.Either (isLeft)
 import Effectful (runPureEff)
@@ -27,7 +27,7 @@ main = do
   recipeBytes <- right (runPureEff (runDhallHandling (encodeRecipes
     [Fact (FactId "weekly") (ClosedRecipe (FlowEntryRef "BrokenFlow.run"))])))
   let original =
-        [("facts/root.dhall", "{ optional = None Text, names = [] : List Text }")
+        [("facts/root.dhall", "{ optional = None Text, names = [] : List Text, choice = < Empty | Filled : Text >.Empty }")
         ,("facts/people/index.dhall", "[\"a\", \"b\"]")
         ,("facts/people/a.dhall", "{ id = \"a\", value = { name = \"Alice\" } }")
         ,("facts/people/b.dhall", "{ id = \"b\", value = { name = \"Bob\" } }")
@@ -41,6 +41,8 @@ main = do
       reject label input = assert label (isLeft (readSnapshot input))
   snapshot@(StoredSnapshot fields collections recipes) <- right (readSnapshot original)
   wire <- right (encodeSnapshotWire snapshot)
+  assert "stored shape emits null outside the wire profile" (nullFree (toJSON wire))
+  assert "stored snapshot JSON roundtrip changes shape" (fromJSON (toJSON wire) == Success wire)
   decoded <- right (runPureEff (runDhallHandling (decodeSnapshotWire wire)))
   assert "structural transport changes captured data" (snapshot == decoded)
   assert "annotated empty types lost" (case (lookup "names" fields,lookup "optional" fields) of
@@ -86,3 +88,9 @@ assert label condition = unless condition (fail label)
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
+
+nullFree :: Value -> Bool
+nullFree Null = False
+nullFree (Object fields) = all nullFree fields
+nullFree (Array values) = all nullFree values
+nullFree _ = True
