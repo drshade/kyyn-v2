@@ -58,7 +58,7 @@ draft = A.draft (A.Instruction (Text.pack "Estimate confidence"))
 `);
   for (const name of ['kb.dhall', 'src/Validate.hs']) {
     const file = path.join(target, name);
-    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('Schema', 'RootV2'));
   }
   const manifest = path.join(target, 'kb.dhall');
   const empty = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';

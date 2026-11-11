@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 assert.equal(process.argv.length, 3, 'Usage: node tools/test-guide.mjs EXECUTABLE');
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expected = fs.readFileSync(path.join(repository, 'docs/guide.md'), 'utf8');
+assert.match(expected, /edit `target\/src\/Schema\.hs` in place/);
+assert.doesNotMatch(expected, /RootV[0-9]/);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-guide-'));
 try {
   const executable = path.join(temporary, 'kyyn-v2');

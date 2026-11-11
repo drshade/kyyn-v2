@@ -32,7 +32,7 @@ function git(...args) {
 try {
   cli(['kb', 'init']);
   const root = path.join(kb, 'root');
-  const manifest = fs.readFileSync(path.join(root, 'kb.dhall'),'utf8').replaceAll('RootV1.Root','Schema.Root').replaceAll('RootV1.metadata','Annotations.metadata');
+  const manifest = fs.readFileSync(path.join(root, 'kb.dhall'),'utf8').replaceAll('Schema.metadata','Annotations.metadata');
   write('root/kb.dhall', manifest);
   write('root/src/Schema.hs', 'module Schema where\nold source cannot compile\n');
   write('root/src/Flows.hs', 'module Flows where\nold source cannot compile\n');
@@ -52,8 +52,6 @@ try {
   assert.equal(fs.existsSync(path.join(draft.path,'before')),false);
   assert.match(fs.readFileSync(path.join(draft.path,'change/Input/Collection001.hs'),'utf8'),/amount :: Integer/);
   for (const name of ['Schema.hs','Flows.hs','Annotations.hs']) fs.copyFileSync(path.join(fixture,'src',name),path.join(draft.path,'target/src',name));
-  const validator = path.join(draft.path,'target/src/Validate.hs');
-  fs.writeFileSync(validator,fs.readFileSync(validator,'utf8').replaceAll('RootV1','Schema'));
   fs.cpSync(path.join(fixture,'.kyyn-change/Input'),path.join(draft.path,'change/Input'),{recursive:true});
   fs.copyFileSync(path.join(fixture,'.kyyn-change/Evolution.hs'),path.join(draft.path,'change/Evolution.hs'));
   const modules = cli(['guest','module','list','--evolution',draft.id]).modules;

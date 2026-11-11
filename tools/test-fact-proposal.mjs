@@ -26,7 +26,7 @@ try {
   cli(['kb', 'init']);
   const initial = cli(['evolution', 'new', 'schema']).result;
   const target = path.join(initial.path, 'target');
-  fs.unlinkSync(path.join(target, 'src/RootV1.hs'));
+  fs.unlinkSync(path.join(target, 'src/Schema.hs'));
   fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
 module RootV2 where
 import GHC.Generics (Generic)
@@ -39,7 +39,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
   for (const name of ['kb.dhall', 'src/Validate.hs']) {
     const file = path.join(target, name);
-    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('Schema', 'RootV2'));
   }
   fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `module Tasks where
 import Kyyn.Agentic (Flow)

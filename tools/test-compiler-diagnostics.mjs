@@ -24,7 +24,7 @@ try {
   invoke(['kb', 'init']);
   const draft = invoke(['evolution', 'new', 'diagnostic-examples']).result;
   const target = path.join(draft.path, 'target');
-  const schemaPath = path.join(target, 'src/RootV1.hs');
+  const schemaPath = path.join(target, 'src/Schema.hs');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   fs.writeFileSync(schemaPath, schema + '\nbad :: Integer\nbad = True\n');
   const check = (code, filename) => {
@@ -36,7 +36,7 @@ try {
     assert.doesNotMatch(text, /CallStack|backtrace:|called at .* in /);
     return text;
   };
-  check('guest.build', 'RootV1.hs');
+  check('guest.build', 'Schema.hs');
   fs.writeFileSync(schemaPath, schema);
   const manifest = path.join(target, 'kb.dhall');
   const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
