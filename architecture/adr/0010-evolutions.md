@@ -408,6 +408,14 @@ includes base, kind, name/explanation and exact evaluation-source paths/bytes;
 lifecycle readiness and review notes are excluded. Actual edits invalidate the
 saved result even if an external editor left the Ready label unchanged.
 
+Domain-view authoring preview under [ADR 0018](0018-surfaces.md#accepted-snapshots-and-live-draft-pages)
+is a separate read-only use: it may serve live `target/views/` files before checks
+succeed. Its query freshness comparison may ignore those view files while still
+requiring every other evaluation input to match the checked candidate. That does
+not update, validate or replace the candidate's captured source. Acceptance keeps
+the complete comparison above, including view files; a page edit therefore needs
+a new check before acceptance even though browser preview needs only a refresh.
+
 ### Optional input-type scaffolding
 
 `evolution new --input-types` emits editable decoding declarations under
