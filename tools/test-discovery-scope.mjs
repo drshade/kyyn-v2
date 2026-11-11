@@ -34,14 +34,14 @@ try {
   const manifest = fs.readFileSync(path.join(target, 'kb.dhall'));
   fs.writeFileSync(path.join(target, 'src/Helpers.hs'), helper);
   fs.writeFileSync(path.join(target, 'src/Unrelated.hs'), 'module unfinished');
-  fs.writeFileSync(path.join(target, 'src/RootV1.hs'), 'module RootV1 where\nunfinished =\n');
+  fs.writeFileSync(path.join(target, 'src/Schema.hs'), 'module Schema where\nunfinished =\n');
   fs.writeFileSync(path.join(target, 'kb.dhall'), 'unfinished manifest');
   fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), 'module Evolution where\nunfinished =\n');
   inspect(['--evolution', draft.id]);
   fs.writeFileSync(path.join(target, 'kb.dhall'), manifest);
   const refused = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Target', '--evolution', draft.id], 1);
-  assert.match(JSON.stringify(refused), /RootV1/);
-  for (const [name,bytes] of [['src/Helpers.hs', helper], ['src/RootV1.hs', 'module RootV1 where\nunfinished =\n'], ['kb.dhall', 'unfinished manifest']])
+  assert.match(JSON.stringify(refused), /Schema/);
+  for (const [name,bytes] of [['src/Helpers.hs', helper], ['src/Schema.hs', 'module Schema where\nunfinished =\n'], ['kb.dhall', 'unfinished manifest']])
     fs.writeFileSync(path.join(kb, 'root', name), bytes);
   for (const args of [['add', 'root'], ['commit', '-qm', 'Unfinished accepted source fixture']]) {
     const result = spawnSync('git', ['-C', kb, ...args], { env, encoding: 'utf8' });

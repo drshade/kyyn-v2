@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-module RootV1 where
+module Schema where
 
 import Kyyn.Schema
 import GHC.Generics (Generic)

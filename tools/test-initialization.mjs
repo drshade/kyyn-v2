@@ -71,9 +71,8 @@ try {
   assert.equal(discover('module', 'list').context.beforeRevision, initialized.revision);
   git(kb, 'switch', 'kb-test');
   const target = path.join(created.path, 'target');
-  fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
-  write(path.join(target, 'src', 'RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
-module RootV2 where
+  write(path.join(target, 'src', 'Schema.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module Schema where
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Kyyn.Schema
@@ -82,19 +81,15 @@ data Root = Root { todos :: [Fact Todo] } deriving stock (Eq, Show, Generic) der
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
-  for (const file of ['kb.dhall', 'src/Validate.hs']) {
-    const filename = path.join(target, file);
-    fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
-  }
-  const schemaPath = path.join(target, 'src', 'RootV2.hs');
+  const schemaPath = path.join(target, 'src', 'Schema.hs');
   const validSchema = fs.readFileSync(schemaPath, 'utf8');
-  fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
+  fs.writeFileSync(schemaPath, 'module Schema where\nthis is invalid\n');
   // Discovery omits the unfinished transformation, but the target Root contract must
   // compile under the target lock (ADR 0010). There is no host SDK fallback.
   const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
   assert.equal(badSchema.outcome, 'Refused');
   assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'guest.build'));
-  assert(badSchema.diagnostics.some(diagnostic => diagnostic.message.includes('RootV2.hs')));
+  assert(badSchema.diagnostics.some(diagnostic => diagnostic.message.includes('Schema.hs')));
   fs.writeFileSync(schemaPath, validSchema);
   const bindings = discover('module', 'show', 'Kyyn.Workspace.Evolution').symbols;
   for (const name of ['edit', 'prepare', 'migrateCollection']) {
@@ -104,7 +99,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   }
   assert(!bindings.some(s => ['beforeRoot', 'afterRoot', 'evaluateEvolution'].includes(s.name)));
   const handle = discover('symbol', 'show', 'Kyyn.Workspace.Target.todos').symbols[0];
-  assert.match(handle.signature, /Collection\s+\(KnowledgeBase RootV2.Root\)\s+RootV2.Todo/);
+  assert.match(handle.signature, /Collection\s+\(KnowledgeBase Schema.Root\)\s+Schema.Todo/);
   assert(handle.documentation.value?.includes('todos'));
   for (const symbol of [...bindings, handle]) {
     assert.doesNotMatch(symbol.signature, /Kyyn\.[\w.]*Internal\b|kyyn-sdk[^:\s]*:internal:|Kyyn\.(?:Runtime|Build)\./, JSON.stringify(symbol));
@@ -115,7 +110,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified RootV2 as After
+import qualified Schema as After
 import qualified Kyyn.Workspace.Target as Collections
 evolution :: Evolution After.Root
 evolution = prepare (pure ()) $ edit (Rationale "Record the first task." [])

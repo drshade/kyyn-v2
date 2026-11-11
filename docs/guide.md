@@ -99,11 +99,11 @@ evolution has the narrower role described below.
 ### Add the first collection
 
 This complete example starts from a newly initialized empty KB. In the draft,
-replace `target/src/RootV1.hs` with `target/src/RootV2.hs`:
+edit `target/src/Schema.hs` in place:
 
 ```haskell
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
-module RootV2 where
+module Schema where
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Kyyn.Schema
@@ -119,15 +119,14 @@ metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 ```
 
-In `target/kb.dhall`, change `schemaType` to `"RootV2.Root"` and
-`schemaMetadata` to `"RootV2.metadata"`. Keep `validator = "Validate.validate"`
-and replace `target/src/Validate.hs` with:
+The existing `Schema.Root` and `Schema.metadata` references in `target/kb.dhall`
+already select this module. Replace `target/src/Validate.hs` with:
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 module Validate where
 import qualified Data.Text as Text
-import RootV2
+import Schema
 import Kyyn.Schema
 import Kyyn.Validation
 
@@ -145,7 +144,7 @@ Write `change/Evolution.hs`:
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified RootV2 as Target
+import qualified Schema as Target
 import qualified Kyyn.Workspace.Target as Collections
 
 evolution :: Evolution Target.Root

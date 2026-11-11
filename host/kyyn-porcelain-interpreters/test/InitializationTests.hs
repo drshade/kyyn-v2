@@ -32,7 +32,7 @@ initializationTests = do
   initial <- either fail pure (fileTree [(marker,"caller-owned scaffold")])
   code <- either fail pure (fileTree [(p,b) | (p,b) <- files initial, relativeName p `notElem` ["facts/root.dhall","recipes.dhall"]])
   contract <- either (fail . show) pure (checkContract
-    (NamedDescription (TypeIdentity "fixture" "RootV1" "Root" []) (RecordDescription "Root" PositionalFields [])) (SchemaMetadata [] [] []) >>= checkRootLayout)
+    (NamedDescription (TypeIdentity "fixture" "Schema" "Root" []) (RecordDescription "Root" PositionalFields [])) (SchemaMetadata [] [] []) >>= checkRootLayout)
   root <- either (fail . show) pure $ runPureEff . runDhallHandling . runRootStore $ do
     checked <- checkRootValue contract (object [])
     either (pure . Left) (\value -> materializeRoot contract code (KB.KnowledgeBase value [])) checked

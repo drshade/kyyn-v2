@@ -39,7 +39,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
   for (const name of ['kb.dhall', 'src/Validate.hs']) {
     const file = path.join(target, name);
-    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('Schema', 'RootV2'));
   }
   fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
 module Evolution where

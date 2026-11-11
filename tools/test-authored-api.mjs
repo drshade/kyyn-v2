@@ -83,7 +83,7 @@ twice name = [greet name, greet name]
   fs.writeFileSync(path.join(source, 'Broken.hs'), 'module Broken where\nbad :: Bool\nbad = "not a boolean"\n');
   const selection = ['--evolution', draft.id];
   const listing = cli(['guest', 'module', 'list', ...selection]).result;
-  for (const name of ['Helpers', 'Helpers.Nested', 'Broken', 'RootV1', 'Validate', 'Queries']) {
+  for (const name of ['Helpers', 'Helpers.Nested', 'Broken', 'Schema', 'Validate', 'Queries']) {
     assert(listing.modules.includes(name), name);
     assert.equal(listing.origins[name], 'kb');
   }

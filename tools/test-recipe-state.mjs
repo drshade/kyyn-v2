@@ -24,9 +24,9 @@ function author(draft, imports, body) {
   fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
-import qualified RootV1
+import qualified Schema
 ${imports}
-evolution :: Evolution RootV1.Root
+evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) $ ${body}
 `);
 }

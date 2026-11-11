@@ -29,7 +29,7 @@ try {
   cli(['kb', 'init']);
   const initial = cli(['evolution', 'new', 'tasks']).result;
   const target = path.join(initial.path, 'target');
-  fs.unlinkSync(path.join(target, 'src/RootV1.hs'));
+  fs.unlinkSync(path.join(target, 'src/Schema.hs'));
   fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
 module Tasks where
 import GHC.Generics (Generic)
@@ -45,7 +45,7 @@ metadata = SchemaMetadata [RoleDecl "label" "Task title" Title]
 `);
   for (const name of ['kb.dhall', 'src/Validate.hs']) {
     const file = path.join(target, name);
-    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'Tasks'));
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('Schema', 'Tasks'));
   }
   const validatePath = path.join(target, 'src/Validate.hs');
   const validator = fs.readFileSync(validatePath, 'utf8');

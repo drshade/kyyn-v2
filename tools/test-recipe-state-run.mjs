@@ -38,21 +38,21 @@ import Control.Arrow (arr)
 import Kyyn.Agentic (Flow)
 import Kyyn.Recipe
 import Kyyn.Workspace.FactEdits (RootEdit)
-import qualified RootV1
+import qualified Schema
 import qualified Review
-review :: Flow (RecipeInput RootV1.Root Text Review.State) (RecipeProposal RootEdit Review.State)
+review :: Flow (RecipeInput Schema.Root Text Review.State) (RecipeProposal RootEdit Review.State)
 review = arr (\\(RecipeInput _ request (Review.State seen)) ->
   if request == "explode" then error "Flow ran again" else RecipeProposal [] (Review.State (seen ++ [request])))
-unit :: Flow (RecipeInput RootV1.Root () ()) (RecipeProposal RootEdit ())
+unit :: Flow (RecipeInput Schema.Root () ()) (RecipeProposal RootEdit ())
 unit = arr (\\_ -> RecipeProposal [] ())
 `);
   write(path.relative(kb, path.join(setup.path, 'change/Evolution.hs')), `{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
 import qualified Kyyn.Workspace.Target.RecipeFlows.Flows as Flows
-import qualified RootV1
+import qualified Schema
 import qualified Review
-evolution :: Evolution RootV1.Root
+evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) $ edit (Rationale "Teach review recipes" []) $ do
   createRecipe (RecipeId "review") Flows.review (Review.State [])
   createRecipe (RecipeId "unit") Flows.unit ()
