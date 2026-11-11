@@ -1,6 +1,7 @@
 -- GHC-owned export inspection: source closure, explicit exports, namespaces,
 -- record fields without selectors, dependency-only closure equivalence, and source
--- rejection before an adapter exists; pragma-free guest defaults and module overrides.
+-- rejection before an adapter exists; pragma-free guest defaults and module overrides;
+-- instances from package modules already loaded through authored imports.
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
@@ -121,6 +122,8 @@ checkInspection = do
     unless (any (\selected -> selected.moduleName == "Types" &&
       any ("Eq Root" `Text.isInfixOf`) selected.moduleInstances) modules)
       (fail "Compiler-owned module instances missing")
+    unless ([(m.moduleName,length m.moduleInstances) | m <- modules] == [("Schema",0),("Types",1)])
+      (fail "Instances leaked across their defining modules")
     unless (any (\entry -> entry.exportName == "total" && "Integer" `Text.isInfixOf` entry.exportSignature) exports)
       (fail "Compiler signature missing")
     (packageSources,packageModules) <- inspectExports libdir ["."] [] ["Data.Maybe"]
@@ -129,6 +132,14 @@ checkInspection = do
     -- Force interface-only fields too: package ModuleInfo contains a partial
     -- instance accessor even though its exports can be inspected successfully.
     sum [Text.length text | m <- packageModules, text <- m.moduleInstances] `seq` pure ()
+    writeFile "ImportsPackage.hs" (unlines
+      ["module ImportsPackage where", "import Data.Maybe", "import Data.Text (Text)",
+       "value :: Maybe Text -> Text", "value = fromMaybe \"empty\""])
+    (_,importedPackages) <- inspectExports libdir ["."] [] ["ImportsPackage","Data.Maybe","Data.Text"]
+    sum [Text.length text | m <- importedPackages, text <- m.moduleInstances] `seq` pure ()
+    unless (any (\m -> m.moduleName == "Data.Text" &&
+      any ("IsString" `Text.isInfixOf`) m.moduleInstances) importedPackages)
+      (fail "Loaded package instances missing")
     writeFile "Main.hs" (unlines ["module Main (value) where","value :: Integer","value = 1"])
     (_,mainModules) <- inspectExports libdir ["."] [] ["Main"]
     unless (any ((== "value") . exportName) (concatMap moduleExports mainModules)) (fail "Authored Main required an IO entry")

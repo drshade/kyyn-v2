@@ -219,7 +219,7 @@
             mkdir -p "$out/src"
             printf '%s\n' '{"selection":"modules","modules":["Example","Data.Maybe","Kyyn.Optics"]}' > "$out/.kyyn-build.json"
             printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
-            printf '%s\n' 'module Example (answer) where' 'answer :: Integer' 'answer = 42' 'private = True' > "$out/src/Example.hs"
+            printf '%s\n' 'module Example (answer) where' 'import Data.Maybe (fromMaybe)' 'answer :: Integer' 'answer = fromMaybe 42 Nothing' 'private = True' > "$out/src/Example.hs"
             printf '%s\n' 'module Broken where' 'unfinished =' > "$out/src/Broken.hs"
           '';
         in {
