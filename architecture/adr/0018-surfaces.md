@@ -615,8 +615,8 @@ Surfaces do not compose root opening, validation or evolution execution themselv
 
 ### KB-owned domain views
 
-Web serves two kinds of page. Host-owned inspection pages let an agent show a
-person the model, facts, queries and evolutions of any KB.
+Web serves two kinds of page. Host-owned inspection pages show the model, facts,
+queries and evolutions of any KB.
 KB-owned domain views present results to readers who never author a KB. A domain
 view is ordinary HTML and JavaScript, not a host-defined widget vocabulary, a
 guest HTML renderer or an extension to the inspection pages.
@@ -840,10 +840,9 @@ capture does not declare a task complete. [ADR 0014](0014-evidence.md) owns this
 boundary. The [user guide](../../docs/guide.md) describes the authoring workflows.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
-MCP and CLI are how an agent discovers, authors, checks and accepts. Web's
-inspection pages are how the agent shows that work to a person; they are
-read-only and defined in [ADR 0023](0023-interaction.md). Both read the same
-state through the same operations.
+MCP and CLI provide discovery, authoring, checking and acceptance. Web's
+inspection pages show the same state through the same operations; they are
+read-only and defined in [ADR 0023](0023-interaction.md).
 
 Record browsing uses host-side checked structural values and snapshot
 store operations. Titles, timelines and badges consume the checked role metadata

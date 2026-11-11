@@ -1,29 +1,30 @@
 ---
 id: 0023
-title: 'Agents drive Kyyn; Web shows their work to people'
+title: 'Web is a read-only surface for showing a KB'
 ---
 
-# Agents drive Kyyn; Web shows their work to people
+# Web is a read-only surface for showing a KB
 
 ## Context
 
-A person works on a KB by talking to their agent. The agent authors, checks and
-accepts through CLI and MCP. What the person lacks is a way to see what the agent
-is describing: a record, a type, a query, a flow or a proposed change. Reading
-Dhall facts, Haskell source and evolution directories is the agent's job.
+Work on a KB is usually a conversation between a person and their agent, with
+authoring, checking and acceptance done through CLI and MCP. What that
+conversation lacks is a way to look at the thing under discussion: a record, a
+type, a query, a flow or a proposed change. Dhall facts, Haskell source and
+evolution directories are a poor way to see it.
 
 ## Decision
 
-The agent is the only driver of Kyyn. Web is a read-only surface the agent uses
-to show something to a person: the agent starts `kyyn-v2 web serve` and sends a
-link. The person responds in their conversation with the agent, and the agent
-acts through CLI or MCP. Web has no mutation endpoints, forms that change a KB,
-accept control, review notes or inbox.
+Web shows a KB; CLI and MCP change it. Whoever is working on the KB starts
+`kyyn-v2 web serve` and opens or shares a link. Typically an agent sends a link
+to the person it is working with, and the reply comes back in their
+conversation. Web has no mutation endpoints, forms that change a KB, accept
+control, review notes or inbox.
 
 Web has two kinds of page:
 
 - **Inspection pages** are host-owned and generated. They render what Kyyn
-  already knows about any KB, so an agent authors nothing to use them.
+  already knows about any KB, so nothing is authored to use them.
 - **Domain views** are KB-owned HTML and JavaScript for readers of results.
   [ADR 0018](0018-surfaces.md#kb-owned-domain-views) owns their serving and
   [ADR 0008](0008-authoring.md) their declaration.
@@ -41,9 +42,9 @@ Web has two kinds of page:
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure and its state type, without executing actions |
 
-Each page stands alone: a person arrives from a link, not through navigation.
-The routes are stable and listed in the guide so an agent can compose a link
-from a name it already has.
+Each page stands alone: a reader arrives from a link, not through navigation.
+The routes are stable and listed in the guide, so a link can be composed from a
+name.
 
 Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
 selects a draft for that page, and its links carry the parameter; without it the
@@ -53,7 +54,7 @@ domain views under `/kb/`.
 Draft facts, types, declarations and query results come from the evolution's
 last successfully checked candidate, not from live target source, so the pages
 of one draft agree with each other. Pages read current state on each request, so
-a reload shows the agent's latest successful check. A GET never runs a check.
+a reload shows the latest successful check. A GET never runs a check.
 
 The evolution page takes its step report from that candidate, or from the
 archived report of an accepted evolution. The report carries each change's
@@ -61,8 +62,8 @@ before and after values, so removed records and intermediate steps are shown
 there. A changed record links to its record page only when it exists in the
 context shown. The source diff is that candidate's captured source against
 the base. An evolution with no checked candidate shows its explanation and a
-source diff of the live target, labelled as unchecked. Check diagnostics are not stored; the agent has them from the
-check it ran.
+source diff of the live target, labelled as unchecked. Check diagnostics are
+not stored; the command that ran the check reports them.
 
 Query and tool pages show the captured module that contains the implementation,
 whole, not an extracted definition.
@@ -71,9 +72,8 @@ Rendering is generic. Records and types are laid out from the checked contract
 and its role metadata under [ADR 0005](0005-contracts.md), not from a second
 reading of authored source. A query's `input` URL parameter is a Dhall expression
 checked against its input contract, as `--input` is on the CLI. Presentation
-designed for a domain belongs in a domain view. An agent that wants a one-off
-explanatory page declares a view in a draft; its pages are served live without
-a check.
+designed for a domain belongs in a domain view. A one-off explanatory page is a
+view declared in a draft; its pages are served live without a check.
 
 Pages are server-rendered HTML produced by the host from the same typed
 operations CLI and MCP use. No client framework or separate JSON API is needed
@@ -81,16 +81,15 @@ for them.
 
 ### Authoring workflow
 
-An agent creates an evolution workspace, populates its `evolution` binding and
-supporting files, trials and refines the result, then marks it Ready. It shows
-the person the evolution page and whatever else explains the change. The person
-asks for revisions or approves in conversation; the agent revises or accepts.
-Ready is not proof of validation, and acceptance still checks the local Before
-revision under [ADR 0012](0012-acceptance.md).
+An author creates an evolution workspace, populates its `evolution` binding and
+supporting files, trials and refines the result, then marks it Ready. The
+evolution page and its linked pages explain the change to whoever reviews it.
+Revision and acceptance are CLI or MCP operations. Ready is not proof of
+validation, and acceptance still checks the local Before revision under
+[ADR 0012](0012-acceptance.md).
 
-Executable examples are KB material the agent writes under
-[ADR 0011](0011-validation.md). A person's counterexample reaches the KB through
-the agent.
+Executable examples are KB material written under
+[ADR 0011](0011-validation.md), not entered through Web.
 
 ### Record history
 
@@ -135,17 +134,17 @@ the algorithms that interpret that record.
 
 ## Boundaries and alternatives
 
-Reject a human-driven workbench with review notes, example forms and an accept
-button. It duplicates the conversation the person already has with their agent
-and adds a second writer to every evolution.
+Reject a Web workbench with review notes, example forms and an accept button.
+It duplicates the conversation a person already has with their agent and
+duplicates operations CLI and MCP already provide.
 
 The server binds to loopback and serves one KB. Inspection pages and domain views
 share an origin; isolation between them is not provided.
 
 ## Verification
 
-Test the journey from the guide: an agent prepares an evolution that changes
-schema, facts and a query, starts the server and composes links from names alone.
+Test the journey from the guide: prepare an evolution that changes schema, facts
+and a query, start the server and compose links from names alone.
 The evolution page lists the changed records and links to record pages showing
 draft values; the same record URL without `?evolution` shows the accepted value.
 A removed record appears in the step report with its former value and no link.
