@@ -42,9 +42,9 @@ Web has two kinds of page:
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure and its state type, without executing actions |
 
-Each page stands alone: a reader arrives from a link, not through navigation.
-The routes are stable and listed in the guide, so a link can be composed from a
-name.
+Each page is complete when opened directly from a link, and links to related
+pages and to the index. The routes are stable and listed in the guide, so a link
+can be composed from a name.
 
 Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
 selects a draft for that page, and its links carry the parameter; without it the
