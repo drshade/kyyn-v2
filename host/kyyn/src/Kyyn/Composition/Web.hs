@@ -9,13 +9,16 @@ import Kyyn.Composition.Runtime
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.Git (TreePath(..), revisionName)
+import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
+import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope)
+import Kyyn.Domain.Path (DirectoryScope, relativePath, relativeName, directoryScope, scopedPath)
 import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(..))
 import qualified Kyyn.Plumbing.Capability.Git as Git
+import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
+import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 import Kyyn.Plumbing.Capability.DhallHandling (encodeValue)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
@@ -47,18 +50,44 @@ serveWeb host scope port draft
           result <- runBase host . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
             (base,tree) <- case draft of
               Nothing -> do
-                path <- either (throwE . pure . errorDiagnostic "kb.path") pure (RootStore.rootLocation kb)
-                tree <- ExceptT (Git.readTreeAt repository revision (Subtree path))
+                path <- checked (RootStore.rootLocation kb)
+                manifestPath <- child path "kb.dhall"
+                manifest <- ExceptT (Git.readFileAt repository revision manifestPath)
+                viewPath <- child path "views"
+                present <- ExceptT (Git.readDirectoryAt repository revision (Subtree viewPath))
+                views <- case present of
+                  Nothing -> checked (fileTree [])
+                  Just _ -> ExceptT (Git.readTreeAt repository revision (Subtree viewPath))
+                tree <- pageTree manifest views
                 pure (revision,tree)
               Just identity -> do
                 let workspace = EvolutionWorkspace kb identity
-                state <- ExceptT (Store.readEvolutionState workspace)
+                path <- checked (Store.workspaceLocation workspace)
+                let Repository scope' = repository
+                manifestPath <- child path "manifest.dhall"
+                bytes <- ExceptT (Right <$> FileSystem.readBytes scope' manifestPath)
+                key <- checked (relativePath "manifest.dhall")
+                manifestTree <- checked (fileTree [(key,bytes)])
+                WorkspaceSnapshot (WorkspaceManifest base _ _ state _) _ _ _ <-
+                  ExceptT (WorkspaceStore.readWorkspaceSnapshot manifestTree)
                 when (state == Accepted) (throwE [errorDiagnostic "web.accepted" "Restart without --evolution to browse the accepted root"])
-                WorkspaceSnapshot (WorkspaceManifest base _ _ _ _) tree _ _ <- ExceptT (Store.readWorkspace workspace)
+                pageManifest <- child path "target/kb.dhall"
+                manifest <- ExceptT (Right <$> FileSystem.readOptionalBytes scope' pageManifest)
+                viewPath <- child path "target/views"
+                viewScope <- checked (directoryScope (scopedPath scope' viewPath))
+                present <- ExceptT (Right <$> FileSystem.directoryExists viewScope)
+                views <- if present then ExceptT (Right <$> FileSystem.readTree viewScope) else checked (fileTree [])
+                tree <- pageTree manifest views
                 pure (base,tree)
             views <- ExceptT (RootStore.readViews tree)
             pure (ViewSource (context base) views tree)
           pure (either (Left . operationalFailure) (either (Left . refusal) Right) result)
+    checked value = either (throwE . pure . errorDiagnostic "web.source") pure value
+    child path suffix = checked (relativePath (relativeName path ++ "/" ++ suffix))
+    pageTree manifest views = do
+      entries <- traverse (\(path,bytes) -> (,bytes) <$> checked (relativePath ("views/" ++ relativeName path))) (files views)
+      key <- checked (relativePath "kb.dhall")
+      checked (fileTree (maybe entries (\bytes -> (key,bytes):entries) manifest))
     context revision = object ["revision" .= revisionName revision, "evolution" .= fmap evolutionIdName draft]
     invoke name args = do
       selected <- selectKnowledgeBase host scope

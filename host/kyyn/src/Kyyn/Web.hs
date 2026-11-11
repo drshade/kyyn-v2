@@ -29,13 +29,17 @@ data ViewSource = ViewSource Value [ViewDefinition] FileTree
 
 runServer :: Int -> IO (Either Result.Response ViewSource)
   -> (String -> Value -> IO (Value,Result.Response)) -> IO Result.Response
-runServer port pages query = bracket acquire close $ \socket -> do
-  address <- getSocketName socket
-  let actual = case address of SockAddrInet n _ -> fromIntegral n :: Int; _ -> port
-  putStrLn ("Serving http://127.0.0.1:" ++ show actual ++ "/kb/")
-  hFlush stdout
-  runSettingsSocket defaultSettings socket application
-  pure (Result.success (object []) [])
+runServer port pages query = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
+  case opened of
+    Left err -> pure (Result.refusal [errorDiagnostic "web.listen"
+      ("Cannot listen on 127.0.0.1:" ++ show port ++ ": " ++ displayException err)])
+    Right socket -> do
+      address <- getSocketName socket
+      let actual = case address of SockAddrInet n _ -> fromIntegral n :: Int; _ -> port
+      putStrLn ("Serving http://127.0.0.1:" ++ show actual ++ "/kb/")
+      hFlush stdout
+      runSettingsSocket defaultSettings socket application
+      pure (Result.success (object []) [])
   where
     acquire = do
       socket <- Socket.socket AF_INET Stream defaultProtocol
@@ -93,10 +97,18 @@ static request context views tree = case pathInfo request of
     content mime bytes = responseLBS status200 ((hContentType,mime):noStore:contextHeaders context) (Lazy.fromStrict bytes)
     index = content "text/html; charset=utf-8" . Text.encodeUtf8 $
       "<!doctype html><meta charset=utf-8><title>Knowledge base</title><h1>Knowledge base views</h1><p>" <>
-      escape (jsonText context) <> "</p><ul>" <> Text.concat
+      escape (contextLabel context) <> "</p>" <> (if null views then "<p>No views are declared.</p>" else "") <> "<ul>" <> Text.concat
       ["<li><a href=\"/kb/views/" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 (Text.pack name))) <>
         "/\">" <> escape (Text.pack name) <> "</a> — " <> escape (Text.pack description) <> "</li>" |
         ViewDefinition name description _ <- views] <> "</ul>"
+
+contextLabel :: Value -> Text.Text
+contextLabel (Object fields) =
+  let revision = case Keys.lookup "revision" fields of Just (String value) -> Text.take 8 value; _ -> "unknown"
+  in case Keys.lookup "evolution" fields of
+    Just (String value) -> "Draft " <> value <> " (base " <> revision <> ")"
+    _ -> "Accepted revision " <> revision
+contextLabel _ = "Knowledge base"
 
 jsonText :: ToJSON a => a -> Text.Text
 jsonText = Text.decodeUtf8 . Lazy.toStrict . encode

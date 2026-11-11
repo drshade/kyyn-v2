@@ -8,7 +8,7 @@ import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), EvolutionState(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, saveCheckedCandidate, loadCandidate, readEvolutionState)
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, StoredCandidate, saveCandidate, saveCheckedCandidate, loadCandidate, readEvolutionState)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring, captureEvolution)
 import Kyyn.Porcelain.Capability.RootPublication (RootPublication, acceptEvolution)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
@@ -26,12 +26,14 @@ checkEvolution :: (EvolutionAuthoring :> es, EvolutionExecution :> es, Evolution
     RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
 checkEvolution workspace = do
-  evaluated <- evaluateWorkspace workspace
-  checked <- traverse checkCandidate evaluated
-  case checked of
-    Right (Passed candidate _) -> saveCheckedCandidate candidate
-    _ -> pure ()
-  pure checked
+  captured <- captureEvolution workspace
+  evaluated <- either (pure . Left . ProposedCodeRejected) applyStoredEvolution captured
+  traverse (\(stored,candidate) -> do
+    checked <- checkCandidate candidate
+    case checked of
+      Passed validated _ -> saveCheckedCandidate stored validated
+      _ -> pure ()
+    pure checked) evaluated
 
 checkSavedCandidate :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
@@ -45,7 +47,11 @@ checkSavedCandidate workspace = do
 
 applyEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
   => CapturedEvolution -> Eff es (Either PreviewRejection (Candidate Root))
-applyEvolution captured = do
+applyEvolution captured = fmap (fmap snd) (applyStoredEvolution captured)
+
+applyStoredEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
+  => CapturedEvolution -> Eff es (Either PreviewRejection (StoredCandidate, Candidate Root))
+applyStoredEvolution captured = do
   evaluated <- evaluateEvolution captured
   case evaluated of
     Left rejection -> pure (Left rejection)
@@ -57,8 +63,8 @@ applyEvolution captured = do
         Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))
         Right root -> do
           let candidate = Candidate context report root
-          saveCandidate candidate
-          pure (Right candidate)
+          stored <- saveCandidate candidate
+          pure (Right (stored,candidate))
 
 acceptStoredEvolution :: (RootPublication :> es, EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => LocalBranch -> CommitMetadata -> EvolutionWorkspace -> Eff es AcceptanceResult
