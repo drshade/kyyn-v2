@@ -12,4 +12,6 @@ guestLanguageFlags = map ("-X" ++)
   , "RecordWildCards"
   , "BlockArguments"
   , "MultiWayIf"
+  , "MultilineStrings"
+  , "OrPatterns"
   ]

@@ -103,7 +103,8 @@ edit `target/src/Schema.hs` in place:
 
 KB modules use GHC2024 plus `OverloadedStrings`, `DeriveAnyClass`,
 `OverloadedRecordDot`, `DuplicateRecordFields`, `NoFieldSelectors`,
-`RecordWildCards`, `BlockArguments` and `MultiWayIf`. Compilation and discovery
+`RecordWildCards`, `BlockArguments`, `MultiWayIf`, `MultilineStrings` and
+`OrPatterns`. Compilation and discovery
 use the same defaults. Module pragmas can enable or disable extensions locally.
 
 The standard guest environment exposes the Kyyn SDK and build support plus
