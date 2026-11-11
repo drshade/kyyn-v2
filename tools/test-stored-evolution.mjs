@@ -70,7 +70,9 @@ try {
   assert.deepEqual(cli(['root','fact','show','items','one']).value,{amount:'7',note:'migrated'});
   assert.equal(cli(['root','recipe','list']).recipes.length,1);
   cli(['root','check']);
-  console.log('Stored migration, input scaffold, stable target names, closed state, archive and acceptance passed.');
+  const replay = cli(['root','recipe','run','weekly']);
+  cli(['evolution','check',replay.id]);
+  console.log('Stored migration, input scaffold, stable target names, closed state, archive, acceptance and running the migrated recipe passed.');
 } finally {
   fs.rmSync(temporary,{recursive:true,force:true});
 }
