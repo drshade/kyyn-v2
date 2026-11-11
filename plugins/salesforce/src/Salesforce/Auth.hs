@@ -8,7 +8,7 @@ import Salesforce.Types
 import Salesforce.Config (tokenEndpoint)
 import qualified Salesforce.Json as Json
 import qualified Salesforce.Http as Http
-import Text.JSON.Types (JSValue)
+import qualified Data.Aeson as Aeson
 
 accessToken :: Text -> SalesforceAuth -> NetworkHost rest (Either Text Text)
 accessToken origin auth = runExceptT $ do
@@ -73,7 +73,7 @@ login origin auth = fmap (either (Left . LoginError) Right) $ runExceptT $ case 
             Right "expired_token" -> throwE "Salesforce device login expired; run login again"
             _ -> either throwE (const (throwE "Salesforce device login failed")) (Http.requireSuccess response)
 
-required :: Text -> JSValue -> Either Text Text
+required :: Text -> Aeson.Value -> Either Text Text
 required key value = do
   result <- Json.member key value >>= Json.text
   if Text.null result then Left ("Salesforce returned an empty " <> key) else Right result

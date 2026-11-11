@@ -1,5 +1,10 @@
 module LibraryDefaults (librariesWork) where
 
+import Data.Aeson.Parser (jsonNoDup)
+import Data.Attoparsec.ByteString.Char8 (parseOnly, endOfInput)
+import Data.Either (isLeft)
+import Data.Scientific (scientific, formatScientific, FPFormat(Fixed))
+import Network.HTTP.Types.URI (urlEncode)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Control.Lens (set, view)
 import Data.Generics.Product.Fields (field)
@@ -21,3 +26,6 @@ librariesWork =
   && Json.decode (Json.encode (["hello"] :: [Text])) == Just (["hello"] :: [Text])
   && Set.size (Set.fromList ([1,1,2] :: [Integer])) == 2
   && addDays 1 (fromGregorian 2024 2 28) == fromGregorian 2024 2 29
+  && isLeft (parseOnly (jsonNoDup <* endOfInput) "{\"x\":true,\"x\":false}")
+  && formatScientific Fixed Nothing (scientific 123 (-2)) == "1.23"
+  && urlEncode True "a b" == "a%20b"

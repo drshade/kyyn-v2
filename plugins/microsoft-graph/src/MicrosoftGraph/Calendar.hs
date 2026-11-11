@@ -14,7 +14,9 @@ import MicrosoftGraph.Config (graphRoot, graphApiBase)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 
 fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition ()))
 fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
@@ -76,8 +78,8 @@ lastCopies :: [(Text,a)] -> [(Text,a)]
 lastCopies entries = map snd (sortOn fst [last group | group <- grouped])
   where grouped = groupBy (\(_,a) (_,b) -> fst a == fst b) (sortOn (fst . snd) (zip [0 :: Int ..] entries))
 
-deltaValue :: JSValue -> Either Text (Text,Maybe (Text,Event))
-deltaValue value@(JSObject fields) | Just _ <- lookup "@removed" (fromJSObject fields) = do
+deltaValue :: Aeson.Value -> Either Text (Text,Maybe (Text,Event))
+deltaValue value@(Aeson.Object fields) | Just _ <- KeyMap.lookup "@removed" fields = do
   key <- Json.member "id" value >>= Json.text
   if Text.null key then Left "Graph removal has no ID" else Right (key,Nothing)
 deltaValue value = do
@@ -95,7 +97,7 @@ removedIds prior current = map snd (sortOn fst (missing ordered current))
       EQ -> missing rest now
       GT -> missing old values
 
-eventValue :: JSValue -> Either Text (Text,Text,Event)
+eventValue :: Aeson.Value -> Either Text (Text,Text,Event)
 eventValue value = do
   key <- fieldText "id"
   either (Left . (("Graph event " <> key <> ": ") <>)) Right (decodeEvent key)
@@ -107,14 +109,14 @@ eventValue value = do
       event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
         <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
         <*> person (optionalField "organizer" value)
-        <*> (case optionalField "attendees" value of JSNull -> Right []; entries -> Json.array entries >>= mapM attendee)
+        <*> (case optionalField "attendees" value of Aeson.Null -> Right []; entries -> Json.array entries >>= mapM attendee)
         <*> descriptive ["location","displayName"] value
         <*> flag "isAllDay" <*> flag "isCancelled"
         <*> descriptive ["type"] value <*> descriptive ["iCalUId"] value <*> descriptive ["lastModifiedDateTime"] value <*> descriptive ["webLink"] value
         <*> responseValue (optionalField "responseStatus" value)
       pure (key,version,event)
     fieldText key = Json.member key value >>= Json.text
-    flag key = case optionalField key value of JSNull -> Right False; item -> Json.boolean item
+    flag key = case optionalField key value of Aeson.Null -> Right False; item -> Json.boolean item
     eventTime item = EventTime <$> (Json.member "dateTime" item >>= Json.text) <*> (Json.member "timeZone" item >>= Json.text)
     person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
     attendee item = Attendee <$> descriptive ["emailAddress","name"] item
@@ -124,12 +126,12 @@ eventValue value = do
         Just (ResponseStatus response (either (const Nothing) id (Json.optionalText "time" item)))
       _ -> Nothing
 
-optionalField :: Text -> JSValue -> JSValue
-optionalField key (JSObject fields) = maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields))
-optionalField _ _ = JSNull
+optionalField :: Text -> Aeson.Value -> Aeson.Value
+optionalField key (Aeson.Object fields) = maybe Aeson.Null id (KeyMap.lookup (Key.fromText key) fields)
+optionalField _ _ = Aeson.Null
 
-descriptive :: [Text] -> JSValue -> Either Text Text
-descriptive _ JSNull = Right ""
+descriptive :: [Text] -> Aeson.Value -> Either Text Text
+descriptive _ Aeson.Null = Right ""
 descriptive [] value = Json.text value
-descriptive (key:rest) (JSObject fields) = descriptive rest (maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields)))
+descriptive (key:rest) (Aeson.Object fields) = descriptive rest (maybe Aeson.Null id (KeyMap.lookup (Key.fromText key) fields))
 descriptive _ _ = Left "Expected descriptive response object"

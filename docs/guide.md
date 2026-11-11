@@ -108,7 +108,8 @@ use the same defaults. Module pragmas can enable or disable extensions locally.
 
 The standard guest environment exposes the Kyyn SDK and build support plus
 `aeson` (JSON), `bytestring`, `text`, `containers`, `time`, `cryptohash-sha256`,
-`lens` and `generic-lens`, alongside GHC's bundled libraries. Use these for data
+`lens`, `generic-lens`, `scientific` (exact JSON numbers), `attoparsec` and
+`attoparsec-aeson` (parsing), and `http-types` (HTTP/URI encoding), alongside GHC's bundled libraries. Use these for data
 handling, dates, hashing and typed record updates. For example, import
 `Data.Time`, `Crypto.Hash.SHA256` or `Data.Generics.Product.Fields` directly.
 

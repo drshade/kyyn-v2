@@ -8,7 +8,7 @@ import MicrosoftGraph.Config (graphApiBase)
 import MicrosoftGraph.Directory.Types (DirectoryUser(..))
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
-import Text.JSON.Types (JSValue(..))
+import qualified Data.Aeson as Aeson
 
 endpoint :: Text
 endpoint = graphApiBase <> "users?$select=id,displayName,givenName,surname,mail,userPrincipalName,accountEnabled,userType&$top=999"
@@ -35,7 +35,7 @@ listing token = runExceptT $ do
           rest <- maybe (pure []) (pages (url:seen)) next
           pure (rows ++ rest)
 
-user :: JSValue -> Either Text DirectoryUser
+user :: Aeson.Value -> Either Text DirectoryUser
 user value = do
   key <- Json.member "id" value >>= Json.text
   if Text.null key then Left "Directory user has an empty ID" else pure ()
@@ -43,7 +43,7 @@ user value = do
     <*> nullable "surname" Json.text <*> nullable "mail" Json.text <*> nullable "userPrincipalName" Json.text
     <*> nullable "accountEnabled" Json.boolean <*> nullable "userType" Json.text
   where
-    nullable :: Text -> (JSValue -> Either Text a) -> Either Text (Maybe a)
+    nullable :: Text -> (Aeson.Value -> Either Text a) -> Either Text (Maybe a)
     nullable field decode = do
       item <- Json.member field value
-      case item of JSNull -> Right Nothing; _ -> Just <$> decode item
+      case item of Aeson.Null -> Right Nothing; _ -> Just <$> decode item

@@ -5,9 +5,9 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Kyyn.Plugin.Host
 import qualified GitHub.Json as Json
-import Text.JSON.Types (JSValue(..))
+import qualified Data.Aeson as Aeson
 
-get :: Text -> Maybe Text -> Text -> Acquisition payload (Either Text (JSValue, Maybe Text))
+get :: Text -> Maybe Text -> Text -> Acquisition payload (Either Text (Aeson.Value, Maybe Text))
 get base token url
   -- GitHub can use /repositories/ID in Link headers instead of /repos/OWNER/NAME.
   | not ("https://api.github.com/" `Text.isPrefixOf` url) = pure (Left "GitHub pagination left the GitHub API origin")
@@ -26,7 +26,7 @@ get base token url
           | status == 403 || status == 429 -> Left (rateFailure headers)
           | status == 409 && (base <> "commits?") `Text.isPrefixOf` url
           , Right value <- Json.parse body
-          , Right "Git Repository is empty." <- Json.field "message" value >>= Json.text -> Right (JSArray [],Nothing)
+          , Right "Git Repository is empty." <- Json.field "message" value >>= Json.text -> Right (Aeson.toJSON ([] :: [Aeson.Value]),Nothing)
           | status == 404 -> Left "GitHub resource unavailable; check the repository URL and token access (not treated as deletion)"
           | otherwise -> Left ("GitHub returned HTTP " <> Text.pack (show status))
 
@@ -49,7 +49,7 @@ nextPage headers = case [part | (name,value) <- headers, Text.toLower name == "l
     _ -> Left "Malformed GitHub pagination"
   _ -> Left "Multiple GitHub next-page links"
 
-pages :: Text -> Maybe Text -> Text -> Acquisition payload (Either Text [JSValue])
+pages :: Text -> Maybe Text -> Text -> Acquisition payload (Either Text [Aeson.Value])
 pages base token = runExceptT . go []
   where
     go seen url

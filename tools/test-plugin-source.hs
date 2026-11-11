@@ -1,4 +1,4 @@
--- Native plugin contract and retry checks using the actual guest language defaults.
+-- Native plugin contract, retry and data checks using the actual guest language defaults.
 -- Run from the repository root with cabal exec -- runghc -package=kyyn-guest-build.
 -- Provider responses are recorded; acquisition integration uses real guest tests.
 module Main where
@@ -12,7 +12,7 @@ main :: IO ()
 main = do
   libdir <- takeWhile (/= '\n') <$> readProcess "ghc" ["--print-libdir"] ""
   packages <- packageOptions libdir
-  forM_ ["PluginContractTests.hs", "GraphRetryTests.hs"] $ \test ->
+  forM_ ["PluginContractTests.hs", "GraphRetryTests.hs", "PluginDataTests.hs"] $ \test ->
     callProcess "runghc" (map ("--ghc-arg=" ++) (guestLanguageFlags ++ packages ++
       [ "-Wall", "-Werror"
       , "-iplugins/local-file/src", "-iplugins/github/src"

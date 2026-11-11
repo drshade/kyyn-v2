@@ -13,7 +13,8 @@ import MicrosoftGraph.Mail.Fingerprint (canonicalMessage)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Json as Json
 import MicrosoftGraph.Timestamp (timestamp, daysBefore)
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
 
 fetch :: MailConfig -> Maybe MailFetch -> FetchContext MailPosition -> EvidenceSnapshot Message
   -> Acquisition Message (Either FetchError (FetchResult Message MailPosition ()))
@@ -68,8 +69,8 @@ fetch (MailConfig auth mailbox folders retentionDays) options (FetchContext star
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
 
-messageId :: JSValue -> Either Text [Text]
-messageId (JSObject fields) | Just _ <- lookup "@removed" (fromJSObject fields) = Right []
+messageId :: Aeson.Value -> Either Text [Text]
+messageId (Aeson.Object fields) | Just _ <- KeyMap.lookup "@removed" fields = Right []
 messageId value = do
   key <- Api.textField "id" value
   if Text.null key then Left "Graph message has an empty ID" else pure [key]
