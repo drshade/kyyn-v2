@@ -71,6 +71,9 @@ checkInspection = do
        "choose :: First -> Text", "choose value = if | value.label == \"yes\" -> \"chosen\" | otherwise -> \"other\"",
        "act :: IO Text", "act = pure =<< do pure (choose (First \"yes\"))",
        "kind :: Maybe Text -> Text", "kind = \\case Just value -> value; Nothing -> \"empty\""])
+    appendFile "LanguageDefaults.hs" (unlines
+      ["multiline :: Text", "multiline = \"\"\"", "  hello", "  guest", "  \"\"\"",
+       "small :: Int -> Bool", "small (0; 1) = True", "small _ = False"])
     _ <- inspectExports libdir ["."] [] ["LanguageDefaults"]
     writeFile "Selectors.hs" "{-# LANGUAGE FieldSelectors #-}\nmodule Selectors where\ndata Value = Value { field :: Integer }\nreadValue = field\n"
     (_,selectors) <- inspectExports libdir ["."] [] ["Selectors"]

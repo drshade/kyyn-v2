@@ -26,3 +26,14 @@ unwrap = \case Just value -> value; Nothing -> "empty"
 languageWorks :: Bool
 languageWorks = label == "ordinary binding" && readFirst (First "first") == "first"
   && choose (Second "yes") == "chosen" && unwrap present == "ready"
+  && multiline == "hello\nguest" && small 0 && small 1 && not (small 2)
+
+multiline :: Text
+multiline = """
+  hello
+  guest
+  """
+
+small :: Int -> Bool
+small (0; 1) = True
+small _ = False
