@@ -8,7 +8,7 @@ import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), EvolutionState(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate, readEvolutionState)
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, saveCheckedCandidate, loadCandidate, readEvolutionState)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring, captureEvolution)
 import Kyyn.Porcelain.Capability.RootPublication (RootPublication, acceptEvolution)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
@@ -27,7 +27,11 @@ checkEvolution :: (EvolutionAuthoring :> es, EvolutionExecution :> es, Evolution
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
 checkEvolution workspace = do
   evaluated <- evaluateWorkspace workspace
-  traverse checkCandidate evaluated
+  checked <- traverse checkCandidate evaluated
+  case checked of
+    Right (Passed candidate _) -> saveCheckedCandidate candidate
+    _ -> pure ()
+  pure checked
 
 checkSavedCandidate :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))

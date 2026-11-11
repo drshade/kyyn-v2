@@ -46,7 +46,7 @@ parseManifest source = do
   closed <- traverse (const (Left "kb.dhall must be self-contained; imports are not supported")) parsed
   _ <- first show (TypeCheck.typeOf closed)
   fields <- record (D.normalize closed)
-  let required = ["schemaType","schemaMetadata","validator","queries","tools"]
+  let required = ["schemaType","schemaMetadata","validator","queries","tools","views"]
   unless (sort (Map.keys fields) `elem` [sort required,sort ("outputs":required)])
     (Left "Unexpected or missing kb.dhall fields")
   checkList (textRecord ["name","description","implementation","inputType","inputMetadata","resultType","resultMetadata"])
@@ -58,6 +58,7 @@ parseManifest source = do
     Just value -> checkList (D.Record (Map.fromList
       ([(name,D.makeRecordField D.Text) | name <- ["name","description","query"]] ++
        [("sink",D.makeRecordField (textRecord ["plugin","instanceName","method"]))]))) (D.recordFieldValue value)
+  checkList (textRecord ["name","description","path"]) =<< field "views" fields
   declarations <- field "queries" fields >>= list >>= traverse query
   toolDeclarations <- field "tools" fields >>= list >>= traverse tool
   outputDeclarations <- maybe (Right []) (\value -> list (D.recordFieldValue value) >>= traverse output) (Map.lookup "outputs" fields)

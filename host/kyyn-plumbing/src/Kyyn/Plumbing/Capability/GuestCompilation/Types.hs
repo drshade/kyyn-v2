@@ -18,6 +18,7 @@ import System.FilePath (splitDirectories)
 import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Plugin (bindingModule)
+import Kyyn.Domain.View (isViewPath)
 import Kyyn.Domain.Root (isRootMaterial)
 import Kyyn.Types.GuestBuild
 
@@ -38,7 +39,7 @@ guestSources requested entries = do
   selected <- fileTree ((request,Lazy.toStrict (encode selection)) : contents)
   pure (GuestSources selection selected)
   where
-    permitted path = not (isRootMaterial path) && all allowed (splitDirectories (relativeName path))
+    permitted path = not (isRootMaterial path) && not (isViewPath path) && all allowed (splitDirectories (relativeName path))
     allowed component = component `notElem` [".git",".kyyn",".kyyn-generated",".build","dist-newstyle",".stack-work","result"]
       && component /= ".env" && not (".env." `isPrefixOf` component)
 

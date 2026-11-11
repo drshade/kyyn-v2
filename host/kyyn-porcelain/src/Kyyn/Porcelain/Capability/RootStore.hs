@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample, exportRootFiles, readRootRecipes
+  , readViews, readExamples, encodeExample, exportRootFiles, readRootRecipes
   , readRecipeStates, encodeRootRecipes, checkRecipeValue, readCollection, rootLocation ) where
 
 import Data.Aeson (Value)
@@ -11,6 +11,7 @@ import Kyyn.Domain.Contract (RootContract, CheckedContract)
 import Kyyn.Types.Fact (Fact)
 import qualified Kyyn.Domain.Recipe as Value
 import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Domain.View (ViewDefinition)
 import Kyyn.Domain.Root (Root, RootDefinition, CheckedValue)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Example (Example)
@@ -23,6 +24,7 @@ rootLocation :: KnowledgeBase -> Either String RelativePath
 rootLocation kb = relativePath "root" >>= knowledgeBasePath kb
 
 data RootStore :: Effect where
+  ReadViews :: FileTree -> RootStore m (Either [Diagnostic] [ViewDefinition])
   ReadRootDefinition :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
   ReadRootRecipes :: FileTree -> RootStore m (Either [Diagnostic] [Fact Value.RecipeDefinition])
   ReadRecipeStates :: [(Fact Value.RecipeDefinition, String, CheckedContract)] -> FileTree
@@ -75,3 +77,6 @@ encodeExample = send . EncodeExample
 
 exportRootFiles :: RootStore :> es => Validated Root -> Eff es (Either [Diagnostic] FileTree)
 exportRootFiles = send . ExportRootFiles
+
+readViews :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] [ViewDefinition])
+readViews = send . ReadViews

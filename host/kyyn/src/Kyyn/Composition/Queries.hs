@@ -11,7 +11,7 @@ import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeValue)
 import qualified Kyyn.Porcelain.Capability.Root as Root
-import Kyyn.Porcelain.Capability.RootExecution (preparedQueries, queryRoot)
+import Kyyn.Porcelain.Capability.RootExecution (preparedQueries, selectQuery, queryRoot)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
@@ -27,9 +27,7 @@ dispatchQueries host command (SelectedKb kb revision _) = withRuntime host $ \se
   runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution $ runExceptT $ do
     prepared <- ExceptT (Root.prepareRootAt kb revision)
     let queries = preparedQueries prepared
-        select name = case [q | q@(QueryDescriptor n _ _ _) <- queries, n == name] of
-          [query] -> pure query
-          _ -> throwE [errorDiagnostic "query.unknown" ("No registered query named " ++ name)]
+        select name = ExceptT (pure (selectQuery prepared name))
     case command of
       Cli.ListQueries -> pure (queryListResult queries)
       Cli.ShowQuery name -> do

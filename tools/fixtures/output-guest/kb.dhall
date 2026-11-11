@@ -1,4 +1,4 @@
-{ schemaType = "Main.Root"
+{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
 , schemaMetadata = "Annotations.metadata"
 , validator = "Main.validate"
 , queries =

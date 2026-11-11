@@ -89,8 +89,14 @@ runEvolutionStore = interpret $ \_ -> \case
   MatchesCapturedInputs (EvolutionContext kb identity _ captured) -> runExceptT $ do
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
-  SaveCandidate (Candidate (EvolutionContext kb identity selectedBefore
-      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) target _ _)) report root@(Root after facts code recipes)) -> do
+  SaveCandidate candidate -> storeCandidate "latest" candidate
+  SaveCheckedCandidate (Candidate context report root) -> storeCandidate "checked" (Candidate context report (validatedValue root))
+  LoadCandidate workspace -> loadCandidateAt "latest" workspace
+  LoadCheckedCandidate workspace -> loadCandidateAt "checked" workspace
+
+storeCandidate :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es) => String -> Candidate Root -> Eff es ()
+storeCandidate prefix (Candidate (EvolutionContext kb identity selectedBefore
+      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) target _ _)) report root@(Root after facts code recipes)) = do
     parent <- candidateScope kb
     let revision = beforeRevision selectedBefore
     unless (revision == selected && code == target)
@@ -113,11 +119,13 @@ runEvolutionStore = interpret $ \_ -> \case
     stateContracts <- encodeRecipeContracts recipes >>= stored WriteFile "recipe-contracts.dhall"
     contractsPath <- stored WriteFile "recipe-contracts.dhall" (relativePath "recipe-contracts.dhall")
     FileSystem.writeBytes location contractsPath stateContracts
-    pointer <- stored WriteFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
+    pointer <- stored WriteFile "latest" (relativePath (prefix ++ "/" ++ evolutionIdName identity))
     FileSystem.replaceBytes parent pointer (Bytes.pack (relativeName allocated))
-  LoadCandidate (EvolutionWorkspace kb identity) -> do
+
+loadCandidateAt :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es) => String -> EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
+loadCandidateAt prefix (EvolutionWorkspace kb identity) = do
     parent <- candidateScope kb
-    pointer <- stored ReadFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
+    pointer <- stored ReadFile "latest" (relativePath (prefix ++ "/" ++ evolutionIdName identity))
     selected <- FileSystem.readOptionalBytes parent pointer
     case selected of
       Nothing -> pure (Right Nothing)

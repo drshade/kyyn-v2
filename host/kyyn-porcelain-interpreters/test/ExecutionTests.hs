@@ -34,7 +34,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   shell <- findExecutable "sh" >>= maybe (fail "sh required for process failure fixtures") pure
   let path = either error id . relativePath
       tree = either error id . fileTree
-      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest), (path "flake.nix","recorded fixture"), (path "flake.lock","recorded lock")]
       root = Root contract facts code []
       entry = fixtureProgram
@@ -60,9 +60,9 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
     Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> pure ()
     _ -> fail ("Malformed report became semantic diagnostics: " ++ show malformed)
   forM_ [tree [], tree [(path "kb.dhall", "True")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")]] $ \badCode -> do
+      tree [(path "kb.dhall", "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
+      tree [(path "kb.dhall", "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")],
+      tree [(path "kb.dhall", "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")]] $ \badCode -> do
     failure <- execute unexpected (Root contract facts badCode [])
     case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
   noFacts <- execute (Right (entry "exit 99")) (Root contract (tree []) code [])

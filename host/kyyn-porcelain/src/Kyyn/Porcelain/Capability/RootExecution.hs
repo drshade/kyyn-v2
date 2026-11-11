@@ -1,12 +1,12 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootExecution
-  ( RootExecution(..), PreparedRoot, PreparedOutput(..), prepareRoot, preparedRoot, preparedQueries, preparedPlugins, preparedOutputs, validateRoot, queryRoot ) where
+  ( RootExecution(..), PreparedRoot, PreparedOutput(..), prepareRoot, preparedRoot, preparedQueries, selectQuery, preparedPlugins, preparedOutputs, validateRoot, queryRoot ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.Root (Root, CheckedValue)
-import Kyyn.Domain.Query (QueryDescriptor, QueryResult)
+import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..), PreparedOutput(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 
@@ -37,3 +37,8 @@ preparedOutputs (PreparedRoot _ _ _ _ _ outputs) = outputs
 
 queryRoot :: RootExecution :> es => PreparedRoot -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
 queryRoot root descriptor = send . ExecuteQuery root descriptor
+
+selectQuery :: PreparedRoot -> String -> Either [Diagnostic] QueryDescriptor
+selectQuery prepared name = case [q | q@(QueryDescriptor actual _ _ _) <- preparedQueries prepared, actual == name] of
+  [query] -> Right query
+  _ -> Left [errorDiagnostic "query.unknown" ("No registered query named " ++ name)]

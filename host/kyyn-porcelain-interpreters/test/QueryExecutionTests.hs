@@ -41,7 +41,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   let path = either error id . relativePath
       tree = either error id . fileTree
       query = "{ name = \"summary\", description = \"Summary\", implementation = \"Queries.summary\", inputType = \"Queries.Input\", inputMetadata = \"Queries.inputMetadata\", resultType = \"Queries.Result\", resultMetadata = \"Queries.resultMetadata\" }"
-      manifest declarations = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\", queries = " <> declarations <> ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest declarations = "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\", queries = " <> declarations <> ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Queries.hs", "captured query"), (path "kb.dhall", manifest ("[" <> query <> "]")), (path "flake.nix","recorded fixture"), (path "flake.lock","recorded lock")]
       root = Root rootContract facts code []
       input = either (error . show) id (checkContract fixtureText (SchemaMetadata [] [] []))

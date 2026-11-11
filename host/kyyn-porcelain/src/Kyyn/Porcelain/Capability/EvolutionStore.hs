@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
   ( EvolutionStore(..), readWorkspace, matchesCapturedInputs, saveCandidate, loadCandidate
+  , saveCheckedCandidate, loadCheckedCandidate
   , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation
   , readEvolutionSummary, readArchivedReport, inspectEvolution ) where
 
@@ -32,6 +33,8 @@ data EvolutionStore :: Effect where
   ExportAcceptedWorkspace :: Candidate (Validated Root) -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
   ReadWorkspace :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] WorkspaceSnapshot)
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
+  SaveCheckedCandidate :: Candidate (Validated Root) -> EvolutionStore m ()
+  LoadCheckedCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
   SaveCandidate :: Candidate Root -> EvolutionStore m ()
   LoadCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
 
@@ -84,3 +87,9 @@ markDraft = send . MarkDraft
 
 exportAcceptedWorkspace :: EvolutionStore :> es => Candidate (Validated Root) -> Eff es (Either [Diagnostic] (TreePath, FileTree))
 exportAcceptedWorkspace = send . ExportAcceptedWorkspace
+
+saveCheckedCandidate :: EvolutionStore :> es => Candidate (Validated Root) -> Eff es ()
+saveCheckedCandidate = send . SaveCheckedCandidate
+
+loadCheckedCandidate :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
+loadCheckedCandidate = send . LoadCheckedCandidate
