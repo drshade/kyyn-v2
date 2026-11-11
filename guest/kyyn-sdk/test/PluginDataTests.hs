@@ -8,6 +8,7 @@ import Data.Ratio ((%))
 import qualified MicrosoftGraph.Json as Graph
 import qualified Salesforce.Json as Salesforce
 import qualified GitHub.Json as GitHub
+import MicrosoftGraph.Meetings.Fingerprint (artifactId)
 import MicrosoftGraph.Timestamp (timestamp, daysBefore)
 
 main :: IO ()
@@ -30,6 +31,7 @@ main = do
   check "Salesforce precision/order changed" $
     (fmap Salesforce.canonical (Salesforce.parse "{\"z\":1.2300,\"b\":9007199254740993,\"a\":1e-20,\"c\":-2,\"s\":\"é\\n\"}")) ==
       Right "{\"a\":0.00000000000000000001,\"b\":9007199254740993,\"c\":-2,\"s\":\"é\\n\",\"z\":1.23}"
+  check "Fingerprint escaping changed" (artifactId "kind" "\b\f" "é😀" == "[\"kind\",\"\\u0008\\u000c\",\"é😀\"]")
   check "Timestamp epoch changed" (timestamp "0001-01-01T00:00:00Z" == Right 0)
   check "Timestamp precision lost" (timestamp "0001-01-01T00:00:00.000000000000000001Z" == Right (1 % (10^(18 :: Int))))
   check "Offset changed instant" (timestamp "2024-02-29T02:00:00+02:00" == timestamp "2024-02-29T00:00:00Z")
