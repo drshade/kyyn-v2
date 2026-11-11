@@ -48,7 +48,7 @@ serveWeb host scope port draft
             (base,tree) <- case draft of
               Nothing -> do
                 path <- either (throwE . pure . errorDiagnostic "kb.path") pure (RootStore.rootLocation kb)
-                tree <- ExceptT (Git.readTree repository revision (Subtree path))
+                tree <- ExceptT (Git.readTreeAt repository revision (Subtree path))
                 pure (revision,tree)
               Just identity -> do
                 let workspace = EvolutionWorkspace kb identity

@@ -30,8 +30,12 @@ readViews tree = runExceptT $ do
     (,,) <$> o .: "name" <*> o .: "description" <*> o .: "path")) . toList)) value)
   let names = [n | (n,_,_) <- declarations]
   unless (length names == length (nub names)) (bad "View names must be unique")
-  traverse (\(name,description,path) -> do
+  views <- traverse (\(name,description,path) -> do
     _ <- either bad pure (bindingName name)
     selected <- either bad pure (viewPath path)
     unless (path `elem` map fst entries) (bad ("Missing view page: " ++ path))
     pure (ViewDefinition name description selected)) declarations
+  let directory (ViewDefinition _ _ path) = takeWhile (/= '/') (drop (length ("views/" :: String)) (relativeName path))
+      directories = map directory views
+  unless (length directories == length (nub directories)) (bad "Each view needs its own views/<directory>/ subtree")
+  pure views

@@ -94,6 +94,12 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   assert.equal(browser.window.kyyn.params().get('month'),'2026-11');
   assert.equal(browser.window.kyyn.viewUrl('training',{q:'a b&c'}),'/kb/views/training/?q=a+b%26c');
   assert.throws(()=>browser.window.kyyn.viewUrl('missing',{}),/Undeclared/);
+  const secret = path.join(temporary,'outside.txt');write(secret,'NOT A VIEW');
+  const link = path.join(target,'views/training/outside.txt');fs.symlinkSync(secret,link);
+  const denied = await request(preview,'/kb/views/training/outside.txt',{},500);
+  assert(!(await denied.text()).includes('NOT A VIEW'));fs.unlinkSync(link);
+  write(manifest,m.replace('views/training/index.html','index.html'));
+  await request(preview,'/kb/',{},400);write(manifest,m);
   write(change,evolution);cli(['evolution','check',d.id]);
   assert.deepEqual((await query(preview,'titles',{})).result,['First lesson']);
   await query(preview,'titles',true,400);
@@ -105,7 +111,13 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   write(path.join(target,'views/training/index.html'),html+'<p>Edited</p>');
   assert((await (await request(preview,'/kb/views/training/')).text()).endsWith('<p>Edited</p>'));
   assert.deepEqual((await query(preview,'titles',{})).result,['First lesson']);
-  cli(['evolution','check',d.id]);
+  const nix=spawnSync('which',['nix'],{encoding:'utf8'}).stdout.trim();assert(nix);
+  const wrapper=path.join(temporary,'nix-observer');const calls=path.join(temporary,'nix-calls');
+  const quote=s=>"'"+s.replaceAll("'", "'\\''")+"'";
+  write(wrapper,'#!/bin/sh\nprintf \'%s\\n\' "$@" >> '+quote(calls)+'\nexec '+quote(nix)+' "$@"\n');
+  fs.chmodSync(wrapper,0o755);
+  cli(['--nix',wrapper,'evolution','check',d.id]);
+  assert(!fs.readFileSync(calls,'utf8').split('\n').includes('build'),'View-only check invoked nix build');
   assert.deepEqual(fs.readdirSync(compiled).sort(),before,'View-only check changed retained guest builds');
   // A semantic failure saves an inspectable candidate, but never replaces checked query data.
   const validate=path.join(target,'src/Validate.hs');const valid=fs.readFileSync(validate,'utf8');

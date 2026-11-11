@@ -9,7 +9,8 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Language.Haskell.TH.Syntax (addDependentFile, lift, runIO, location, loc_filename)
+import Language.Haskell.TH.Syntax (addDependentFile, lift, runIO, loc_filename)
+import qualified Language.Haskell.TH.Syntax as TH
 import Network.HTTP.Types
 import Network.Mime (defaultMimeLookup)
 import Network.Socket hiding (socket)
@@ -130,7 +131,7 @@ resultStatus (Result.Response outcome _ _ diagnostics)
 
 script :: Text.Text
 script = Text.pack $(do
-  source <- loc_filename <$> location
+  source <- loc_filename <$> TH.location
   let path = takeDirectory source </> "../../web/kyyn.js"
   addDependentFile path
   runIO (readFile path) >>= lift)
