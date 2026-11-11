@@ -161,7 +161,7 @@ check executable = do
     (fail "Incorrect contract fingerprint accepted")
   unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.loadedSources = ["../outside.hs"] }))))
     (fail "Source traversal accepted")
-  unless (map G.entryName description.entries == ["validate","total"]) (fail "Wrong registered entries")
+  unless (concatMap G.entryNames description.entries == ["validate","total"]) (fail "Wrong registered entries")
   selectedRoot <- case [root | G.ValidatorEntry _ root <- description.entries] of
     [root] -> pure root
     _ -> fail "Missing validator contract"

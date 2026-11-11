@@ -3,7 +3,7 @@ module Kyyn.Runtime.Entry (Entry(..), Adapter(..), CapturedAdapter(..), pureAdap
 import qualified Data.Aeson as Json
 import Agentic.Aeson (fromAeson)
 import Data.Text (Text)
-import Kyyn.Types.Guest (EntryDescription, Invocation(..), DescribedContract, CapturedContracts, entryName)
+import Kyyn.Types.Guest (EntryDescription, Invocation(..), DescribedContract, CapturedContracts, entryNames)
 import Kyyn.Runtime.Contract (toWire)
 import qualified Kyyn.Runtime.Json as Wire
 import Kyyn.Runtime.Transport (Transport, writeJson)
@@ -26,7 +26,9 @@ entryDescriptor (ConnectorGroup description _) = description
 
 entryActions :: Entry -> [(Text,Action)]
 entryActions (DescriptionEntry _) = []
-entryActions (Entry description run) = [(entryName description,run)]
+entryActions (Entry description run) = case entryNames description of
+  [name] -> [(name,run)]
+  _ -> error "A single-entry adapter requires exactly one invocation name"
 entryActions (ConnectorGroup _ actions) = actions
 
 pureEntry :: EntryDescription -> (Json.Value -> Either String Json.Value) -> Entry
