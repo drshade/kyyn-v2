@@ -1,5 +1,5 @@
 module Kyyn.Runtime.Transport
-  ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson, writeValue, writeValueFrame ) where
+  ( Transport, withTransport, readFrame, writeFrame, readJson, writeValue, writeValueFrame ) where
 
 import Control.Exception (evaluate)
 import qualified Data.ByteString as B
@@ -8,7 +8,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import System.IO
 import Kyyn.Runtime.Json (printChunks)
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 
 data Transport = Transport Handle Handle
 
@@ -62,35 +62,10 @@ readJson transport = do
   if B.null body then pure (T.unpack (TE.decodeUtf8 metadata))
     else fail "Unexpected raw body"
 
-writeJson :: Transport -> String -> IO ()
-writeJson transport text = writeFrame transport (chunks text) B.empty
-  where
-    chunks [] = []
-    chunks input = let (part,rest) = splitAt 8192 input
-                  in TE.encodeUtf8 (T.pack part) : chunks rest
-
-writeValue :: Transport -> JSValue -> IO ()
+writeValue :: Transport -> Value -> IO ()
 writeValue transport value = writeValueFrame transport value B.empty
 
-writeValueFrame :: Transport -> JSValue -> B.ByteString -> IO ()
--- A failed write may leave a partial frame: the guest must terminate, not retry.
-writeValueFrame (Transport input output) value body = do
-  emit [] 0 (printChunks value)
-  -- writeFrame finishes the metadata section, then writes the body section.
-  writeFrame (Transport input output) [] body
-  where
-    emit pending _ [] = flush pending
-    emit _ _ (Left message:_) = fail message
-    emit pending size (Right characters:rest) = do
-      let (part,remaining) = splitAt (8192-size) characters
-          size' = size + length part
-          pending' = part : pending
-      if size' == 8192 then do
-        flush pending'
-        emit [] 0 (Right remaining:rest)
-      else emit pending' size' rest
-    flush pending = do
-      let bytes = TE.encodeUtf8 (T.pack (concat (reverse pending)))
-      if B.null bytes then pure () else do
-        B.hPut output (C.pack (show (B.length bytes) ++ "\n"))
-        B.hPut output bytes
+writeValueFrame :: Transport -> Value -> B.ByteString -> IO ()
+writeValueFrame transport value body = do
+  chunks <- either fail pure (printChunks value)
+  writeFrame transport chunks body

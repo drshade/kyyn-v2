@@ -112,7 +112,7 @@ test('prepared root constructors stay behind the capability', () => {
 
 test('compiler internals stay in the guest builder and transport stays private', () => {
   assert.deepEqual(checkImports('kyyn-guest-build', 'import GHC'), []);
-  assert.deepEqual(checkImports('kyyn-runtime', 'import Text.JSON.Types'), []);
+  assert.deepEqual(checkImports('kyyn-runtime', 'import Data.Aeson'), []);
   assert.deepEqual(checkImports('kyyn-runtime', 'import GHC'), ['GHC']);
   assert.deepEqual(checkImports('kyyn-guest-build', 'import Kyyn.Porcelain.Capability.RootStore'), ['Kyyn.Porcelain.Capability.RootStore']);
 });

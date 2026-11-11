@@ -9,7 +9,10 @@ import Kyyn.Plumbing.Protocol.Frame
 import Kyyn.Plumbing.Protocol.PluginHost (httpResult)
 import Kyyn.Types.PluginHost
 import Kyyn.Runtime.Json
-import Text.JSON.Types
+import Data.Aeson (Value(..), toJSON)
+import Control.Exception (SomeException, try, evaluate)
+import Data.Either (isLeft)
+import Kyyn.Types.Wire (parseWire)
 
 assert :: String -> Bool -> IO ()
 assert label passed = unless passed (fail label)
@@ -45,11 +48,25 @@ main = do
     assert "all HTTP statuses retain raw body" (body == T.encodeUtf8 "provider response λ")
   let (_,failureBody) = httpResult (Left HttpTimedOut)
   assert "transport failure has empty raw body" (B.null failureBody)
-  let values = [JSBool True, record [], JSArray [], encodeWith textCodec "", encodeWith textCodec (T.replicate 20000 "λ\n\"\\🦋"),
-        record [("a",JSArray [encodeWith stringCodec "a\tb",JSBool False]),("a",JSNull)],
-        record [("key\nλ",record [("nested",JSArray [record [],JSArray []])])]]
+  let values = [Bool True, record [], Array mempty, encodeWith textCodec "", encodeWith textCodec (T.replicate 20000 "λ\n\"\\🦋"),
+        record [("a",toJSON [encodeWith stringCodec "a\tb",Bool False])],
+        record [("key\nλ",record [("nested",toJSON [record [],Array mempty])])]]
   forM_ values $ \value -> assert "streamed encoding equals library encoding"
-    ((concat <$> sequence (printChunks value)) == printValue value)
-  forM_ [JSNull,JSRational False 1,encodeWith stringCodec "\xD800",JSArray [JSBool True,JSNull]] $ \value ->
-    assert "streamed encoding rejects invalid profile" (case sequence (printChunks value) of Left _ -> True; _ -> False)
+    ((T.unpack . T.decodeUtf8 . B.concat <$> printChunks value) == printValue value)
+  forM_ [Null,Number 1,toJSON [Bool True,Null]] $ \value ->
+    assert "streamed encoding rejects invalid profile" (case printChunks value of Left _ -> True; _ -> False)
+  badString <- try (evaluate (encodeWith stringCodec "\xD800")) :: IO (Either SomeException Value)
+  assert "String surrogate refused before Text.pack" (isLeft badString)
+  badKey <- try (evaluate (record [("\xD800",Bool True)])) :: IO (Either SomeException Value)
+  assert "String key surrogate refused before Text.pack" (isLeft badKey)
+  duplicate <- try (evaluate (record [("a",Bool True),("a",Bool False)])) :: IO (Either SomeException Value)
+  assert "generated duplicate fields refused" (isLeft duplicate)
+  forM_ ["{\"a\":true,\"a\":false}", "{\"a\":{\"x\":true,\"x\":false}}",
+         "{\"a\":true,\"\\u0061\":false}", "\"\\ud800\"", "\"\\udc00\"",
+         "null", "1", "{\"x\":null}", "[true,1]", "{} trailing"] $ \input -> do
+    assert ("guest rejects " ++ input) (isLeft (parseValue input))
+    assert ("host rejects " ++ input) (isLeft (parseWire (T.encodeUtf8 (T.pack input))))
+  assert "escaped pair decodes" (parseValue "\"\\ud83d\\ude00\"" == Right (String "😀"))
+  assert "surrogate raw input refused" (isLeft (parseValue "\xD800"))
+  assert "invalid UTF-8 refused" (isLeft (parseWire (B.pack [34,255,34])))
   putStrLn "Frame and bounded JSON encoding tests passed"

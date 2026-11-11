@@ -59,7 +59,7 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.22 && <4.23, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
-    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson >=2.2.4 && <2.3, agentic ==0.2.1.0, json ==0.11
+    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson >=2.2.4 && <2.3, agentic ==0.2.1.0
 
 test-suite frames
   type: exitcode-stdio-1.0
@@ -69,4 +69,4 @@ test-suite frames
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: base, kyyn-plumbing, kyyn-types, bytestring, text, transformers, json ==0.11
+  build-depends: base, kyyn-plumbing, kyyn-types, bytestring, text, transformers, aeson >=2.2.4 && <2.3

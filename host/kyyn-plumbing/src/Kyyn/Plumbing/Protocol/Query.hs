@@ -1,7 +1,8 @@
 module Kyyn.Plumbing.Protocol.Query (decodeQueryReply) where
 
+import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
-import Data.Aeson (Value, eitherDecodeStrict, withObject, withArray, (.:))
+import Data.Aeson (Value, withObject, withArray, (.:))
 import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
@@ -11,7 +12,7 @@ import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Types.Query (ReadAccess(..))
 
 decodeQueryReply :: Bytes.ByteString -> Either String (Value, [ReadAccess])
-decodeQueryReply bytes = eitherDecodeStrict bytes >>= parseEither
+decodeQueryReply bytes = decodeWire bytes >>= parseEither
   (withObject "QueryReply" $ \o -> do
     unless (sort (Keys.keys o) == ["result", "trace"]) (fail "Expected result and trace")
     value <- o .: "result"

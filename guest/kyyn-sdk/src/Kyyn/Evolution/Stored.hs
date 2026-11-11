@@ -7,7 +7,8 @@ module Kyyn.Evolution.Stored
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Text.JSON.Types (JSValue(..), fromJSObject, toJSObject, fromJSString, toJSString)
+import Data.Aeson (Value(..))
+import qualified Data.Aeson.KeyMap as Keys
 import Kyyn.Contract
 import Kyyn.Contract.Wire (toWire, fromWire)
 import Kyyn.Types.Fact (Fact(..), FactId(..), parseFactId)
@@ -17,7 +18,7 @@ import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.StoredShape
 
 -- Each recorded fact value includes the full id/value envelope.
-data RecordedValue = RecordedValue StoredShape JSValue deriving (Eq, Show)
+data RecordedValue = RecordedValue StoredShape Value deriving (Eq, Show)
 data StoredRecipe = StoredRecipe Recipe (Maybe Text) RecordedValue deriving (Eq, Show)
 data StoredSnapshot = StoredSnapshot
   [(Text,RecordedValue)] [(Text,[Fact RecordedValue])] [Fact StoredRecipe]
@@ -46,15 +47,15 @@ encodeFact (Fact (FactId name) value) = do
   _ <- either failure Right (parseFactId name)
   RecordedValue shape encoded <- encodeStored value
   pure (RecordedValue (StoredRecord [("id",StoredText),("value",shape)])
-    (JSObject (toJSObject [("id",JSString (toJSString (Text.unpack name))),("value",encoded)])))
+    (Object (Keys.fromList [("id",String name),("value",encoded)])))
 
 decodeFact :: Contract a => RecordedValue -> Either EvolutionFailure (Fact a)
-decodeFact (RecordedValue shape (JSObject object))
+decodeFact (RecordedValue shape (Object object))
   | StoredRecord [("id",StoredText),("value",payload)] <- canonicalShape shape
-  , fields <- fromJSObject object
+  , fields <- Keys.toList object
   , length fields == 2
-  , Just (JSString rawId) <- lookup "id" fields
+  , Just (String rawId) <- lookup "id" fields
   , Just value <- lookup "value" fields = do
-      identity <- either failure Right (parseFactId (Text.pack (fromJSString rawId)))
+      identity <- either failure Right (parseFactId (rawId))
       Fact identity <$> decodeStored (RecordedValue payload value)
 decodeFact _ = failure "Invalid stored fact envelope"

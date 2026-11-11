@@ -1,7 +1,8 @@
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Kyyn.Plumbing.Interpreter.GuestInspection (runGuestInspection) where
 
-import Data.Aeson (encode, eitherDecodeStrict')
+import Kyyn.Types.Wire (decodeWire)
+import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -16,6 +17,6 @@ runGuestInspection :: (GuestExecution :> es, Failure :> es) => Eff (GuestInspect
 runGuestInspection = interpret $ \_ (DescribeGuest program) -> do
   response <- executeCompiledEntry "describe" program
     (Bytes.toStrict (encode Describe))
-  pure $ case eitherDecodeStrict' response of
+  pure $ case decodeWire response of
     Left problem -> Left [errorDiagnostic "guest.description" problem]
     Right description -> checkGuest description

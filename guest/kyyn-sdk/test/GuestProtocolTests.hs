@@ -11,6 +11,11 @@ import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString.Char8 as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Either (isLeft)
+import qualified Agentic.Contract as Agentic
+import qualified Agentic.Schema as Agentic
+import qualified Agentic.Value as Agentic
+import Kyyn.Runtime.AgenticContract (fromWireCodec)
+import qualified Kyyn.Runtime.Json as Wire
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
@@ -70,12 +75,25 @@ main = do
     ["--api-built",path] -> checkApi False (path,[])
     ["--api-bindings-built",path] -> checkApi True (path,[])
     [] -> do
+      checkModelBridge
       path <- getExecutablePath
       check (path,["--guest"])
       checkCaptured (path,["--captured-guest"])
       checkAcquisition (path,["--acquisition-guest"])
       checkPlugin (path,["--plugin-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
+
+checkModelBridge :: IO ()
+checkModelBridge = do
+  let Agentic.Codec _ _ decode = fromWireCodec (Agentic.schemaOf (Agentic.SObject []))
+        (Wire.Codec (const (object [])) (const (Right ())))
+  forM_ [Agentic.Object [("a",Agentic.Bool True),("a",Agentic.Bool False)],
+    Agentic.Array [Agentic.Object [("a",Agentic.Bool True),("a",Agentic.Bool False)]]] $ \value ->
+      unless (decode value == Left "duplicate object keys") (fail "Model duplicate was not a typed refusal")
+  forM_ [0/0,1/0, -1/0] $ \value ->
+    unless (decode (Agentic.Number value) == Left "Expected finite model number")
+      (fail "Nonfinite model number was not a typed refusal")
+  putStrLn "Model bridge refuses duplicate objects and nonfinite numbers without exceptions."
 
 -- Broken proposal data and an unfinished transformation must not be read/run by
 -- discovery. Its compiler-owned facade has the real exports but no invocation.
@@ -206,11 +224,19 @@ check executable = do
     object ["operation" .= ("describe" :: String), "argument" .= root]] $ \requestValue -> do
       (status,_,_) <- call executable requestValue
       unless (status /= ExitSuccess) (fail "Malformed invocation accepted")
+  forM_ ["{\"operation\":\"describe\",\"operation\":\"describe\"}",
+    "{\"operation\":\"describe\",\"\\u006fperation\":\"describe\"}",
+    "{\"operation\":\"invoke\",\"entry\":\"validate\",\"argument\":{\"items\":[{\"id\":\"a\",\"value\":{\"amount\":\"12.34\",\"amount\":\"12.34\"}}]}}"] $ \metadata -> do
+      (status,_,_) <- callRaw executable metadata
+      unless (status /= ExitSuccess) (fail "Duplicate-key invocation accepted")
   putStrLn "Compiled guest describe/invoke and rejection checks passed."
 
 call :: (FilePath,[String]) -> Value -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
-call (executable,arguments) value = Process.readProcess (Process.setStdin (Process.byteStringInput
-  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value)))))))
+call executable value = callRaw executable (Lazy.toStrict (encode value))
+
+callRaw :: (FilePath,[String]) -> Bytes.ByteString -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
+callRaw (executable,arguments) metadata = Process.readProcess (Process.setStdin (Process.byteStringInput
+  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame metadata)))))
   (Process.proc executable arguments))
 
 invoke :: (FilePath,[String]) -> Value -> IO Value

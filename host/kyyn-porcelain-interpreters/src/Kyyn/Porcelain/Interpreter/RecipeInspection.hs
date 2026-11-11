@@ -3,7 +3,8 @@ module Kyyn.Porcelain.Interpreter.RecipeInspection (runRecipeInspection) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad (unless)
-import Data.Aeson (eitherDecodeStrict', toJSON)
+import Data.Aeson (toJSON)
+import Kyyn.Types.Wire (decodeWire)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -34,4 +35,4 @@ runRecipeInspection = interpret $ \_ (DescribeRecipe (SourceRoot contract code _
   unless (contractId root == contractId (rootSchema contract))
     (throwE [errorDiagnostic "recipe.root-type" "Recipe flow takes a different Root contract"])
   output <- ExceptT (Right <$> executeEntry entry (toJSON (G.RenderRecipe format)))
-  either (throwE . pure . errorDiagnostic "recipe.description-protocol") pure (eitherDecodeStrict' output)
+  either (throwE . pure . errorDiagnostic "recipe.description-protocol") pure (decodeWire output)

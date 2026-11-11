@@ -7,7 +7,7 @@ module Kyyn.Recipe.Internal
 import Kyyn.Types.StoredShape (StoredShape)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.KnowledgeBase (Recipe)
 import Kyyn.Types.Diagnostic (errorDiagnostic)
@@ -19,12 +19,12 @@ data KnowledgeBase root = KnowledgeBase root [Fact StoredRecipe] deriving (Eq, S
 
 -- | A generated binding identifying and encoding a recipe's state type.
 data RecipeType state = RecipeType Text Text StoredShape
-  (state -> JSValue) (JSValue -> Either String state)
+  (state -> Value) (Value -> Either String state)
 
 -- | A recipe's instructions or flow and its typed state binding.
 data RecipeDefinition state = RecipeDefinition Recipe (RecipeType state)
 
-data StoredRecipe = StoredRecipe Recipe Text Text JSValue deriving (Eq, Show)
+data StoredRecipe = StoredRecipe Recipe Text Text Value deriving (Eq, Show)
 
 storeRecipe :: RecipeDefinition state -> state -> StoredRecipe
 storeRecipe (RecipeDefinition method (RecipeType name identity _ encode _)) state =

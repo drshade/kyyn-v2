@@ -1,7 +1,7 @@
 module Kyyn.Plumbing.Capability.SchemaInspection.Metadata
   ( metadataAdapter, decodeMetadata, evaluateMetadata ) where
 
-import Data.Aeson (eitherDecodeStrict)
+import Kyyn.Types.Wire (decodeWire)
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, (:>))
 import Kyyn.Types.SchemaMetadata
@@ -17,12 +17,12 @@ metadataAdapter :: String -> Either String String
 metadataAdapter selected = do
   moduleName <- bindingModule selected
   pure (unlines ["module KyynMetadataEntry where", "import qualified " ++ moduleName,
-      "import Kyyn.Runtime.SchemaMetadata (encodeMetadata)",
-      "import Kyyn.Runtime.Transport (withTransport, writeJson)",
-      "main :: IO ()", "main = withTransport $ \\transport -> either fail (writeJson transport) (encodeMetadata " ++ selected ++ ")"])
+      "import Data.Aeson (toJSON)",
+      "import Kyyn.Runtime.Transport (withTransport, writeValue)",
+      "main :: IO ()", "main = withTransport $ \\transport -> writeValue transport (toJSON " ++ selected ++ ")"])
 
 decodeMetadata :: Bytes.ByteString -> Either String SchemaMetadata
-decodeMetadata = eitherDecodeStrict
+decodeMetadata = decodeWire
 
 evaluateMetadata
   :: (GuestCompilation :> es, GuestExecution :> es, Failure :> es)

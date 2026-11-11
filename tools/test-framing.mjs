@@ -1,5 +1,5 @@
 // Native guest transport: large UTF-8/raw frames, malformed lengths and partial
-// results. Compiled in the pinned contributor environment; no provider calls.
+// results and invalid authored encoders. Compiled in the pinned contributor environment; no provider calls.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -14,7 +14,7 @@ const run = (bin, args, input) => execFileSync(bin, args, { cwd: root, input, ti
 try {
   const main = path.join(root, 'tools/fixtures/framing/Main.hs');
   const native = path.join(temporary, 'guest');
-  run('cabal', ['exec', '--', 'ghc', '-v0', '-i', `-i${path.join(root, 'guest/kyyn-runtime/src')}`,
+  run('cabal', ['exec', '--', 'ghc', '-v0', '-package=kyyn-types', '-package=aeson', '-package=text', '-package=bytestring', '-i', `-i${path.join(root, 'guest/kyyn-runtime/src')}`,
     '-outputdir', temporary, main, '-o', native]);
   for (const [bin,args] of [[native,[]]]) {
     // Node creates socket-backed descriptors; cat supplies the OS pipe used by the native host.
@@ -34,12 +34,27 @@ try {
     let partial;
     try { invoke(Buffer.alloc(0), ['fail']); assert.fail('Invalid result was encoded'); }
     catch (error) { assert.notEqual(error.status, 0); partial = error.stdout; }
-    assert(partial.length > 8192, 'Fixture failed before emitting a chunk');
-    let dispatched = 0;
-    await assert.rejects(async () => {
-      for await (const frame of readFrames(Readable.from([partial]))) { void frame; dispatched++; }
-    }, /Incomplete frame/);
-    assert.equal(dispatched, 0, 'Partial result became dispatchable');
+    assert.equal(partial.length, 0, 'Invalid profile emitted bytes before validation');
+    for (const [mode,diagnostic] of [
+      ['surrogate', /surrogate character is outside the wire profile/],
+      ['surrogate-key', /surrogate character is outside the wire profile/],
+      ['duplicate', /duplicate record keys/],
+    ]) {
+      let refusal;
+      try { invoke(Buffer.alloc(0), [mode]); } catch (error) { refusal = error; }
+      assert(refusal, mode + ' was accepted');
+      assert.notEqual(refusal.status, 0);
+      assert.match(refusal.stderr.toString(), diagnostic);
+      assert.equal(refusal.stdout.length, 0, mode + ' emitted a partial frame');
+    }
+    const rawFrame = source => Buffer.concat([Buffer.from(Buffer.byteLength(source) + '\n'), Buffer.from(source), Buffer.from('0\n0\n')]);
+    for (const source of ['{"a":true,"a":false}', '{"a":{"x":true,"x":false}}',
+      '{"a":true,"\\u0061":false}', '"\\ud800"', '"\\udc00"', 'null', '[true,1]', '{} garbage']) {
+      assert.throws(() => invoke(rawFrame(source)));
+    }
+    const escaped = [];
+    for await (const frame of readFrames(Readable.from([invoke(rawFrame('"\\ud83d\\ude00"'))]))) escaped.push(frame);
+    assert.equal(escaped[0].metadata, '😀');
     console.log(`Framing roundtrips and malformed-input refusal passed: ${bin}`);
   }
 } finally { rmSync(temporary, { recursive: true, force: true }); }

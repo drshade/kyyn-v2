@@ -5,11 +5,11 @@ import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import Text.JSON.Types (JSValue)
+import Data.Aeson (Value)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Validation (encodeReportValue)
 
-rejectionValue :: EvolutionFailure -> Either String JSValue
+rejectionValue :: EvolutionFailure -> Either String Value
 rejectionValue (EvolutionFailure diagnostics) = tagged "Rejected" . Just <$> encodeReportValue (ValidationReport diagnostics)
 
 knowledgeBaseCodec :: Codec a -> Codec (KnowledgeBase a)

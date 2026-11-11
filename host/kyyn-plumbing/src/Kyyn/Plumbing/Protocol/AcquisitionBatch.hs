@@ -1,8 +1,9 @@
 module Kyyn.Plumbing.Protocol.AcquisitionBatch
   ( AcquisitionFrame(..), decodeAcquisitionFrame, encodeBatchResponse, acquisitionInput ) where
 
+import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
-import Data.Aeson (Value(..), Object, object, (.=), (.:), eitherDecodeStrict, encode)
+import Data.Aeson (Value(..), Object, object, (.=), (.:), encode)
 import Data.Aeson.Types (Parser, parseEither, withObject)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
@@ -21,7 +22,7 @@ acquisitionInput width arguments = Lazy.toStrict (encode (object
 decodeAcquisitionFrame :: Int -> (Frame -> Either String (PluginFrame call)) -> Frame
   -> Either String (AcquisitionFrame call)
 decodeAcquisitionFrame width decode frame@(Frame bytes body) = do
-  value <- eitherDecodeStrict bytes
+  value <- decodeWire bytes
   grouped <- parseEither (withObject "acquisition frame" (\o -> (== ("HostBatch" :: String)) <$> o .: "tag")) value
   if not grouped then Single <$> decode frame else do
     parts <- parseEither (withObject "acquisition batch" $ \o -> do

@@ -8,7 +8,7 @@ module Kyyn.Evolution.KnowledgeBase
 import Control.Monad.Trans.State.Strict (StateT(..))
 import Kyyn.Types.StoredShape (StoredShape(..))
 import Data.Text (Text)
-import Text.JSON.Types (JSValue(..), toJSObject, fromJSObject)
+import Data.Aeson (Value(..))
 import Kyyn.Recipe.Internal
 import Kyyn.Types.KnowledgeBase (Recipe(OpenAgent))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
@@ -39,9 +39,9 @@ openRecipe state instructions = RecipeDefinition (OpenAgent instructions) state
 unitRecipeType :: RecipeType ()
 unitRecipeType = RecipeType "()"
   (Contract.fingerprint (Contract.contractIdentity Contract.UnitDescription (SchemaMetadata [] [] [])))
-  (StoredRecord []) (\() -> JSObject (toJSObject [])) decode
+  (StoredRecord []) (\() -> Object mempty) decode
   where
-    decode (JSObject fields) | null (fromJSObject fields) = Right ()
+    decode (Object fields) | null fields = Right ()
     decode _ = Left "Expected unit state"
 
 -- | Create a recipe with its initial state. Refuses an existing recipe ID.
