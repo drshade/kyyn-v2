@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedRecordDot #-}
 module Queries (Args, Total, total) where
 
 import Data.Fixed (Fixed, E2)

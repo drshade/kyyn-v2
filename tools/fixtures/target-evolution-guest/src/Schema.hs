@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, NoFieldSelectors #-}
 module Schema (Root(..), Item(..)) where
 import Data.Text (Text)
 import GHC.Generics (Generic)

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Files.Config (validate, login, matches) where
 import Data.Text (Text)
 import qualified Data.Text as Text

@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings, TypeApplications #-}
 module Tools where
 import GHC.Generics (Generic)
 import Data.Text (Text)

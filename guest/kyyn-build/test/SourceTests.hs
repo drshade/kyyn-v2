@@ -1,4 +1,4 @@
--- GHC source inventory never typechecks unfinished function bodies.
+-- Source inventory uses guest header syntax defaults without checking unfinished bodies.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
@@ -16,7 +16,7 @@ main = do
   libdir <- case lines compiler of [path] -> pure path; _ -> fail "Missing compiler libdir"
   withSystemTempDirectory "kyyn-source-inventory" $ \directory -> do
     let after = directory </> "evolution.hs"
-    writeFile after "module Evolution where\nimport Shared\nunfinished =\n"
+    writeFile after "module Evolution where\nimport Shared (type T)\nunfinished =\n"
     header <- moduleHeader libdir after
     unless (header == ("Evolution",["Shared"])) (fail ("Wrong partial module inventory: " ++ show header))
     let inputs = directory </> "inputs"

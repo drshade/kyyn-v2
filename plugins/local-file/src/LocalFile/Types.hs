@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module LocalFile.Types where
 
 import GHC.Generics (Generic)

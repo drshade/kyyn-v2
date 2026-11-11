@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Directory.Fingerprint (canonicalDirectory) where
 import Data.Text (Text)
 import qualified Data.Text as Text

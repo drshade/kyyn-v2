@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings.Fingerprint (artifactId, canonicalArtifact) where
 
 import Data.Text (Text)

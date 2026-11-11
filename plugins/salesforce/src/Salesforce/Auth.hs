@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Auth (accessToken, login) where
 import Data.Text (Text)
 import qualified Data.Text as Text

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Config (validate, repository, validSince) where
 
 import Data.Char (isAscii, isAlphaNum, isDigit)

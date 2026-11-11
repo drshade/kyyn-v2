@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Calendar.Config (validate, login, window) where
 
 import qualified Data.Text as Text
@@ -12,14 +11,14 @@ import qualified MicrosoftGraph.Auth as Auth
 import MicrosoftGraph.Timestamp (timestamp)
 
 validate :: CalendarConfig -> ValidationReport
-validate config@(CalendarConfig auth mailbox _ _ _ _) = ValidationReport $
+validate config@(CalendarConfig auth mailbox _ shared _ _) = ValidationReport $
   authentication auth mailbox <>
   [errorDiagnostic "graph.calendar" message | Left message <- [window config]] <>
   case auth of
     ClientSecret {} -> []
     DeviceCode _ _ _ scopes ->
       [errorDiagnostic "graph.scopes" "Shared calendar access requires Calendars.Read.Shared or Calendars.ReadWrite.Shared in auth.scopes; run connector login after changing scopes." |
-        sharedCalendar config && not (any (`elem` ["calendars.read.shared","calendars.readwrite.shared"]) (map normalize scopes))]
+        shared && not (any (`elem` ["calendars.read.shared","calendars.readwrite.shared"]) (map normalize scopes))]
   where
     normalize s = let lower = Text.toLower s
       in maybe lower id (Text.stripPrefix graphRoot lower)

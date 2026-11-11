@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Directory.Api (listing, endpoint) where
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (sortOn, groupBy)
@@ -7,7 +6,6 @@ import qualified Data.Text as Text
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Config (graphApiBase)
 import MicrosoftGraph.Directory.Types (DirectoryUser(..))
-import qualified MicrosoftGraph.Directory.Types as Directory
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
 import Text.JSON.Types (JSValue(..))
@@ -18,8 +16,8 @@ endpoint = graphApiBase <> "users?$select=id,displayName,givenName,surname,mail,
 listing :: Text -> Acquisition payload (Either Text [DirectoryUser])
 listing token = runExceptT $ do
   rows <- pages [] endpoint
-  let sorted = sortOn Directory.id rows
-  if any ((>1) . length) (groupBy (\a b -> Directory.id a == Directory.id b) sorted)
+  let sorted = sortOn (.id) rows
+  if any ((>1) . length) (groupBy (\a b -> a.id == b.id) sorted)
     then throwE "Directory returned duplicate user IDs; retry the complete snapshot"
     else pure sorted
   where
@@ -45,6 +43,7 @@ user value = do
     <*> nullable "surname" Json.text <*> nullable "mail" Json.text <*> nullable "userPrincipalName" Json.text
     <*> nullable "accountEnabled" Json.boolean <*> nullable "userType" Json.text
   where
+    nullable :: Text -> (JSValue -> Either Text a) -> Either Text (Maybe a)
     nullable field decode = do
       item <- Json.member field value
       case item of JSNull -> Right Nothing; _ -> Just <$> decode item

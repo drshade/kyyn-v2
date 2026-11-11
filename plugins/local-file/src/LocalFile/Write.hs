@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Write (Config(..), Options(..), defaults, validate, publish) where
 
 import GHC.Generics (Generic)

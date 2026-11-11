@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, OverloadedStrings #-}
 module Fixture.Plugin (connectors, count, fetch, fetchOptions, fetchState, fetchStateOptions, validate, login, publish, defaults) where
 
 import GHC.Generics (Generic)

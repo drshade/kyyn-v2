@@ -9,7 +9,7 @@ import System.FilePath ((</>))
 
 writeFrozenProposal :: FilePath -> Maybe (Value, Bool) -> IO ()
 writeFrozenProposal generated selected = writeFile (generated </> "KyynFrozenProposal.hs") (unlines
-  ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where",
+  [ "module KyynFrozenProposal (frozen, proposal) where",
    "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits (RootEdit, applyRootEdit)",
    "import qualified KyynFactEditCodec", "import qualified KyynRecipeStateCodec",
    "import Kyyn.Runtime.Bindings (rejectEvolution)",

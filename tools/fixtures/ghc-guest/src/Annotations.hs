@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Annotations (metadata, emptyMetadata) where
 
 import Kyyn.Schema

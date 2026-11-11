@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module TranscriptFixture where
 
 import Data.Text (Text)

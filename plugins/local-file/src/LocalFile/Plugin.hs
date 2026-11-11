@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Plugin (description, connectors) where
 
 import Kyyn.Plugin (Connector(..), CapturedMethod(..))

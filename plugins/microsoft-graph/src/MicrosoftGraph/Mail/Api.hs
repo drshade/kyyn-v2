@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Mail.Api (baseUrl, folderId, delta, captureMessage, textField) where
 
 import Data.Text (Text)

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Blobs.Source where
 import Data.Text (Text)
 import GHC.Generics (Generic)

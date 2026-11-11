@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Auth (accessToken, login) where
 
 import qualified Data.Text as Text

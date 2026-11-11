@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Fingerprint (canonicalItem) where
 
 import Data.Text (Text)

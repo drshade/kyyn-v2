@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Read (content) where
 
 import Kyyn.Plugin

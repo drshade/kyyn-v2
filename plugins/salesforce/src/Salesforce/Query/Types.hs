@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Salesforce.Query.Types where
 
 import GHC.Generics (Generic)

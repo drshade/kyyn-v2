@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Plugin (connectors) where
 import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 

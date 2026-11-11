@@ -1,6 +1,6 @@
 -- GHC-owned export inspection: source closure, explicit exports, namespaces,
 -- record fields without selectors, dependency-only closure equivalence, and source
--- rejection before an adapter exists.
+-- rejection before an adapter exists; pragma-free guest defaults and module overrides.
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
@@ -58,8 +58,23 @@ checkInspection = do
     _ -> fail "Compiler did not identify its libdir"
   withSystemTempDirectory "kyyn-ghc-inspection" $ \directory -> withCurrentDirectory directory $ do
     writeFile "Types.hs" (unlines
-      ["{-# LANGUAGE NoFieldSelectors #-}","module Types (Root(..)) where",
+      ["module Types (Root(..)) where",
        "data Root = Root { count :: Integer } deriving Eq"])
+    writeFile "LanguageDefaults.hs" (unlines
+      ["module LanguageDefaults where", "import GHC.Generics (Generic)", "import Data.Text (Text)",
+       "class Marker a",
+       "data First = First { label :: Text } deriving stock Generic deriving anyclass Marker",
+       "data Second = Second { label :: Text } deriving stock Generic deriving anyclass Marker",
+       "label :: Text", "label = \"ordinary binding\"",
+       "describe :: First -> Text", "describe First{..} = label",
+       "choose :: First -> Text", "choose value = if | value.label == \"yes\" -> \"chosen\" | otherwise -> \"other\"",
+       "act :: IO Text", "act = pure =<< do pure (choose (First \"yes\"))",
+       "kind :: Maybe Text -> Text", "kind = \\case Just value -> value; Nothing -> \"empty\""])
+    _ <- inspectExports libdir ["."] [] ["LanguageDefaults"]
+    writeFile "Selectors.hs" "{-# LANGUAGE FieldSelectors #-}\nmodule Selectors where\ndata Value = Value { field :: Integer }\nreadValue = field\n"
+    (_,selectors) <- inspectExports libdir ["."] [] ["Selectors"]
+    unless (any ((== "field") . exportName) (concatMap moduleExports selectors))
+      (fail "Module pragma did not override guest defaults")
     writeFile "Schema.hs" (unlines
       ["module Schema (Root(..), total) where","import Types",
        "-- | Count selected records.","total :: Root -> Integer","total (Root n) = n", "private :: Bool", "private = True"])

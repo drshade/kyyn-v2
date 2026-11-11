@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings.Read (artifact, transcript) where
 
 import Data.Text (Text)

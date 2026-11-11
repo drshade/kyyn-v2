@@ -130,7 +130,7 @@ checkSchema executable = do
   _ <- right (Host.checkGuest description)
   case description.entries of
     [G.ContractEntry "root" selected] ->
-      unless (selected.loadedSources == ["src/Main.hs"]) (fail "Wrong schema-only source closure")
+      unless (selected.loadedSources == ["src/LanguageDefaults.hs","src/Main.hs"]) (fail "Wrong schema-only source closure")
     _ -> fail "Schema discovery produced runnable entries"
   unless (all ((/= "Queries") . G.moduleName) description.modules) (fail "Unfinished query included in schema discovery")
   (status,_,_) <- call executable (object ["operation" .= ("invoke" :: String),"entry" .= ("root" :: String),"argument" .= object []])

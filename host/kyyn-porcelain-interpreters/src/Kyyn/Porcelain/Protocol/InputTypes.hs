@@ -26,7 +26,7 @@ scaffoldInputTypes revision (StoredSnapshot fields collections recipes) = do
     source <- either (bad . ((label ++ ": ") ++)) Right (declarations shape)
     path <- either bad Right (relativePath ("Input/" ++ name ++ ".hs"))
     pure (path,Text.encodeUtf8 (Text.pack (unlines
-      (["{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, DuplicateRecordFields, NoFieldSelectors #-}",
+      ([
         "-- Decoding view for " ++ label ++ "; base " ++ show revision ++ ".",
         "-- Text carriers do not claim the historical scalar meaning.",
         "module Input." ++ name ++ " where",

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Plugin (connectors) where
 import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 connectors :: [Connector]

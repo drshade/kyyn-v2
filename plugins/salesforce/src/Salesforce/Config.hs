@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Config (origin, authentication, tokenEndpoint) where
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)

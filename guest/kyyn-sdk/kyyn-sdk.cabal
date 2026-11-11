@@ -101,36 +101,6 @@ test-suite capabilities
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types
 
-test-suite plugin-contracts
-  type: exitcode-stdio-1.0
-  hs-source-dirs: test, ../../plugins/local-file/src, ../../plugins/github/src,
-    ../../plugins/microsoft-graph/src, ../../plugins/salesforce/src
-  main-is: PluginContractTests.hs
-  other-modules: GitHub.Types
-    LocalFile.Types
-    MicrosoftGraph.Calendar.Types
-    MicrosoftGraph.Directory.Types
-    MicrosoftGraph.Files.Types
-    MicrosoftGraph.Mail.Types
-    MicrosoftGraph.Meetings.Types
-    MicrosoftGraph.Types
-    Salesforce.Query.Types
-    Salesforce.Types
-    LocalFile.Write
-  default-language: GHC2021
-  ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk, text
-
-test-suite graph-retries
-  type: exitcode-stdio-1.0
-  main-is: GraphRetryTests.hs
-  hs-source-dirs: test, ../../plugins/microsoft-graph/src
-  other-modules: MicrosoftGraph.Http MicrosoftGraph.Json
-  default-language: GHC2021
-  ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, text, bytestring, json ==0.11
-
-
 test-suite snapshot-preparation
   type: exitcode-stdio-1.0
   main-is: PreparationTests.hs

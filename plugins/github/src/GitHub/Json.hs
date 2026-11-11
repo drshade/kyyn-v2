@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Json (parse, field, text, integer, boolean, array, nullable, optional, has, escape) where
 
 import Data.Char (chr)

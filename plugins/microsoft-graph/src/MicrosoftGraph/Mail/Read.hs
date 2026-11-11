@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Mail.Read (message, body, attachments) where
 import Data.Text (Text)
 import Kyyn.Plugin

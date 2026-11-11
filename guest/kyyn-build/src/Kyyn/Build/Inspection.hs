@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Build.Inspection (inspectExports, sourceDependencies, BindingNeeds(..), requiredBindings, packageOptions, packageModuleNames) where
 
+import Kyyn.Build.Language (guestLanguageFlags)
+
 import Control.Monad (forM, unless, filterM)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (nub, sort, isPrefixOf)
@@ -123,7 +125,7 @@ configure roots options modules = do
   initial <- getSessionDynFlags
   logger <- getLogger
   (configured,remaining,_) <- parseDynamicFlags logger initial
-    (map noLoc (["-XGHC2021","-haddock","-main-is","KyynGuestEntry.main"] ++ options))
+    (map noLoc (guestLanguageFlags ++ ["-haddock","-main-is","KyynGuestEntry.main"] ++ options))
   unless (null remaining) (liftIO (fail "Unsupported compiler options in guest build"))
   let flags = configured { importPaths = roots, backend = noBackend, ghcLink = NoLink }
   _ <- setSessionDynFlags flags
