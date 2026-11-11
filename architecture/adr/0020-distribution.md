@@ -34,7 +34,7 @@ Haskell libraries, subject to their chosen compiler/SDK actually building them.
 
 The standard guest environment explicitly exposes the Kyyn SDK and build support,
 `aeson`, `bytestring`, `text`, `containers`, `time`, `cryptohash-sha256`, `lens` and
-`generic-lens`, `scientific`, `attoparsec` and `http-types`, alongside the compiler's bundled libraries. These cover ordinary
+`generic-lens`, `scientific`, `attoparsec`, `attoparsec-aeson` and `http-types`, alongside the compiler's bundled libraries. These cover ordinary
 structured data, collections, time arithmetic, hashing, typed record updates,
 exact decimal rendering, parsing and HTTP/URI encoding;
 authors should use them instead of implementing those facilities in each KB.
