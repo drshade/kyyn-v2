@@ -9,6 +9,7 @@ import Data.List (nub, sort, isPrefixOf)
 import Data.Maybe (catMaybes)
 import qualified Data.Text as Text
 import GHC
+import GHC.Types.Error (mkUnknownDiagnostic)
 import GHC.Driver.Make (depanalPartial)
 import GHC.Iface.Type (ShowSub(..), ShowHowMuch(..), ShowForAllFlag(..), AltPpr(..))
 import GHC.Types.Name (getOccString, nameModule_maybe)
@@ -115,9 +116,9 @@ data BindingNeeds = BindingNeeds { rootBindings :: Bool, toolBindings :: Bool, w
 requiredBindings :: FilePath -> [FilePath] -> [String] -> [String] -> IO BindingNeeds
 requiredBindings libdir roots options modules = runGhc (Just libdir) $ do
   _ <- configure roots options modules
-  (_,graph) <- depanalPartial [] False
-  let requested = modules ++ map (moduleNameString . unLoc . snd)
-        (concatMap (\summary -> ms_srcimps summary ++ ms_textual_imps summary) (mgModSummaries graph))
+  (_,graph) <- depanalPartial mkUnknownDiagnostic Nothing [] False
+  let requested = modules ++ map (moduleNameString . unLoc)
+        (concatMap (\summary -> ms_srcimps summary ++ [name | (_,_,name) <- ms_textual_imps summary]) (mgModSummaries graph))
       tools name = name `elem` ["Kyyn.Connectors","Kyyn.Agentic","KyynToolCalls"] || "Kyyn.Plugins." `isPrefixOf` name
       workspace name = "Kyyn.Workspace." `isPrefixOf` name || name == "KyynFrozenProposal"
   pure (BindingNeeds ("KyynQueryBindings" `elem` requested) (any tools requested) (any workspace requested))

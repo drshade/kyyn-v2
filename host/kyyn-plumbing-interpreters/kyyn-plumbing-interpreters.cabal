@@ -29,12 +29,12 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     effectful-core ==2.6.1.0, bytestring, async, typed-process ==0.2.13.0,
-    directory, filepath, temporary ==1.3, dhall ==1.42.3, aeson ==2.2.5.0, text,
-    containers, prettyprinter, transformers, random ==1.3.1, time, filelock ==0.1.1.8,
+    directory, filepath, temporary ==1.3, dhall ==1.42.3, aeson >=2.2.4 && <2.3, text,
+    containers, prettyprinter, transformers, random >=1.2.1 && <1.4, time, filelock >=0.1.1.8 && <0.2,
     cryptohash-sha256 ==0.11.102.1, kyyn-types, agentic ==0.2.1.0, agentic-openai ==0.2.1.0, agentic-anthropic ==0.2.1.0, agentic-jev ==0.2.1.0,
-    http-client ==0.7.19, http-client-tls ==0.3.6.4, http-types ==0.12.5, case-insensitive
+    http-client ==0.7.19, http-client-tls ==0.3.6.4, http-types >=0.12.4 && <0.13, case-insensitive
 
 test-suite blob-storage
   type: exitcode-stdio-1.0
@@ -42,7 +42,7 @@ test-suite blob-storage
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, text,
     temporary ==1.3, aeson, async, network
 
@@ -52,7 +52,7 @@ test-suite plugin-host
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-plumbing, kyyn-plumbing-interpreters,
     effectful-core ==2.6.1.0, bytestring, text, http-client, async, network
 
 test-suite model-turn-provider
@@ -61,7 +61,7 @@ test-suite model-turn-provider
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing, kyyn-plumbing-interpreters,
     effectful-core ==2.6.1.0, text, http-client, agentic, agentic-openai, agentic-anthropic
 
 test-suite judgement-provider
@@ -70,7 +70,7 @@ test-suite judgement-provider
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, text, aeson, http-client, agentic, agentic-jev
 
 test-suite secret-store
@@ -79,7 +79,7 @@ test-suite secret-store
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, text, directory, filepath, temporary ==1.3
 
 test-suite file-acquisition
@@ -88,7 +88,7 @@ test-suite file-acquisition
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, text, filepath, temporary ==1.3
 
 test-suite document-persistence
@@ -97,7 +97,7 @@ test-suite document-persistence
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
     bytestring, directory, filepath, temporary ==1.3, async
 
@@ -107,7 +107,7 @@ test-suite plugin-packages
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, directory, filepath, temporary ==1.3, process
 
 test-suite file-trees
@@ -116,8 +116,8 @@ test-suite file-trees
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
-    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, directory, filepath, temporary ==1.3, random ==1.3.1, async, bytestring
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, directory, filepath, temporary ==1.3, random >=1.2.1 && <1.4, async, bytestring
 
 test-suite git-snapshots
   type: exitcode-stdio-1.0
@@ -126,7 +126,7 @@ test-suite git-snapshots
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, directory, filepath, temporary ==1.3, async
 
 test-suite dhall-values
@@ -135,7 +135,7 @@ test-suite dhall-values
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, kyyn-types, kyyn-sdk, agentic, effectful-core ==2.6.1.0, aeson, text, bytestring, dhall ==1.42.3
 
 test-suite processes
@@ -146,7 +146,7 @@ test-suite processes
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, async,
     directory, unix, temporary ==1.3
 
@@ -156,7 +156,7 @@ test-suite concurrent-execution
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, async
 
 test-suite scalar-storage
@@ -165,8 +165,8 @@ test-suite scalar-storage
   main-is: ScalarStorageTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
-    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson ==2.2.5.0, text
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson >=2.2.4 && <2.3, text
 
 test-suite description-storage
   type: exitcode-stdio-1.0
@@ -174,8 +174,8 @@ test-suite description-storage
   main-is: DescriptionStorageTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
-    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson ==2.2.5.0
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson >=2.2.4 && <2.3
 
 -- Run with --test-options pointing to a separately built checks.<system>.guest.
 test-suite native-guest
@@ -184,7 +184,7 @@ test-suite native-guest
   main-is: NativeGuestTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, aeson,
     directory, filepath, temporary ==1.3
 
@@ -194,7 +194,7 @@ test-suite nix-guest-build
   main-is: NixGuestBuildTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, aeson,
     directory, temporary ==1.3, transformers
 
@@ -205,7 +205,7 @@ test-suite graph-directory
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, effectful-core ==2.6.1.0
 
 test-suite graph-files
@@ -215,7 +215,7 @@ test-suite graph-files
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
 
 test-suite salesforce-query
@@ -225,7 +225,7 @@ test-suite salesforce-query
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
 
 test-suite github
@@ -235,7 +235,7 @@ test-suite github
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
 
 test-suite graph-mail
@@ -245,7 +245,7 @@ test-suite graph-mail
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
 
 test-suite graph-meetings
@@ -255,7 +255,7 @@ test-suite graph-meetings
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
 
 test-suite graph-calendar
@@ -265,7 +265,7 @@ test-suite graph-calendar
   other-modules: ProviderBroker
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing,
     aeson, bytestring, text, process
 
 test-suite guest-scheduler
@@ -276,7 +276,7 @@ test-suite guest-scheduler
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror -threaded
-  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-sdk:runtime, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-sdk:runtime, kyyn-plumbing,
     aeson, bytestring, text, process
 
 test-suite guest-compilation-cache
@@ -285,7 +285,7 @@ test-suite guest-compilation-cache
   main-is: GuestCompilationCacheTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, aeson,
     directory, filepath, temporary ==1.3
 
@@ -295,5 +295,5 @@ test-suite snapshot-archives
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson, bytestring

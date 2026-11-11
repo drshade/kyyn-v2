@@ -44,4 +44,4 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, bytestring, text, transformers, effectful-core ==2.6.1.0
+  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, aeson, bytestring, text, transformers, effectful-core ==2.6.1.0

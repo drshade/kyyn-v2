@@ -4,7 +4,7 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   inputs.agentic = {
-    url = "github:drshade/haskell-agentic/043604a28ceb7d2ebba0921856b719b5f5d661b3";
+    url = "github:drshade/haskell-agentic/46624d9ce48c27a01efcd2873a5bd65af6d41711";
     flake = false;
   };
 
@@ -21,18 +21,19 @@
               ./host ./guest ./shared ./plugins ./docs/guide.md
             ];
           };
-          localPackages = {
-            kyyn-types = "shared/kyyn-types";
-            kyyn-domain = "host/kyyn-domain";
-            kyyn-plumbing = "host/kyyn-plumbing";
-            kyyn-plumbing-interpreters = "host/kyyn-plumbing-interpreters";
-            kyyn-porcelain = "host/kyyn-porcelain";
-            kyyn-porcelain-interpreters = "host/kyyn-porcelain-interpreters";
-            kyyn-surfaces = "host/kyyn-surfaces";
-            kyyn = "host/kyyn";
-            kyyn-sdk = "guest/kyyn-sdk";
-            kyyn-guest-build = "guest/kyyn-build";
-          };
+          # cabal.project owns the local package inventory.
+          packageBlock = builtins.head (builtins.match
+            "packages:([^\n]*(\n[ \t]+[^\n]*)*)\n.*" (builtins.readFile ./cabal.project));
+          packagePaths = builtins.filter (x: builtins.isString x && x != "")
+            (builtins.split "[[:space:]]+" packageBlock);
+          localPackages = builtins.listToAttrs (map (path:
+            let
+              manifests = builtins.filter (name: pkgs.lib.hasSuffix ".cabal" name)
+                (builtins.attrNames (builtins.readDir (self + "/${path}")));
+            in assert builtins.length manifests == 1; {
+              name = pkgs.lib.removeSuffix ".cabal" (builtins.head manifests);
+              value = path;
+            }) packagePaths);
           # Initialization copies a standard, already locked KB flake. Published
           # builds pin this repository revision; dirty contributor builds retain
           # their immutable local source so installed tests need no remote commit.
@@ -68,29 +69,33 @@
             ''} "$out/flake.nix"
             cp ${pkgs.writeText "flake.lock" (builtins.toJSON templateLock)} "$out/flake.lock"
           '';
-          haskell = pkgs.haskell.packages.ghc9103.override {
+          haskell = pkgs.haskell.packages.ghc9141.override {
             overrides = final: prev:
-              let
-                pinned = {
-                  filelock = { version = "0.1.1.8"; hash = "sha256-0qNcgMmZ6pl7oEUPROuuDo4MKoKzVGlrqBAfjoS5yvo="; };
-                  aeson = { version = "2.2.5.0"; hash = "sha256-RooTSc8dZrcUiWFQDssKv1/l5OB/psUD7jbyWG/7VKQ="; };
-                  effectful-core = { version = "2.6.1.0"; hash = "sha256-0UTeE7JnUkNx77QobyjKjQFpUVQsz6a1E55WEohJ+hI="; };
-                  dhall = { version = "1.42.3"; hash = "sha256-/yOhbmlljlo8bpvlOCBQS0n6HbqcDy4DtIIwLShYlxE="; };
-                  http-client = { version = "0.7.19"; hash = "sha256-KY6XuRBqlpGdsxEOs9mbIhkoOobuAEmdSSrMqBh9keE="; };
-                  http-types = { version = "0.12.5"; hash = "sha256-Y1/wrRFPIVxgTGWgPboRDUht+fzvl3e1jazj+G1pTw0="; };
-                  optparse-applicative = { version = "0.19.0.0"; hash = "sha256-dhqvRILfdbpYPMxC+WpAyO0KUfq2nLopGk1NdSN2SDM="; };
-                  random = { version = "1.3.1"; hash = "sha256-M2xVhHMZ7Lqvx/F832mGirHULgzv7TjP/oNkQ4V6YLM="; };
-                  typed-process = { version = "0.2.13.0"; hash = "sha256-QzuL1epLvjF62isUdiRueSfPWsJgdgsadMFOuvv32hs="; };
-                };
-              in
-              # Some exact project pins are absent from nixpkgs' Hackage index.
-              # Fetch those release archives by content hash, without relaxing bounds.
-              builtins.mapAttrs (name: pin:
-                if prev.${name}.version == pin.version then prev.${name}
-                else pkgs.haskell.lib.dontCheck (final.callCabal2nix name (pkgs.fetchzip {
-                  url = "https://hackage-content.haskell.org/package/${name}-${pin.version}.tar.gz";
-                  inherit (pin) hash;
-                }) { })) pinned
+              {
+                # Upstream #171: GHC 9.14 changes Core, breaking an inspection test.
+                # Remove dontCheck when generic-lens updates that test; Kyyn tests the optics.
+                generic-lens = pkgs.haskell.lib.dontCheck final.generic-lens_2_3_0_0;
+                generic-lens-core = final.generic-lens-core_2_3_0_0;
+                # Upstream dhall-haskell #2704; remove this patch at the next release.
+                dhall = pkgs.haskell.lib.overrideCabal prev.dhall (old: {
+                  patches = (old.patches or []) ++ [ (pkgs.fetchpatch {
+                    url = "https://github.com/dhall-lang/dhall-haskell/commit/f741afffafc3131cc5a8dd896749c35ed49bfd0a.patch";
+                    stripLen = 1;
+                    hash = "sha256-Q/L6Q2XTnoYpIT8w5bqH7RGoLoxUh5QFAOTW9Wt9Hzc=";
+                  }) ];
+                });
+                # Remove bound patches when upstream Hackage revisions admit GHC 9.14.
+                cborg-json = pkgs.haskell.lib.overrideCabal prev.cborg-json (old: {
+                  postPatch = (old.postPatch or "") + ''
+                    substituteInPlace cborg-json.cabal --replace-fail '< 4.22' '< 4.23'
+                  '';
+                });
+                repline = pkgs.haskell.lib.overrideCabal prev.repline (old: {
+                  postPatch = (old.postPatch or "") + ''
+                    substituteInPlace repline.cabal --replace-fail 'containers  >=0.5  && <0.8' 'containers  >=0.5  && <0.9'
+                  '';
+                });
+              }
               // builtins.listToAttrs (map (name: {
                 inherit name;
                 value = pkgs.haskell.lib.dontCheck

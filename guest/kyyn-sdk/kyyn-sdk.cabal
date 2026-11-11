@@ -19,7 +19,7 @@ library
     Kyyn.Plugin.Host,
     Kyyn.Plugin.Sink
   default-language: Haskell2010
-  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal
+  build-depends: base >=4.22 && <4.23, kyyn-sdk:internal
 
 library internal
   hs-source-dirs: src
@@ -29,7 +29,7 @@ library internal
      Kyyn.Contract.Scalars Kyyn.Contract.Wire Kyyn.Evolution.Stored Kyyn.Evolution.Target Kyyn.Evolution.Preparation Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Evolution Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-types, agentic ==0.2.1.0, lens ==5.3.6, generic-lens ==2.2.2.0, time, json ==0.11, transformers ==0.6.1.1, text, bytestring
+  build-depends: base >=4.22 && <4.23, kyyn-types, agentic ==0.2.1.0, lens ==5.3.6, generic-lens >=2.3 && <2.4, time, json ==0.11, transformers >=0.6.1 && <0.7, text, bytestring
 
 library runtime
   visibility: public
@@ -60,8 +60,8 @@ library runtime
   other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry Kyyn.Runtime.RecipeEntry
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: transformers, base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types,
-    agentic ==0.2.1.0, agentic-aeson ==0.2.1.0, aeson ==2.2.5.0, json ==0.11, text, bytestring
+  build-depends: transformers, base >=4.22 && <4.23, kyyn-sdk:internal, kyyn-types,
+    agentic ==0.2.1.0, agentic-aeson ==0.2.1.0, aeson >=2.2.4 && <2.3, json ==0.11, text, bytestring
 
 test-suite evolution-core
   type: exitcode-stdio-1.0
@@ -71,7 +71,7 @@ test-suite evolution-core
   default-language: Haskell2010
   ghc-options: -Wall -Werror -main-is EvolutionCore.main
   default-extensions: OverloadedStrings
-  build-depends: kyyn-sdk:internal, agentic ==0.2.1.0, base >=4.20 && <4.21, kyyn-types, lens ==5.3.6, generic-lens ==2.2.2.0, json ==0.11, transformers ==0.6.1.1, text
+  build-depends: kyyn-sdk:internal, agentic ==0.2.1.0, base >=4.22 && <4.23, kyyn-types, lens ==5.3.6, generic-lens >=2.3 && <2.4, json ==0.11, transformers >=0.6.1 && <0.7, text
 
 test-suite wire-contracts
   type: exitcode-stdio-1.0
@@ -79,7 +79,7 @@ test-suite wire-contracts
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, kyyn-domain, agentic ==0.2.1.0, text, time, aeson ==2.2.5.0
+  build-depends: base >=4.22 && <4.23, kyyn-sdk, kyyn-types, kyyn-domain, agentic ==0.2.1.0, text, time, aeson >=2.2.4 && <2.3
 
 test-suite guest-protocol
   type: exitcode-stdio-1.0
@@ -89,8 +89,8 @@ test-suite guest-protocol
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: kyyn-domain, base >=4.20 && <4.21, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
-    aeson ==2.2.5.0, bytestring, text, typed-process ==0.2.13.0, transformers
+  build-depends: kyyn-domain, base >=4.22 && <4.23, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+    aeson >=2.2.4 && <2.3, bytestring, text, typed-process ==0.2.13.0, transformers
 
 test-suite capabilities
   type: exitcode-stdio-1.0
@@ -99,7 +99,7 @@ test-suite capabilities
   other-modules: QueryCore
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types
+  build-depends: base >=4.22 && <4.23, kyyn-sdk, kyyn-types
 
 test-suite snapshot-preparation
   type: exitcode-stdio-1.0
@@ -107,7 +107,7 @@ test-suite snapshot-preparation
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types, text, json ==0.11
+  build-depends: base >=4.22 && <4.23, kyyn-sdk:internal, kyyn-types, text, json ==0.11
 
 test-suite target-evolution
   type: exitcode-stdio-1.0
@@ -115,4 +115,4 @@ test-suite target-evolution
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-sdk:runtime, kyyn-types, text
+  build-depends: base >=4.22 && <4.23, kyyn-sdk:internal, kyyn-sdk:runtime, kyyn-types, text

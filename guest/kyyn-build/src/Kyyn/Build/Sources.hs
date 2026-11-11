@@ -7,6 +7,8 @@ import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (sort)
 import GHC
+import GHC.Driver.Session (supportedLanguagesAndExtensions)
+import GHC.Platform (platformArchOS)
 import GHC.Parser.Header (getImports, getOptions)
 import GHC.Driver.Config.Parser (initParserOpts)
 import GHC.Data.StringBuffer (hGetStringBuffer)
@@ -21,13 +23,14 @@ moduleHeader libdir path = runGhc (Just libdir) $ do
   logger <- getLogger
   (base,_,_) <- parseDynamicFlags logger initial (map noLoc guestLanguageFlags)
   buffer <- liftIO (hGetStringBuffer path)
-  let (_,options) = getOptions (initParserOpts base) buffer path
+  let (_,options) = getOptions (initParserOpts base)
+        (supportedLanguagesAndExtensions (platformArchOS (targetPlatform base))) buffer path
   (configured,_,_) <- parseDynamicFlags logger base options
   parsed <- liftIO (getImports (initParserOpts configured) False buffer path path)
   case parsed of
     Left _ -> liftIO (fail ("GHC rejected module header: " ++ path))
-    Right (sourceImports,imports,_,name) -> pure (moduleNameString (unLoc name),
-      map (moduleNameString . unLoc . snd) (sourceImports ++ imports))
+    Right (sourceImports,imports,name) -> pure (moduleNameString (unLoc name),
+      map (moduleNameString . unLoc) (sourceImports ++ [name' | (_,_,name') <- imports]))
 
 sourceFiles :: FilePath -> IO [FilePath]
 sourceFiles root = do
