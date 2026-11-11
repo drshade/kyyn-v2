@@ -89,7 +89,7 @@ test-suite guest-protocol
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: kyyn-domain, base >=4.22 && <4.23, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+  build-depends: agentic ==0.2.1.0, kyyn-domain, base >=4.22 && <4.23, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
     aeson >=2.2.4 && <2.3, bytestring, text, typed-process ==0.2.13.0, transformers
 
 test-suite capabilities

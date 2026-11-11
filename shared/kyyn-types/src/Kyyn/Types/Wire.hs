@@ -28,7 +28,6 @@ scalarText characters
 validateWire :: Value -> Either String ()
 validateWire Null = Left "null is outside the wire profile"
 validateWire (Number _) = Left "numbers must use strings"
-validateWire (String text) = Text.length text `seq` Right ()
 validateWire (Array values) = mapM_ validateWire values
 validateWire (Object values) = mapM_ validateWire values
 validateWire _ = Right ()
