@@ -44,17 +44,17 @@ workspaceApiTests = do
       repo = Repository (either error id (directoryScope "/fixture"))
       kb = KnowledgeBase repo (Subtree (path "nested"))
       workspace = EvolutionWorkspace kb (either error id (evolutionId "000001-test"))
-      beforeCode = tree [("kb.dhall",manifest "Before"),("src/Before.hs","before schema"),
+      beforeCode = tree [("kb.dhall",manifest "Historical"),("src/Historical.hs","before schema"),
         ("src/Unused.hs","invalid unused code"),("flake.nix","must not build accepted flake"),("flake.lock","invalid accepted lock")]
-      target = tree [("kb.dhall",manifest "After"),("src/After.hs","after schema"),("flake.nix","target flake"),("flake.lock","target lock")]
+      target = tree [("kb.dhall",manifest "Target"),("src/Target.hs","after schema"),("flake.nix","target flake"),("flake.lock","target lock")]
       snapshot targetCode change = WorkspaceSnapshot
         (WorkspaceManifest revision "Test" "" Draft AdHoc) targetCode change (tree [])
       expected = [ModuleDescription name ".kyyn-generated/Fixture.hs" Nothing [] [] |
         name <- ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Target","Kyyn.Workspace.Target.Fields"]]
       program = fixtureProgram "not executed"
       checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
-        [G.ContractEntry "$evolution.target" (described "After" "src/After.hs")]
-        (ModuleDescription "Private" "src/After.hs" Nothing [] [] : expected)))
+        [G.ContractEntry "$evolution.target" (described "Target" "src/Target.hs")]
+        (ModuleDescription "Private" "src/Target.hs" Nothing [] [] : expected)))
       perform :: Bool -> WorkspaceSnapshot -> IO (Either [Diagnostic] WorkspaceCatalogue, [String])
       perform refuseBuild material = do
         trace <- newIORef ([] :: [String])
@@ -69,7 +69,6 @@ workspaceApiTests = do
               record "build"
               unless (selectedBuild source == EvolutionEntries (EvolutionSelection [] Nothing (Just []))
                 && lookup (path "flake.lock") (sourceFiles source) == Just "target lock"
-                && lookup (path ".kyyn-before/Before.hs") (sourceFiles source) == Nothing
                 && all (not . isRootMaterial . fst) (sourceFiles source))
                 (error "Discovery lost typed target selection or included facts")
               pure (if refuseBuild then Left [errorDiagnostic "guest.build" "Rejected fixture"] else Right program))

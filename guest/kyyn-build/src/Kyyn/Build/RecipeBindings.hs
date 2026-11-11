@@ -10,7 +10,7 @@ import Kyyn.Build.Manifest
 import Kyyn.Types.SchemaMetadata
 
 writeRecipeBindings :: FilePath -> [FilePath] -> Manifest -> SchemaMetadata -> IO ()
-writeRecipeBindings generated roots manifest metadata = writeBindings generated roots manifest.schemaType metadata
+writeRecipeBindings = writeTargetEvolutionBindings
 
 writeBindings :: FilePath -> [FilePath] -> Reference -> SchemaMetadata -> IO ()
 writeBindings generated roots selectedRoot (SchemaMetadata _ _ collections) = do

@@ -152,7 +152,7 @@ checkInspection = do
     directNeeds <- requiredBindings libdir ["."] [] ["Kyyn.Connectors"]
     unless (toolNeeds == BindingNeeds False True False && directNeeds == toolNeeds)
       (fail "Generated tool imports were lost from the partial compiler graph")
-    writeFile "UsesWorkspace.hs" "module UsesWorkspace where\nimport Kyyn.Workspace.After\nunfinished =\n"
+    writeFile "UsesWorkspace.hs" "module UsesWorkspace where\nimport Kyyn.Workspace.Target\nunfinished =\n"
     workspaceNeeds <- requiredBindings libdir ["."] [] ["UsesWorkspace"]
     unless (workspaceNeeds == BindingNeeds False False True)
       (fail "Dependency-scoped discovery lost generated workspace imports")

@@ -12,8 +12,7 @@ import Kyyn.Recipe
 import Kyyn.Evolution (Rationale(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Workspace.FactEdits (RootEdit(..))
-import qualified Kyyn.Workspace.Before
-import qualified Kyyn.Workspace.After
+import qualified Kyyn.Workspace.Target
 import qualified Kyyn.Workspace.Evolution
 import Main (Root, Item(..))
 

@@ -194,7 +194,7 @@ main = do
     (Invocation selected Human (Guest Nothing (ShowGuestSymbol "Kyyn.Evolution.>=>")))
   forM_ [(["module","list"],ListGuestModules),
     (["module","show","Kyyn.Workspace.Evolution"],ShowGuestModule "Kyyn.Workspace.Evolution"),
-    (["symbol","show","Kyyn.Workspace.After.todos"],ShowGuestSymbol "Kyyn.Workspace.After.todos")] $ \(args,request) -> do
+    (["symbol","show","Kyyn.Workspace.Target.todos"],ShowGuestSymbol "Kyyn.Workspace.Target.todos")] $ \(args,request) -> do
       succeeds (["--kb","nested/kb","--nix","/bin/nix","--json","guest"] ++ args ++ ["--evolution","abc123"])
         (Invocation (Selection "nested/kb" Nothing (Just "/bin/nix")) Json (Guest (Just identity) request))
       refuses (["guest"] ++ args ++ ["--evolution","../invalid"])
