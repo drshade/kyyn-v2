@@ -462,15 +462,19 @@ closed recipe shows its flow structure without executing its actions.
 
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can
 be exposed as a tool or composed into a closed recipe. Configure provider/model
-and a secret name in the optional `model` field of `target/kb.dhall`.
-Set that field to the following record, or omit it when no model is needed:
+and a secret name in the required `model` field of `target/kb.dhall`.
+Use `Some` with the configuration record:
 
 ```dhall
-{ provider = < OpenAI | Anthropic >.Anthropic
+Some { provider = < OpenAI | Anthropic >.Anthropic
 , model = "your-provider-model-name"
 , credential = "MODEL_KEY"
 }
 ```
+
+Without a model, write `model = None { provider : < OpenAI | Anthropic >,
+model : Text, credential : Text }`. Every manifest field is required, including
+`model` and `outputs`; use a typed empty list when there are no outputs.
 
 Set the actual key separately. Agentic's SystemOne judgements use Jev;
 SystemTwo uses the configured OpenAI or Anthropic provider. Consult
@@ -550,7 +554,7 @@ A KB has its own build environment inside its accepted root:
 root/
   flake.nix       guest build and library dependencies
   flake.lock      pinned compiler, SDK and external inputs
-  kb.dhall        schema, query, tool, view and optional model declarations
+  kb.dhall        schema, query, tool, output, view and model declarations
   src/            authored Haskell
   facts/          materialized facts
 ```

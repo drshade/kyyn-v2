@@ -37,7 +37,7 @@ try {
   assert(!cli(['guest', 'module', 'list', '--evolution', setup.id]).result.modules.includes('KyynFrozenProposal'));
   cli(['plugin', 'install', '--evolution', setup.id, '--from', plugin]);
   const target = path.join(setup.path, 'target');
-  const modelConfiguration = '{ provider = < OpenAI | Anthropic >.OpenAI, model = "fixture", credential = "RECIPE_TEST_KEY" }';
+  const modelConfiguration = 'Some { provider = < OpenAI | Anthropic >.OpenAI, model = "fixture", credential = "RECIPE_TEST_KEY" }';
   const config = path.join(target, 'plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(config), { recursive: true });
   fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >

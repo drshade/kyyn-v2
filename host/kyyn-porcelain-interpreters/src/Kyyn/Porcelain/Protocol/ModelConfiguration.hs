@@ -7,9 +7,10 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files)
+import Kyyn.Domain.DataType (Shape(Optional))
 import Kyyn.Domain.Model (ModelConfiguration)
 import Kyyn.Domain.Path (relativeName)
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, inferValue, decodeValue)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
 import Kyyn.Plumbing.Protocol.ModelConfiguration (configurationShape, decodeConfiguration)
 
 -- | Read the optional model selection from the captured KB manifest.
@@ -20,13 +21,10 @@ readModelConfiguration tree = case [bytes | (path,bytes) <- files tree, relative
   bytes : _ -> case Text.decodeUtf8' bytes of
     Left _ -> pure (bad "kb.dhall must contain UTF-8 text")
     Right source -> do
-      inferred <- inferValue source
-      case inferred of
-        Left diagnostics -> pure (Left diagnostics)
-        Right (_,Object fields)
-          | not (Keys.member "model" fields) -> pure (Right Nothing)
-          | otherwise -> do
-              decoded <- decodeValue configurationShape ("(" <> source <> ").model")
-              pure $ decoded >>= fmap Just . first (pure . errorDiagnostic "model.configuration") . decodeConfiguration
-        Right _ -> pure (bad "kb.dhall must contain a record")
+      decoded <- decodeValue (Optional configurationShape) ("(" <> source <> ").model")
+      pure $ decoded >>= \value -> case value of
+        Object fields | Keys.lookup "tag" fields == Just (String "None") -> Right Nothing
+        Object fields | Just item <- Keys.lookup "value" fields ->
+          first (pure . errorDiagnostic "model.configuration") (Just <$> decodeConfiguration item)
+        _ -> bad "Expected an optional model configuration"
   where bad = Left . pure . errorDiagnostic "model.configuration"

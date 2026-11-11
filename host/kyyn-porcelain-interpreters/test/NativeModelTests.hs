@@ -64,16 +64,22 @@ main = do
     key <- right (secretName "MODEL_KEY")
     let expected = ModelConfiguration Anthropic "fixture-model" key
     assert "Model selection was not captured" (model == Just expected && null plugins)
-    forM_ ["{ provider = < OpenAI | Anthropic >.OpenAI, model = \" \", credential = \"KEY\" }",
-      "{ provider = < OpenAI | Anthropic >.OpenAI, model = \"model\", credential = \"bad/key\" }",
-      "{ model = \"missing fields\" }", "\255"] $ \bad -> do
+    forM_ ["Some { provider = < OpenAI | Anthropic >.OpenAI, model = \" \", credential = \"KEY\" }",
+      "Some { provider = < OpenAI | Anthropic >.OpenAI, model = \"model\", credential = \"bad/key\" }",
+      "Some { model = \"missing fields\" }", "\255"] $ \bad -> do
       tree <- right (fileTree [(name,if relativeName name == "kb.dhall" then "(" <> bytes <> ") // { model = " <> bad <> " }" else bytes) | (name,bytes) <- files code])
       assert "Root accepted malformed model configuration"
         (case runPureEff (runDhallHandling (runRootStore (readRootDefinition tree))) of Left _ -> True; Right _ -> False)
     withoutModel <- right (fileTree [(name,if relativeName name == "kb.dhall"
-      then "(" <> bytes <> ").{schemaType,schemaMetadata,validator,queries,tools,views}" else bytes) | (name,bytes) <- files code])
-    assert "Root refused an omitted model field"
+      then "(" <> bytes <> ") // { model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text } }" else bytes) | (name,bytes) <- files code])
+    assert "Root refused an explicit absent model"
       (case runPureEff (runDhallHandling (runRootStore (readRootDefinition withoutModel))) of Right _ -> True; Left _ -> False)
+    forM_ ["schemaType,schemaMetadata,validator,queries,tools,views,outputs",
+      "schemaType,schemaMetadata,validator,queries,tools,views,model"] $ \projection -> do
+      missingField <- right (fileTree [(name,if relativeName name == "kb.dhall"
+        then "(" <> bytes <> ").{" <> projection <> "}" else bytes) | (name,bytes) <- files code])
+      assert "Root accepted missing model or outputs"
+        (case runPureEff (runDhallHandling (runRootStore (readRootDefinition missingField))) of Left _ -> True; Right _ -> False)
     let invoke selected handler = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
           . runGuestExecution [("LC_ALL","C.UTF-8")] . noEvidence . noReads . noJudgement . handler $
             executeToolProgram entry plugins selected [] (toJSON ("input" :: String))

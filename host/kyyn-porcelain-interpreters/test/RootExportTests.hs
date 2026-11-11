@@ -54,7 +54,7 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   let path = either error id . relativePath
       tree = either error id . fileTree
       repo = Repository scope
-      manifest = "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text }, outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       completeCode = tree ([(p,if relativeName p == "kb.dhall" then manifest else b) | (p,b) <- files code] ++ [(path "plugins/config/example.dhall","{ enabled = True }"),
         (path "assets/template.bin",Bytes.pack [0..255])])
       root = Root contract facts completeCode []

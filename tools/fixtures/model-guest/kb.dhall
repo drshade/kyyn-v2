@@ -1,4 +1,4 @@
-{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
+{ outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
 , schemaMetadata = "Annotations.metadata"
 , validator = "Main.validate"
 , queries =
@@ -9,5 +9,5 @@
     }
   ]
 , tools = [{ name = "draft", description = "Nested recorded model turns", implementation = "Tools.draft", inputType = "Tools.Input", resultType = "Tools.Output" }, { name = "assess", description = "Applicative recorded judgement", implementation = "Tools.assess", inputType = "Tools.Input", resultType = "Tools.Input" }]
-, model = { provider = < OpenAI | Anthropic >.Anthropic, model = "fixture-model", credential = "MODEL_KEY" }
+, model = Some { provider = < OpenAI | Anthropic >.Anthropic, model = "fixture-model", credential = "MODEL_KEY" }
 }

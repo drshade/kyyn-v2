@@ -46,22 +46,26 @@ parseManifest source = do
   closed <- traverse (const (Left "kb.dhall must be self-contained; imports are not supported")) parsed
   _ <- first show (TypeCheck.typeOf closed)
   fields <- record (D.normalize closed)
-  let required = ["schemaType","schemaMetadata","validator","queries","tools","views"]
-  unless (all (`elem` Map.keys fields) required && all (`elem` (required ++ ["outputs","model"])) (Map.keys fields))
+  let required = ["schemaType","schemaMetadata","validator","queries","tools","views","outputs","model"]
+  unless (sort (Map.keys fields) == sort required)
     (Left "Unexpected or missing kb.dhall fields")
   checkList (textRecord ["name","description","implementation","inputType","inputMetadata","resultType","resultMetadata"])
     =<< field "queries" fields
   checkList (textRecord ["name","description","implementation","inputType","resultType"])
     =<< field "tools" fields
-  case Map.lookup "outputs" fields of
-    Nothing -> pure ()
-    Just value -> checkList (D.Record (Map.fromList
-      ([(name,D.makeRecordField D.Text) | name <- ["name","description","query"]] ++
-       [("sink",D.makeRecordField (textRecord ["plugin","instanceName","method"]))]))) (D.recordFieldValue value)
+  checkList (D.Record (Map.fromList
+    ([(name,D.makeRecordField D.Text) | name <- ["name","description","query"]] ++
+     [("sink",D.makeRecordField (textRecord ["plugin","instanceName","method"]))]))) =<< field "outputs" fields
+  modelValue <- field "model" fields
+  modelType <- first (const "Invalid model configuration type") (TypeCheck.typeOf modelValue)
+  let expectedModel = D.App D.Optional (D.Record (Map.fromList
+        [("provider",D.makeRecordField (D.Union (Map.fromList [("OpenAI",Nothing),("Anthropic",Nothing)]))),
+         ("model",D.makeRecordField D.Text),("credential",D.makeRecordField D.Text)]))
+  unless (D.judgmentallyEqual modelType expectedModel) (Left "Expected Optional model configuration")
   checkList (textRecord ["name","description","path"]) =<< field "views" fields
   declarations <- field "queries" fields >>= list >>= traverse query
   toolDeclarations <- field "tools" fields >>= list >>= traverse tool
-  outputDeclarations <- maybe (Right []) (\value -> list (D.recordFieldValue value) >>= traverse output) (Map.lookup "outputs" fields)
+  outputDeclarations <- field "outputs" fields >>= list >>= traverse output
   unique "query" (map queryName declarations)
   unique "tool" [name | Tool name _ _ _ _ <- toolDeclarations]
   unique "output" [name | Output name _ _ _ _ _ <- outputDeclarations]

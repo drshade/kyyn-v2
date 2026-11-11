@@ -81,7 +81,7 @@ runRootStore = interpret $ \_ -> \case
     let toolNames = [name | ToolDefinition name _ _ _ _ <- tools]
     ensure (length toolNames == length (nub toolNames)) "Tool names must be unique"
     outputs <- case Keys.lookup "outputs" manifest of
-      Nothing -> pure []
+      Nothing -> problem "Missing kb.dhall outputs field"
       Just value -> do
         let textShape = Scalar TextScalar
             sinkShape = Record [(name,textShape) | name <- ["plugin","instanceName","method"]]

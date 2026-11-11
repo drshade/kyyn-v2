@@ -20,7 +20,7 @@ encodeReply reply = do
 
 failureMessage :: ModelFailure -> String
 failureMessage failure = case failure of
-  InvalidModelConfiguration -> "Invalid model configuration; check provider and model in the model field in root/kb.dhall."
+  InvalidModelConfiguration -> "Invalid model configuration; check the model configuration in root/kb.dhall."
   MissingModelSecret name -> "Missing model secret " ++ secretNameText name ++ ". " ++ setup name
   EmptyModelSecret name -> "Model secret " ++ secretNameText name ++ " is empty. " ++ setup name
   ModelAuthenticationRejected -> "Model authentication was rejected; check the configured credential."
