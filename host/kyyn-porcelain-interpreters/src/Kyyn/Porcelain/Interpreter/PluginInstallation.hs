@@ -53,6 +53,9 @@ runPluginInstallation = interpret $ \_ -> \case
           parent <- pathChecked (directoryScope (scopedPath destination parentPath))
           namePath <- pathChecked (relativePath (pluginNameText name))
           target <- pathChecked (directoryScope (scopedPath parent namePath))
+          configPath <- pathChecked (relativePath (relativeName rootPath ++ "/plugins/config"))
+          config <- pathChecked (directoryScope (scopedPath destination configPath))
+          liftEff (FS.ensureDirectory config)
           liftEff (FS.replaceTree staging parent namePath payload)
           pure (InstalledPlugin name target origin)
     ExceptT $ case source of

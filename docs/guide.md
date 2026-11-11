@@ -215,7 +215,13 @@ blindly repeating acceptance.
 
 Taps are plugin catalogues. Refresh a tap to discover its packages and read their
 guides before installation. Install or update plugin source in an evolution;
-configure named connector instances in its `target/plugins/config/` files using
+installation creates `target/plugins/config/` and returns the KB-relative path for
+this plugin's configuration file, plus guide, schema and check commands. From the
+KB directory, run the printed guide command, copy its instance example to that
+path, and fill in your settings. Run the printed schema command for the exact
+configuration type, then the check command to validate the draft. In JSON, these
+hints are under `result.configuration`; the file is not created or overwritten.
+Configure named connector instances in its `target/plugins/config/` files using
 the advertised schema. One plugin can provide multiple connectors and instances.
 An instance's `binding` names its generated guest value in `Kyyn.Connectors`.
 

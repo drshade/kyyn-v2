@@ -89,6 +89,15 @@ try {
   write(path.join(source, 'plugins/local-file/scratch/ignored'), 'ignored untracked file');
   const local = invoke(['--from', './source:repo/plugins', '--path', 'local-file']);
   assert.equal(local.result.name, 'local-file');
+  assert(fs.statSync(path.join(workspace, 'target/plugins/config')).isDirectory());
+  const config = local.result.configuration;
+  assert.equal(config.relativeTo, 'kb');
+  assert.equal(config.path, `evolutions/${evolution}/target/plugins/config/local-file.dhall`);
+  assert.equal(config.guideCommand, `kyyn-v2 plugin guide local-file --evolution ${evolution}`);
+  assert.equal(config.schemaCommand, `kyyn-v2 plugin connector schema show local-file --evolution ${evolution}`);
+  assert.equal(config.checkCommand, `kyyn-v2 evolution check ${evolution}`);
+  assert(!fs.existsSync(path.join(kb, config.path)), 'Install invented a configuration');
+
   assert.equal(local.result.location, path.join(installed, 'local-file'));
   assert.deepEqual(local.result.origin, { repository: { kind: 'Local', location: source }, path: 'plugins/local-file', revision: sourceHead });
   assert.equal(fs.readFileSync(path.join(installed, 'local-file/source/src/LocalFile/Plugin.hs'), 'utf8'),
@@ -100,7 +109,7 @@ try {
   const remote = invoke(['--from', remoteUrl, '--path', 'plugins/remote']);
   assert.deepEqual(remote.result.origin, { repository: { kind: 'Git', location: remoteUrl }, path: 'plugins/remote', revision: sourceHead });
   const human = invoke(['--from', source, '--path', 'plugins/human'], 0, { json: false });
-  for (const text of ['Installed plugin human', path.join(installed, 'human'), source, sourceHead]) assert.ok(human.includes(text), human);
+  for (const text of ['Installed plugin human', path.join(installed, 'human'), source, sourceHead, `evolutions/${evolution}/target/plugins/config/human.dhall`, `kyyn-v2 plugin guide human --evolution ${evolution}`, `kyyn-v2 evolution check ${evolution}`]) assert.ok(human.includes(text), human);
   const installedBefore = snapshot(repo);
   invoke(['--from', source, '--path', 'plugins/local-file']);
   assert.deepEqual(snapshot(repo), installedBefore);
