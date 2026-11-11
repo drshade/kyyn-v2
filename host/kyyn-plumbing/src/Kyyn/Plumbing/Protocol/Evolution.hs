@@ -6,7 +6,8 @@ import Kyyn.Domain.DataType (definingModule)
 
 identityEvolutionSource :: String -> ByteString
 identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
-  [ "module Evolution where"
+  [ "{-# LANGUAGE OverloadedStrings #-}"
+  , "module Evolution where"
   , "import Kyyn.Workspace.Evolution"
   , "import qualified " ++ definingModule selected
   , "import qualified Kyyn.Workspace.Target as Target"
