@@ -3,7 +3,8 @@ module Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation) where
 
 import Control.Monad (forM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (eitherDecodeStrict, toJSON)
+import Data.Aeson (toJSON)
+import Kyyn.Types.Wire (decodeWire)
 import GHC.Records (getField)
 import Data.Coerce (coerce)
 import Data.List (nub, stripPrefix, isPrefixOf)
@@ -99,7 +100,7 @@ prepareFromGuest code program description = do
             (getField @"contract" <$> options) login (getField @"contract" <$> position) (getField @"contract" <$> report))
         CompiledSink _ (G.SinkContracts config options input result) publication validator defaults -> do
           bytes <- ExceptT (Right <$> executeEntry defaults (toJSON G.SinkDefaultsInvocation))
-          value <- checked connectorLabel (eitherDecodeStrict bytes)
+          value <- checked connectorLabel (decodeWire bytes)
           _ <- located connectorLabel (encodeValue (contractShape options.contract) value)
           pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract publication
             (CheckedValue (contractId options.contract) value))
