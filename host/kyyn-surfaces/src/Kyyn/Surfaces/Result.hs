@@ -55,15 +55,24 @@ pluginResult evolution (InstalledPlugin name location (PluginOrigin repository p
         LocalRepository scope -> ("Local" :: String, scopePath scope)
         RemoteRepository url -> ("Git", gitUrlText url)
       subdirectory = case path of WholeTree -> Nothing; Subtree selected -> Just (relativeName selected)
+      configPath = "evolutions/" ++ evolutionIdName evolution ++ "/target/plugins/config/" ++ pluginNameText name ++ ".dhall"
+      guide = "kyyn-v2 plugin guide " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution
+      schema = "kyyn-v2 plugin connector schema show " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution
+      check = "kyyn-v2 evolution check " ++ evolutionIdName evolution
+      instructions = "Copy the plugin guide's instance example to the configuration path, fill in your settings, then check the evolution. Existing configuration is preserved."
   in success
     (object ["name" .= pluginNameText name, "location" .= scopePath location,
       "origin" .= object ["repository" .= object ["kind" .= kind, "location" .= source],
-        "path" .= subdirectory, "revision" .= revisionName revision]])
+        "path" .= subdirectory, "revision" .= revisionName revision],
+      "configuration" .= object ["path" .= configPath, "relativeTo" .= ("kb" :: String),
+        "instructions" .= instructions, "guideCommand" .= guide, "schemaCommand" .= schema, "checkCommand" .= check]])
     ["Installed plugin " ++ pluginNameText name, "Location: " ++ scopePath location,
       "Source: " ++ source ++ maybe "" (\selected -> " (" ++ selected ++ ")") subdirectory,
       "Revision: " ++ revisionName revision,
-      "Guide: kyyn-v2 plugin guide " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution,
-      "Configuration: kyyn-v2 plugin connector schema show " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution]
+      "Configuration file (relative to the KB): " ++ configPath,
+      "The target/plugins/config directory is ready. " ++ instructions,
+      "Next, from the KB directory:", "  " ++ guide, "  " ++ schema,
+      "After writing configuration: " ++ check]
 
 initializationResult :: CheckResult InitializationResult -> Response
 initializationResult (Rejected report) = validationResult "Initialization" report False
