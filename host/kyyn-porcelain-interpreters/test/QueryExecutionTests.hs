@@ -49,7 +49,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
       descriptor = QueryDescriptor "summary" "Summary" input output
       args = CheckedValue (contractId input) (String "hello")
       describe c = G.describeContract (descriptionOf c) (metadataOf c) []
-      description = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+      description = either (error . show) id (checkGuest (G.GuestDescription
         [G.ValidatorEntry "validate" (describe (rootSchema rootContract)),
          G.QueryEntry "summary" (G.QueryContracts (describe (rootSchema rootContract)) (describe input) (describe output))] []))
       entry = fixtureProgram

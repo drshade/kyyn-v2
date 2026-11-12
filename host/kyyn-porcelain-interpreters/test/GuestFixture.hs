@@ -55,7 +55,7 @@ fixtureTool program contract = case compiledEntries program checked of
   _ -> error "Expected one tool fixture"
   where
     selected = G.describeContract (descriptionOf contract) (metadataOf contract) []
-    checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+    checked = either (error . show) id (checkGuest (G.GuestDescription
       [G.ToolEntry "tool" "tool" "Fixture" (G.ToolContracts selected selected)] []))
 
 fixtureConnector :: CompiledProgram -> Text.Text -> Text.Text -> G.ConnectorEntries CheckedContract -> CompiledConnector
@@ -64,7 +64,7 @@ fixtureConnector program plugin kind roles = case compiledConnectors program che
   _ -> error "Expected one connector fixture"
   where
     describe contract = G.describeContract (descriptionOf contract) (metadataOf contract) []
-    checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+    checked = either (error . show) id (checkGuest (G.GuestDescription
       [G.ConnectorEntry (G.ConnectorIdentity plugin kind) (fmap describe roles)] []))
 
 noGuest :: Eff (GuestCompilation : GuestInspection : es) a -> Eff es a

@@ -40,7 +40,7 @@ recipeInspectionTests contract = do
       program = fixtureProgram "not executed"
       root = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) []
       unit = G.describeContract UnitDescription (SchemaMetadata [] [] []) []
-      description = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+      description = either (error . show) id (checkGuest (G.GuestDescription
         [G.RecipeEntry "recipe" "Tasks.flow" (G.RecipeContracts root unit unit)] []))
       perform :: DescriptionFormat -> Bytes.ByteString -> ProcessExit -> Either OperationalFailure (Either [Diagnostic] Text)
       perform format output exit = runPureEff . runFailure

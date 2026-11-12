@@ -35,7 +35,7 @@ encodeSnapshotArchive :: DhallHandling :> es
 encodeSnapshotArchive identity target plugins steps = case catalogue steps of
   Left message -> pure (bad message)
   Right types -> fmap (fmap Text.encodeUtf8) (encodeValue (archiveShape types) (object
-    ["format" .= String "stored-snapshot-1", "identity" .= evolutionIdName identity,
+    ["identity" .= evolutionIdName identity,
      "target" .= snapshotValue target, "steps" .= map (stepValue types) steps,
      "plugins" .= map pluginValue plugins]))
 
@@ -73,7 +73,7 @@ changeValues change = case change of
 
 archiveShape :: Catalogue -> Shape
 archiveShape types = Record
-  [("format",text),("identity",text),("target",snapshotShape),("plugins",List pluginShape),
+  [("identity",text),("target",snapshotShape),("plugins",List pluginShape),
    ("steps",List (Record [("origin",Union [("Authored",Nothing),("TargetProjection",Nothing)]),
      ("explanation",text),("evidence",List evidenceShape),("changes",List change)]))]
   where
@@ -117,8 +117,6 @@ stepValue types (SnapshotStep origin (Rationale explanation evidence) changes) =
 
 parseArchive :: Catalogue -> Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,[PluginChange],[SnapshotStep]))
 parseArchive types = withObject "Stored report" $ \fields -> do
-  format <- fields .: "format" :: Parser Text.Text
-  unless (format == "stored-snapshot-1") (fail "Unknown stored report format")
   identity <- fields .: "identity" >>= either fail pure . evolutionId
   target <- fields .: "target" >>= restoreSnapshot
   plugins <- fields .: "plugins" >>= list parsePlugin

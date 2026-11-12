@@ -15,11 +15,11 @@ import Data.List (sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout)
+import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout, descriptionOf)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.CompiledEntry (compiledEntries, entryDescription)
 import Kyyn.Domain.Guest (CheckedGuest, checkedEntries, InspectedSchema(..))
-import Kyyn.Domain.Recipe (KnowledgeBase(..), ProposedRecipe(..), StoredRecipe(..))
+import Kyyn.Domain.Recipe (KnowledgeBase(..), ProposedRecipe(..), StoredRecipe(..), RecipeDefinition(..), recipeMethod)
 import Kyyn.Domain.StoredSnapshot (StoredSnapshot)
 import Kyyn.Domain.SnapshotReport
 import Kyyn.Domain.Root (Root(..))
@@ -29,6 +29,7 @@ import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+import qualified Kyyn.Types.Contract as D
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.SnapshotWire (SnapshotWire)
 import Kyyn.Plumbing.Capability.Failure (Failure)
@@ -87,9 +88,13 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
       root <- ExceptT (checkRootValue target value)
       states <- traverse checkState recipes
       ExceptT (materializeRoot target targetCode (KnowledgeBase root states))
-    checkState (Fact identity (ProposedRecipe method name fingerprint value)) = do
-      contract <- stateContract method name
-      unless (contractId contract == fingerprint) (bad "Returned recipe state has the wrong target contract")
+    checkState (Fact identity (ProposedRecipe definition value)) = do
+      let method = recipeMethod definition
+          declared = case definition of OpenRecipe _ name -> name; ClosedRecipe _ -> ""
+      contract <- stateContract method declared
+      let name = case definition of
+            OpenRecipe _ authored -> authored
+            ClosedRecipe _ -> Text.unpack (D.descriptionTypeName (descriptionOf contract))
       state <- ExceptT (checkRecipeValue contract value)
       pure (Fact identity (StoredRecipe method name contract state))
     stateContract method name = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,

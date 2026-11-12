@@ -30,25 +30,28 @@ knowledgeBaseCodec valueCodec = Codec encode decode
       payload <- field "value" payloadCodec values
       pure (Fact (FactId name) payload)
     payloadCodec = Codec encodeStored decodeStored
-    encodeStored (StoredRecipe method stateType contract state) = record
-      [("method",encodePayload method),("stateType",encodeWith textCodec stateType),
-       ("stateContract",encodeWith textCodec contract),("state",state)]
+    encodeStored (StoredRecipe method authored state) = record
+      [("definition",encodeDefinition method authored),("state",state)]
     decodeStored value = do
-      values <- fields ["method","stateType","stateContract","state"] value
-      StoredRecipe <$> field "method" (Codec encodePayload decodePayload) values
-        <*> field "stateType" textCodec values <*> field "stateContract" textCodec values
-        <*> field "state" (Codec id Right) values
-    encodePayload (OpenAgent instructions) = tagged "OpenAgent" (Just
-      (record [("instructions",encodeWith textCodec instructions)]))
-    encodePayload (ClosedAgent (FlowEntryRef entry)) = tagged "ClosedAgent" (Just
+      values <- fields ["definition","state"] value
+      (method,authored) <- field "definition" definitionCodec values
+      StoredRecipe method authored <$> field "state" (Codec id Right) values
+    definitionCodec = Codec (uncurry encodeDefinition) decodeDefinition
+    encodeDefinition (OpenAgent instructions) authored = tagged "OpenAgent" (Just
+      (record [("instructions",encodeWith textCodec instructions),
+        ("stateType",encodeWith textCodec (maybe "" id authored))]))
+    encodeDefinition (ClosedAgent (FlowEntryRef entry)) _ = tagged "ClosedAgent" (Just
       (record [("flow",encodeWith textCodec entry)]))
-    decodePayload value = do
+    decodeDefinition value = do
       (name, payload) <- variant value
       case (name,payload) of
         ("OpenAgent", Just contents) -> do
-          values <- fields ["instructions"] contents
-          OpenAgent <$> field "instructions" textCodec values
+          values <- fields ["instructions","stateType"] contents
+          instructions <- field "instructions" textCodec values
+          authored <- field "stateType" textCodec values
+          pure (OpenAgent instructions,Just authored)
         ("ClosedAgent", Just contents) -> do
           values <- fields ["flow"] contents
-          ClosedAgent . FlowEntryRef <$> field "flow" textCodec values
+          entry <- field "flow" textCodec values
+          pure (ClosedAgent (FlowEntryRef entry),Nothing)
         _ -> Left "Expected OpenAgent or ClosedAgent recipe"

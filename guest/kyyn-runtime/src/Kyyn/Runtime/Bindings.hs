@@ -32,7 +32,7 @@ recipeType name = do
   let description = describeContract compiled.description (SchemaMetadata [] [] []) []
       codec = runtimeCodec compiled.codec
   shape <- either (Left . ProjectionError []) Right (storedShape compiled.description)
-  pure (Recipe.RecipeType name description.identity shape (Wire.encodeWith codec) (Wire.decodeWith codec))
+  pure (Recipe.RecipeType name shape (Wire.encodeWith codec) (Wire.decodeWith codec))
 
 inferredRecipeType :: forall state. Contract state => Either ProjectionError (RecipeType state)
 inferredRecipeType = do

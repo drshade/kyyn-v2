@@ -9,7 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Aeson (Value)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Types.KnowledgeBase (Recipe)
+import Kyyn.Types.KnowledgeBase (Recipe(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Types.Fact (Fact)
@@ -18,26 +18,22 @@ import Kyyn.Types.Fact (Fact)
 data KnowledgeBase root = KnowledgeBase root [Fact StoredRecipe] deriving (Eq, Show)
 
 -- | A generated binding identifying and encoding a recipe's state type.
-data RecipeType state = RecipeType Text Text StoredShape
+data RecipeType state = RecipeType Text StoredShape
   (state -> Value) (Value -> Either String state)
 
 -- | A recipe's instructions or flow and its typed state binding.
 data RecipeDefinition state = RecipeDefinition Recipe (RecipeType state)
 
-data StoredRecipe = StoredRecipe Recipe Text Text Value deriving (Eq, Show)
+data StoredRecipe = StoredRecipe Recipe (Maybe Text) Value deriving (Eq, Show)
 
 storeRecipe :: RecipeDefinition state -> state -> StoredRecipe
-storeRecipe (RecipeDefinition method (RecipeType name identity _ encode _)) state =
-  StoredRecipe method name identity (encode state)
+storeRecipe (RecipeDefinition method (RecipeType name _ encode _)) state =
+  StoredRecipe method (case method of OpenAgent _ -> Just name; ClosedAgent _ -> Nothing) (encode state)
 
 readRecipeState :: RecipeId -> RecipeType state -> StoredRecipe
   -> Either EvolutionFailure state
-readRecipeState (RecipeId ident) (RecipeType name identity _ _ decode)
-    (StoredRecipe _ actualName actualIdentity value)
-  | identity /= actualIdentity = failure
-      "recipe.state-type" ("Expected state type " <> name <> "; found " <> actualName <>
-        ". Use preparation to decode and migrate the stored recipe state.")
-  | otherwise = either (failure "recipe.state-invalid" . Text.pack) Right (decode value)
+readRecipeState (RecipeId ident) (RecipeType _ _ _ decode)
+    (StoredRecipe _ _ value) = either (failure "recipe.state-invalid" . Text.pack) Right (decode value)
   where
     failure code message = Left (EvolutionFailure
       [errorDiagnostic code ("Recipe " <> ident <> ": " <> message)])

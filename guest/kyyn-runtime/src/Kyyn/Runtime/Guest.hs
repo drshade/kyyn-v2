@@ -132,7 +132,7 @@ runGuest exports selected = do
     unless (Bytes.null body) (fail "Unexpected invocation body")
     request <- either fail pure (decodeWire metadata)
     case request of
-      Describe -> writeReply transport (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
+      Describe -> writeReply transport (Json.toJSON (GuestDescription descriptions exports))
       Invoke name argument -> case [run | (selectedName,run) <- concatMap entryActions built, selectedName == name] of
         [run] -> run transport argument
         _ -> fail "Unknown guest entry"

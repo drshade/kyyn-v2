@@ -36,7 +36,7 @@ data RecipeBinding where
   RecipeBinding :: RecipeReference -> RecipeType state -> RecipeBinding
 
 definitionBinding :: RecipeDefinition state -> RecipeBinding
-definitionBinding (RecipeDefinition method binding@(RecipeType name _ _ _ _)) = RecipeBinding
+definitionBinding (RecipeDefinition method binding@(RecipeType name _ _ _)) = RecipeBinding
   (case method of OpenAgent _ -> OpenState name; ClosedAgent (FlowEntryRef flow) -> ClosedFlow flow) binding
 
 targetBinding :: forall root. Contract root
@@ -59,15 +59,13 @@ targetBinding (SchemaMetadata _ _ collections) bindings = do
       _ -> failure "Recipe definition has no unique target state binding"
     decodeRecipe (StoredRecipe method authored (RecordedValue actual value)) = do
       reference <- key method authored
-      RecipeBinding _ (RecipeType name identity shape encode decode) <- select reference
+      RecipeBinding _ (RecipeType _ shape encode decode) <- select reference
       unless (canonicalShape actual == canonicalShape shape) (failure "Recipe state shape differs from target")
       state <- either (failure . Text.pack) Right (decode value)
-      pure (Typed.StoredRecipe method name identity (encode state))
-    encodeRecipe (Typed.StoredRecipe method name identity value) = do
-      let authored = case method of OpenAgent _ -> Just name; ClosedAgent _ -> Nothing
+      pure (Typed.StoredRecipe method authored (encode state))
+    encodeRecipe (Typed.StoredRecipe method authored value) = do
       reference <- key method authored
-      RecipeBinding _ (RecipeType expected expectedIdentity shape encode decode) <- select reference
-      unless (name == expected && identity == expectedIdentity) (failure "Recipe state identity differs from target")
+      RecipeBinding _ (RecipeType _ shape encode decode) <- select reference
       state <- either (failure . Text.pack) Right (decode value)
       pure (StoredRecipe method authored (RecordedValue shape (encode state)))
 
@@ -91,7 +89,7 @@ targetRecipeEvolutionEntry metadata recipes stateType (RecipeEvolution steps) =
         _ -> failure ("Recipe " <> identity <> " is missing or ambiguous")
       state <- Typed.readRecipeState (RecipeId identity) stateType original
       ((),(newRoot,newState)) <- runStateT action (root,state)
-      let Typed.StoredRecipe method _ _ _ = original
+      let Typed.StoredRecipe method _ _ = original
           changed = Typed.storeRecipe (Typed.RecipeDefinition method stateType) newState
       pure ((),Typed.KnowledgeBase newRoot
         [Fact key (if name == identity then changed else value) | Fact key@(FactId name) value <- states])

@@ -11,7 +11,6 @@ import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (sort)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.Contract (contractFingerprint, parseContractFingerprint)
 import Kyyn.Domain.Recipe (KnowledgeBase(..), RecipeDefinition(..), ProposedRecipe(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
@@ -70,14 +69,12 @@ parseRecipes value = parseJSON value >>= traverse
     Fact <$> (FactId <$> fields .: "id") <*> (fields .: "value" >>= parseRecipeDefinition))
 
 proposedRecipeValue :: ProposedRecipe -> Value
-proposedRecipeValue (ProposedRecipe method stateType identity value) = object
-  ["method" .= methodValue method,"stateType" .= stateType,
-   "stateContract" .= contractFingerprint identity,"state" .= value]
+proposedRecipeValue (ProposedRecipe definition value) = object
+  ["definition" .= recipeDefinitionValue definition,"state" .= value]
 
 parseProposedRecipe :: Value -> Parser ProposedRecipe
-parseProposedRecipe = exact "Recipe" ["method","stateType","stateContract","state"] $ \fields ->
-  ProposedRecipe <$> (fields .: "method" >>= parseMethod) <*> fields .: "stateType"
-    <*> (fields .: "stateContract" >>= either fail pure . parseContractFingerprint) <*> fields .: "state"
+parseProposedRecipe = exact "Recipe" ["definition","state"] $ \fields ->
+  ProposedRecipe <$> (fields .: "definition" >>= parseRecipeDefinition) <*> fields .: "state"
 
 knowledgeBaseValue :: KnowledgeBase Value ProposedRecipe -> Value
 knowledgeBaseValue (KnowledgeBase value entries) = object

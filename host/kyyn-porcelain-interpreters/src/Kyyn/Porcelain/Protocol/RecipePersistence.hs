@@ -14,12 +14,13 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Recipe (recipeId, RecipeId(..))
 import Kyyn.Domain.Recipe (RecipeDefinition, StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
-import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
+import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape, descriptionOf)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.Recipes (recipesShape, recipesValue, parseRecipes)
@@ -64,9 +65,9 @@ encodeRecipeContracts :: DhallHandling :> es
 encodeRecipeContracts recipes = fmap (fmap Text.encodeUtf8) $ encodeValue recipeContractsShape
   (toValue recipes)
   where
-    toValue entries = toJSON [object ["id" .= name,"stateType" .= stateType,
+    toValue entries = toJSON [object ["id" .= name,
       "contract" .= checkedSnapshotValue contract] |
-      Fact (FactId name) (StoredRecipe _ stateType contract _) <- entries]
+      Fact (FactId name) (StoredRecipe _ _ contract _) <- entries]
 
 decodeRecipeContracts :: DhallHandling :> es
   => ByteString -> Eff es (Either [Diagnostic] [(FactId,String,CheckedContract)])
@@ -76,13 +77,12 @@ decodeRecipeContracts bytes = runExceptT $ do
   restored <- checked (parseEither (\v -> parseJSON v >>= traverse
     (withObject "Recipe contract" $ \fields -> do
       name <- FactId <$> fields .: "id"
-      stateType <- fields .: "stateType"
       contract <- fields .: "contract" >>= restoreCheckedSnapshot
-      pure ((name,stateType,) <$> contract))) value)
+      pure ((\checkedContract -> (name,Text.unpack (D.descriptionTypeName (descriptionOf checkedContract)),checkedContract)) <$> contract))) value)
   ExceptT (pure (sequence restored))
 
 recipeContractsShape :: Shape
-recipeContractsShape = List (Record [("id",Scalar TextScalar),("stateType",Scalar TextScalar),("contract",snapshotShape)])
+recipeContractsShape = List (Record [("id",Scalar TextScalar),("contract",snapshotShape)])
 
 encodeRecipeStates :: DhallHandling :> es
   => [(RecipeId, CheckedContract, CheckedValue)] -> Eff es (Either [Diagnostic] FileTree)

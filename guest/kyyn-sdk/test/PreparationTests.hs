@@ -40,7 +40,7 @@ main = do
       reason = Rationale "Explicit migration" []
       field = TargetField "total" :: TargetField [Fact New] Integer
       recipe = RecipeDefinition (OpenAgent "new")
-        (RecipeType "New.State" "target" StoredBool Bool
+        (RecipeType "New.State" StoredBool Bool
           (\value -> case value of Bool result -> Right result; _ -> Left "expected boolean"))
       action = do
         migrateCollection reason "people" target convert

@@ -94,7 +94,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
           (path pluginFile,pluginBytes),(path "flake.nix","recorded fixture"),(path "flake.lock","recorded lock")]
         described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) []
-        guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+        guest = either (error . show) id (checkGuest (G.GuestDescription
           [G.ContractEntry "$evolution.target" described] []))
         compiled :: Eff (GuestCompilation : es) a -> Eff es a
         compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation

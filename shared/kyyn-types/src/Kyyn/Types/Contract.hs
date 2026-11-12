@@ -53,7 +53,7 @@ newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Ord, Show)
 -- generic transport encoding. Declaration order remains significant.
 contractIdentity :: Description -> SchemaMetadata -> ContractId
 contractIdentity description metadata = ContractId . SHA256.hash . Lazy.toStrict . encode $
-  toJSON [String "kyyn-contract-1", canonicalDescription description, canonicalMetadata metadata]
+  toJSON [canonicalDescription description, canonicalMetadata metadata]
 
 canonicalType :: TypeIdentity -> Value
 canonicalType (TypeIdentity packageName moduleName name args) =
