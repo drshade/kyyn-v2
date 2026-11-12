@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.Inspection
-  ( Inspection(..), inspectSnapshot, inspectEvolutionSource, inspectDeclaration, inspectConnectors, inspectEvidenceItem, inspectEvidenceReferences ) where
+  ( Inspection(..), inspectConfiguration, inspectSnapshot, inspectEvolutionSource, inspectDeclaration, inspectConnectors, inspectEvidenceItem, inspectEvidenceReferences ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -13,6 +13,7 @@ import Kyyn.Domain.Inspection
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 
 data Inspection :: Effect where
+  InspectConfiguration :: SnapshotInspection -> Inspection m (Either [Diagnostic] ConfigurationInspection)
   InspectConnectors :: SnapshotInspection -> Inspection m (Either [Diagnostic] [ConnectorInspection])
   InspectEvidenceItem :: ConnectorInspection -> EvidenceId -> Inspection m (Either [Diagnostic] EvidenceItemInspection)
   InspectEvidenceReferences :: KnowledgeBase -> GitRevision -> [EvidenceRef]
@@ -47,3 +48,6 @@ inspectEvidenceItem connector = send . InspectEvidenceItem connector
 inspectEvidenceReferences :: Inspection :> es => KnowledgeBase -> GitRevision -> [EvidenceRef]
   -> Eff es [(EvidenceRef, Either [Diagnostic] ())]
 inspectEvidenceReferences kb revision = send . InspectEvidenceReferences kb revision
+
+inspectConfiguration :: Inspection :> es => SnapshotInspection -> Eff es (Either [Diagnostic] ConfigurationInspection)
+inspectConfiguration = send . InspectConfiguration

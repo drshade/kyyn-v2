@@ -2,14 +2,17 @@
 module Kyyn.Domain.Inspection
   ( SnapshotInspection(..), EvolutionInspection(..), SourceOrigin(..), SourceChange(..)
   , DeclarationRequest(..), DeclarationInspection(..), ImplementationSource(..)
+  , ConfigurationInspection(..), ConnectorDeclarationInspection(..), CatalogueInspection(..)
   , ConnectorInspection(..), EvidenceItemInspection(..), LocalInspection(..) ) where
 
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (Evidence, EvidenceId)
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex)
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorName, ConnectorTypeName, BindingName)
+import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorName, ConnectorTypeName, BindingName, PluginOrigin, MethodName)
 import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Domain.Output (OutputDefinition)
+import Kyyn.Domain.Tap (Tap)
 import Kyyn.Domain.Blob (BlobRef)
 import Kyyn.Types.Evidence (EvidenceRef)
 import Data.Aeson (Value)
@@ -37,7 +40,7 @@ data SourceOrigin = SavedCapture | LiveWorkspace deriving (Eq, Show)
 data EvolutionInspection = EvolutionInspection WorkspaceManifest SourceOrigin (Maybe EvolutionReport) [SourceChange]
 
 -- Requests describe entries; only QueryRequest with an input executes a query.
-data DeclarationRequest = QueryRequest String (Maybe Text) | ToolRequest String | RecipeRequest Text
+data DeclarationRequest = QueryRequest String (Maybe Text) | ToolRequest String | RecipeRequest Text | PluginRequest Text | OutputRequest String
 
 data ImplementationSource = ImplementationSource Text (Maybe Text)
 
@@ -45,6 +48,8 @@ data DeclarationInspection
   = QueryInspection QueryDefinition QueryDescriptor ImplementationSource (Maybe Value)
   | ToolInspection ToolDefinition ToolDescriptor (Maybe ModelConfiguration) ImplementationSource
   | RecipeInspection Text StoredRecipe (Maybe Text)
+  | PluginInspection PluginName PackageIdentity PluginOrigin [ConnectorDeclarationInspection]
+  | OutputInspection OutputDefinition QueryDescriptor
 
 data ConnectorInspection = ConnectorInspection
   { plugin :: PluginName, package :: PackageIdentity, name :: ConnectorName
@@ -59,3 +64,11 @@ data EvidenceItemInspection = EvidenceItemInspection EvidenceId (Evidence Checke
 data LocalInspection = LocalInspection
   (Either [Diagnostic] [ConnectorInspection]) (Maybe EvidenceItemInspection)
   [(EvidenceRef, Either [Diagnostic] ())]
+
+-- Snapshot configuration and machine-local discovery are deliberately separate.
+data ConfigurationInspection = ConfigurationInspection [(PluginName, PluginOrigin)] (Maybe ModelConfiguration)
+data CatalogueInspection = CatalogueInspection
+  (Either [Diagnostic] ConfigurationInspection) (Either [Diagnostic] [(Tap, Maybe GitRevision)])
+data ConnectorDeclarationInspection = ConnectorDeclarationInspection
+  ConnectorTypeName Bool [(String, CheckedContract)] [(MethodName, String)]
+  [(ConnectorName, BindingName, CheckedValue)]

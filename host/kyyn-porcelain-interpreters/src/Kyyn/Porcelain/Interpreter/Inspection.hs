@@ -9,22 +9,25 @@ import qualified Kyyn.Porcelain.Capability.EvidenceStore as EvidenceStore
 import qualified Kyyn.Porcelain.Capability.EvidenceInspection as EvidenceRead
 import qualified Kyyn.Porcelain.Capability.PluginPreparation as Plugins
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (nub, sort, isSuffixOf)
+import Data.List (nub, sort, isSuffixOf, stripPrefix)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (contractId, contractShape)
+import qualified Kyyn.Domain.Output
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
-import Kyyn.Domain.Plugin (MethodName(..), ConnectorName(..), pluginName)
+import Kyyn.Domain.Plugin (ConnectorName(..), PluginName, PluginOrigin, pluginName, MethodName(..))
+import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
+import Kyyn.Plumbing.Protocol.Plugin (decodeOrigin)
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.DataType (definingModule)
 import Kyyn.Domain.Recipe (RecipeDefinition(..), recipeDefinition, DescriptionFormat(Mermaid))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Git (TreePath(..))
 import Kyyn.Domain.Inspection
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -46,6 +49,10 @@ runInspection :: (RootOpening :> es, RootStore :> es, Store.EvolutionStore :> es
   Query.RootExecution :> es, Tool.ToolPreparation :> es, Recipe.RecipeInspection :> es, Dhall.DhallHandling :> es)
   => Eff (Inspection : es) a -> Eff es a
 runInspection = interpret $ \_ -> \case
+  InspectConfiguration (SnapshotInspection _ _ (Root _ _ code _) _ _) -> runExceptT $ do
+    origins <- inspectOrigins code
+    model <- ExceptT (readModelConfiguration code)
+    pure (ConfigurationInspection origins model)
   InspectConnectors (SnapshotInspection _ _ (Root _ _ code _) _ _) -> runExceptT $ do
     plugins <- ExceptT (Plugins.preparePlugins code)
     forM [(package,name,binding,connector,payload,config) |
@@ -112,6 +119,33 @@ runInspection = interpret $ \_ -> \case
           pure (ImplementationSource (Text.pack name) body)
         unknown kind name = throwE [errorDiagnostic "inspection.unknown" ("Unknown " ++ kind ++ ": " ++ name)]
     case request of
+      PluginRequest name -> do
+        selected <- checked (pluginName (Text.unpack name))
+        origins <- inspectOrigins code
+        origin <- maybe (unknown "plugin" (Text.unpack name)) pure (lookup selected origins)
+        plugins <- ExceptT (Plugins.preparePlugins code)
+        Plugins.PreparedPlugin (Plugins.PreparedPackage identity fingerprint connectors) instances <- ExceptT (pure (Plugins.selectedPlugin selected plugins))
+        let describe connector =
+              let configured = [(n,b,v) | Plugins.ConfiguredConnector n b c v <- instances, c.connectorType == connector.connectorType]
+                  config = ("configuration",connector.configContract)
+              in case connector of
+                Plugins.PreparedConnector { Plugins.payloadContract = payload, Plugins.fetchOptionsContract = options,
+                  Plugins.reportContract = report, Plugins.methods = methods } ->
+                  ConnectorDeclarationInspection connector.connectorType False
+                    ([config,("payload",payload)] ++ maybe [] (pure . ("options",)) options ++ maybe [] (pure . ("report",)) report ++
+                     concat [[("method:" ++ method ++ ":input",input),("method:" ++ method ++ ":result",output)] |
+                       Plugins.PreparedMethod (MethodName method) _ input output _ <- methods])
+                    [(method,description) | Plugins.PreparedMethod method description _ _ _ <- methods] configured
+                Plugins.PreparedSinkConnector { Plugins.sinkInputContract = input, Plugins.sinkOptionsContract = options,
+                  Plugins.sinkResultContract = output } ->
+                  ConnectorDeclarationInspection connector.connectorType True
+                    [config,("input",input),("options",options),("result",output)] [] configured
+        pure (PluginInspection identity fingerprint origin (map describe connectors))
+      OutputRequest name -> do
+        prepared <- ExceptT (Query.prepareRoot root)
+        case [ (output,descriptor) | Query.PreparedOutput output@(Kyyn.Domain.Output.OutputDefinition actual _ _ _) descriptor _ <- Query.preparedOutputs prepared, actual == name] of
+          [(output,descriptor)] -> pure (OutputInspection output descriptor)
+          _ -> unknown "output" name
       QueryRequest name supplied -> do
         declaration@(QueryDefinition _ _ implementation _ _ _ _) <- case
           [query | query@(QueryDefinition actual _ _ _ _ _ _) <- queries, actual == name] of
@@ -164,3 +198,12 @@ runInspection = interpret $ \_ -> \case
     -- Lifecycle state is current; explanation/base/source belong to the labelled capture.
     pure (EvolutionInspection selectedManifest saved report changes)
   where checked = either (throwE . pure . errorDiagnostic "inspection.source") pure
+
+inspectOrigins :: Dhall.DhallHandling :> es => FileTree -> ExceptT [Diagnostic] (Eff es) [(PluginName,PluginOrigin)]
+inspectOrigins code = forM entries $ \(name,bytes) -> do
+  identity <- either (throwE . pure . errorDiagnostic "inspection.plugin") pure (pluginName name)
+  origin <- ExceptT (decodeOrigin bytes)
+  pure (identity,origin)
+  where entries = [(name,bytes) | (path,bytes) <- files code,
+          Just suffix <- [stripPrefix "plugins/packages/" (relativeName path)],
+          let (name,rest) = break (== '/') suffix, rest == "/origin.dhall"]

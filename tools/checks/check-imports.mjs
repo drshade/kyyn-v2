@@ -122,7 +122,7 @@ const allowed = {
 };
 
 const domainModules = {
-  'Kyyn.Domain.Inspection': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Domain.Blob', 'Kyyn.Types.Evidence', 'Data.Text', 'Kyyn.Domain.Model', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Recipe', 'Kyyn.Domain.Root', 'Data.Aeson', 'Data.ByteString', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace'],
+  'Kyyn.Domain.Inspection': ['Kyyn.Domain.Output', 'Kyyn.Domain.Tap', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Domain.Blob', 'Kyyn.Types.Evidence', 'Data.Text', 'Kyyn.Domain.Model', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Recipe', 'Kyyn.Domain.Root', 'Data.Aeson', 'Data.ByteString', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace'],
   'Kyyn.Domain.SnapshotReport': ['Control.Monad', 'Data.List', 'Data.Text', 'Kyyn.Domain.StoredSnapshot', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.StoragePath': ['Control.Monad', 'Data.ByteString', 'Data.Char', 'Data.Text', 'Data.Text.Encoding', 'Numeric'],
   'Kyyn.Domain.StoredSnapshot': ['Kyyn.Types.StoredShape', 'Data.Aeson', 'Data.Text', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Recipe', 'Kyyn.Types.Fact'],

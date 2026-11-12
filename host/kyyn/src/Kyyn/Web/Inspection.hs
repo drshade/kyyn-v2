@@ -6,7 +6,7 @@ import qualified Data.Map.Strict as Map
 import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..), EvidenceId(..), EvidenceFingerprint(..), FetchSummary(..), FetchId(..), FetchReport(..))
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..))
 import Kyyn.Domain.Blob (BlobRef(..), sdkBlobRefType)
-import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), ConnectorTypeName(..), BindingName(..), PackageIdentity(..))
+import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), ConnectorTypeName(..), BindingName(..), PackageIdentity(..), PluginOrigin(..), PluginRepository(..))
 import Control.Monad (forM_, unless)
 import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
 import Data.Aeson (Value(..), encode)
@@ -26,7 +26,9 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
-import Kyyn.Domain.Git (revisionName)
+import Kyyn.Domain.Git (revisionName, gitUrlText, TreePath(..))
+import Kyyn.Domain.Output (OutputDefinition(..), SinkReference(..))
+import Kyyn.Domain.Tap (Tap(..), tapNameText)
 import Kyyn.Domain.Inspection
 import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..))
@@ -39,7 +41,7 @@ import Kyyn.Domain.Secret (secretNameText)
 import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
-import Kyyn.Domain.Path (relativeName)
+import Kyyn.Domain.Path (relativeName, scopePath)
 import Kyyn.Domain.SnapshotReport
 import Kyyn.Domain.StoredSnapshot (RecordedValue(..), RecordedRecipe(..))
 import Kyyn.Domain.Workspace (WorkspaceManifest(..), EvolutionState(..))
@@ -51,14 +53,15 @@ import Kyyn.Types.SchemaMetadata
 data InspectionRoute = IndexPage | EvolutionPage EvolutionId | CollectionPage String
   | RecordPage String Text | TypePage String
   | QueryPage String (Maybe Text) | ToolPage String | RecipePage Text | RecipeTypePage Text String
+  | PluginPage Text | PluginTypePage Text Text Text String | OutputPage String | OutputTypePage String Text String
   | ConnectorPage Text Text | EvidencePage Text Text Text | CaptureTypePage Text Text Text String
 
 -- Keep routing and data acquisition outside the HTML renderer.
 renderInspection :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> InspectionRoute
-  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Maybe DeclarationInspection -> LocalInspection -> Either [Diagnostic] (Html ())
-renderInspection selected snapshot route summaries evolution declaration local@(LocalInspection _ _ references) = do
+  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Maybe DeclarationInspection -> LocalInspection -> CatalogueInspection -> Either [Diagnostic] (Html ())
+renderInspection selected snapshot route summaries evolution declaration local@(LocalInspection _ _ references) catalogue = do
   (title,body) <- case route of
-    IndexPage -> Right ("Knowledge base", indexBody selected snapshot summaries >> localIndex local)
+    IndexPage -> Right ("Knowledge base", indexBody selected snapshot summaries >> catalogueIndex selected snapshot catalogue >> localIndex local)
     EvolutionPage identity -> case evolution of
       Just details -> Right ("Evolution " <> Text.pack (evolutionIdName identity), evolutionBody selected snapshot details references)
       Nothing -> missing "evolution" (evolutionIdName identity)
@@ -117,11 +120,29 @@ renderInspection selected snapshot route summaries evolution declaration local@(
         localNotice
         p_ $ a_ [href_ (connectorLink connector)] "Connector"
         typeBody (captureTypeLink connector role) contract target)
+    PluginPage name -> declared (Text.unpack name)
+    OutputPage name -> declared name
+    PluginTypePage plugin kind role name -> case declaration of
+      Just (PluginInspection _ _ _ connectors) -> do
+        contract <- case [c | ConnectorDeclarationInspection (ConnectorTypeName actual) _ contracts _ _ <- connectors,
+          Text.pack actual == kind, (key,c) <- contracts, Text.pack key == role] of
+          [c] -> Right c
+          _ -> missing "plugin contract" (Text.unpack role)
+        scopedType contract (pluginTypeLink selected plugin kind role) name
+      _ -> missing "plugin" (Text.unpack plugin)
+    OutputTypePage name role typ -> case declaration of
+      Just (OutputInspection _ (QueryDescriptor _ _ input output)) -> do
+        contract <- case role of "input" -> Right input; "result" -> Right output; _ -> missing "output contract" (Text.unpack role)
+        scopedType contract (outputTypeLink selected name role) typ
+      _ -> missing "output" name
     QueryPage name _ -> declared name
     ToolPage name -> declared name
     RecipePage name -> declared (Text.unpack name)
   pure $ document selected snapshot title body
   where
+    scopedType contract link name = case [t | t <- reachableTypes (rootType contract), haskellType t == name] of
+      t:_ -> Right (Text.pack name,typeBody link contract t)
+      _ -> missing "type" name
     declared name = do
       current <- snapshot
       case declaration of
@@ -392,6 +413,37 @@ sourceCode False text = toHtml text
 
 declarationBody :: Maybe EvolutionId -> SnapshotInspection -> DeclarationInspection -> Html ()
 declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declaration = case declaration of
+  PluginInspection plugin fingerprint origin connectors -> do
+    originBody origin
+    let PackageIdentity hash = fingerprint
+    dl_ $ do dt_ "Package identity"; dd_ (toHtml hash)
+    forM_ connectors $ \(ConnectorDeclarationInspection (ConnectorTypeName kind) sink contracts methods instances) -> do
+      h2_ (toHtml kind)
+      p_ (if sink then "Sink connector" else "Source connector")
+      dl_ $ forM_ contracts $ \(role,contract) -> do
+        dt_ (toHtml (Text.replace ":" " · " (Text.pack role)))
+        dd_ (typeReference (pluginTypeLink selected (Text.pack (pluginNameText plugin)) (Text.pack kind) (Text.pack role)) (rootType contract))
+      unless (null methods) $ do
+        h3_ "Captured methods"
+        dl_ $ forM_ methods $ \(MethodName method,description) -> dt_ (toHtml method) >> dd_ (toHtml description)
+      unless (null instances) $ do
+        h3_ "Configured instances"
+        forM_ instances $ \(ConnectorName name,BindingName binding,CheckedValue _ value) -> do
+          h4_ (toHtml name)
+          p_ $ toHtml ("Binding: " ++ binding)
+          case lookup "configuration" contracts of
+            Just contract -> renderValue selected (contractShape contract) value
+            Nothing -> mempty
+          unless sink $ p_ $ a_ [href_ (inspectionLink Nothing ["connectors",Text.pack (pluginNameText plugin),Text.pack name])] "Local evidence"
+  OutputInspection (OutputDefinition name description query (SinkReference plugin (ConnectorName instanceName) (MethodName method))) (QueryDescriptor _ _ input output) -> do
+    p_ (toHtml description)
+    dl_ $ do
+      dt_ "Renderer"; dd_ $ a_ [href_ (inspectionLink selected ["queries",Text.pack query])] (toHtml query)
+      dt_ "Input"; dd_ (typeReference (outputTypeLink selected name "input") (rootType input))
+      dt_ "Result"; dd_ (typeReference (outputTypeLink selected name "result") (rootType output))
+      dt_ "Sink"; dd_ $ do
+        a_ [href_ (inspectionLink selected ["plugins",Text.pack (pluginNameText plugin)])] (toHtml (pluginNameText plugin))
+        toHtml (" / " ++ instanceName ++ " / " ++ method)
   QueryInspection (QueryDefinition _ _ implementation _ _ _ _) (QueryDescriptor _ description input output) source result -> do
     p_ (toHtml description)
     signature input output
@@ -571,3 +623,49 @@ evidenceItemBody c (EvidenceItemInspection (EvidenceId key) (Evidence (EvidenceF
       dt_ "Bytes"; dd_ (toHtml (show size))
       dt_ "Media type"; dd_ (toHtml media)
       dt_ "SHA-256"; dd_ (toHtml digest)
+
+pluginTypeLink :: Maybe EvolutionId -> Text -> Text -> Text -> String -> Text
+pluginTypeLink selected plugin kind role name = inspectionLink selected ["plugins",plugin,"types",kind,role,Text.pack name]
+
+outputTypeLink :: Maybe EvolutionId -> String -> Text -> String -> Text
+outputTypeLink selected output role name = inspectionLink selected ["outputs",Text.pack output,"types",role,Text.pack name]
+
+originBody :: PluginOrigin -> Html ()
+originBody (PluginOrigin repository path revision) = dl_ $ do
+  dt_ "Repository"; dd_ $ toHtml $ case repository of
+    LocalRepository scope -> scopePath scope
+    RemoteRepository url -> gitUrlText url
+  dt_ "Package path"; dd_ $ toHtml $ case path of WholeTree -> "."; Subtree p -> relativeName p
+  dt_ "Pinned revision"; dd_ (toHtml (revisionName revision))
+
+catalogueIndex :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> CatalogueInspection -> Html ()
+catalogueIndex selected snapshot (CatalogueInspection configuration taps) = do
+  case configuration of
+    Left diagnostics -> diagnosticsBody diagnostics
+    Right (ConfigurationInspection plugins model) -> do
+      h2_ "Plugins"
+      ul_ $ forM_ plugins $ \(plugin,_) -> li_ $
+        a_ [href_ (inspectionLink selected ["plugins",Text.pack (pluginNameText plugin)])] (toHtml (pluginNameText plugin))
+      h2_ "Model"
+      case model of
+        Nothing -> p_ "No model configured."
+        Just (ModelConfiguration provider name credential) -> dl_ $ do
+          dt_ "Provider"; dd_ (toHtml (show provider))
+          dt_ "Model"; dd_ (toHtml name)
+          dt_ "Credential name"; dd_ (toHtml (secretNameText credential))
+  case snapshot of
+    Right (SnapshotInspection _ _ _ _ (RootDefinition _ _ _ _ _ _ outputs)) -> do
+      h2_ "Outputs"
+      ul_ $ forM_ outputs $ \(OutputDefinition name description _ _) -> li_ $ do
+        a_ [href_ (inspectionLink selected ["outputs",Text.pack name])] (toHtml name)
+        toHtml (" · " ++ description)
+    Left _ -> mempty
+  h2_ "Taps"
+  p_ [class_ "context"] "Local discovery configuration"
+  case taps of
+    Left diagnostics -> diagnosticsBody diagnostics
+    Right entries -> dl_ $ forM_ entries $ \(Tap name url,revision) -> do
+      dt_ (toHtml (tapNameText name))
+      dd_ $ do
+        toHtml (gitUrlText url)
+        toHtml (maybe " · Not synced" (\r -> " · " ++ revisionName r) revision)

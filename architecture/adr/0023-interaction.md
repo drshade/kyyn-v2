@@ -40,6 +40,10 @@ Web has two kinds of page:
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure, state type and saved checkpoint, without executing actions |
 | `GET /recipes/<name>/types/<type>` | Types reachable from this recipe's checked state contract, with fields, descriptions and nested type links |
+| `GET /plugins/<plugin>` | Captured plugin origin/pin, connector types, contracts, methods and configured instances |
+| `GET /plugins/<plugin>/types/<connector>/<role>/<type>` | Types scoped to a plugin connector contract |
+| `GET /outputs/<output>` | Output renderer, input/result contracts and destination sink |
+| `GET /outputs/<output>/types/<role>/<type>` | Types scoped to an output renderer contract |
 | `GET /connectors/<plugin>/<instance>` | Accepted connector configuration, latest local fetch/report and evidence items |
 | `GET /evidence/<plugin>/<instance>/<id>` | Current local payload, fingerprint, references and blob metadata |
 | `GET /connectors/<plugin>/<instance>/types/<role>/<type>` | Payload or report contract types scoped to the connector capture |
@@ -78,6 +82,14 @@ only the latest capture. Not-fetched and changed-producer diagnostics remain
 visible. Evidence references in evolution rationales link to current local items
 where they resolve, not to an inferred historical payload. Blob attachments are listed as
 metadata. Inspection does not read the secret store.
+
+Plugin and output pages follow the selected accepted or checked snapshot. The
+index also shows its model provider, model and credential name. Taps are labelled
+as local discovery configuration with their cached revision; viewing them never
+updates the catalogue. Plugin contract links are scoped by connector and role,
+including captured-method input/result contracts, rather than matched by name
+against the KB schema. Output inspection describes the renderer and sink without
+running the query or publishing anything.
 
 Query and tool pages show the captured module that contains the implementation,
 whole, not an extracted definition.
