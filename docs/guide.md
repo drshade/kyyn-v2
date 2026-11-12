@@ -347,10 +347,8 @@ references link to current locally retained items where available.
 Stored connector configuration is displayed as written: keep credentials in the
 secret store and reference them by name; inspection never reads secret values.
 
-Haskell code is highlighted. Recipe diagrams show compact labels; select a step
-with the mouse or keyboard to expand its full prompt or questions. Use Fit and
-Zoom to navigate larger flows. Long instructions are expandable, and Mermaid
-source remains readable without JavaScript. These assets are served locally.
+Haskell highlighting and recipe diagrams use locally served assets. Full Mermaid
+source remains readable without JavaScript.
 
 URL-encode each name or ID as a path segment. For example,
 `/records/people/alex?evolution=000009-update-people` shows a draft record.

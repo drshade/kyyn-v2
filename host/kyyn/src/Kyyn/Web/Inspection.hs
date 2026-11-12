@@ -423,7 +423,7 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     h2_ "Current saved state"
     if contractShape contract == Record [] then p_ "No state fields." else
       details_ $ do
-        summary_ "Expand saved checkpoint"
+        summary_ "State"
         renderValue selected (contractShape contract) state
   where
     names = [haskellType typ | typ@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))]
@@ -477,7 +477,7 @@ connectorFor (LocalInspection result _ _) plugin name = do
     _ -> Left [errorDiagnostic "inspection.unknown" "Unknown source connector instance"]
 
 localNotice :: Html ()
-localNotice = p_ [class_ "context"] "This machine’s current captured evidence. Evolution selection does not change this capture. Configuration is from the accepted KB."
+localNotice = p_ [class_ "context"] "Local capture · accepted connector configuration"
 
 connectorLink :: ConnectorInspection -> Text
 connectorLink c = let ConnectorName name = c.name
@@ -559,7 +559,7 @@ evidenceItemBody c (EvidenceItemInspection (EvidenceId key) (Evidence (EvidenceF
     dt_ "Source references"; dd_ $ ul_ $ forM_ refs (li_ . toHtml)
   h2_ "Payload"
   case payload of
-    Truncated -> p_ "Payload truncated: this item is known, but its content is no longer retained locally."
+    Truncated -> p_ "Payload no longer retained locally."
     Available (CheckedValue _ value) -> renderValue Nothing (contractShape (capturePayload c)) value
   unless (null blobs) $ do
     h2_ "Blobs"

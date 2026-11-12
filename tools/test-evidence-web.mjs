@@ -49,7 +49,7 @@ in [ { name = "captured", binding = "captured", connector = Connector.Capture { 
  assert((await page('/evidence/inspection-fixture/captured/record%20%2F%20one')).includes('Captured &lt;document&gt;'));
  const blob=await page('/evidence/inspection-fixture/captured/record%20%2F%20one');assert(blob.includes('fixture.bin'));assert(blob.includes('SHA-256'));assert(!blob.includes('binary fixture bytes'));
  const positional=await page('/evidence/inspection-fixture/captured/positional');assert(positional.includes('Measurement'));assert(positional.includes('90'));
- assert((await page('/evidence/inspection-fixture/captured/truncated')).includes('Payload truncated'));
+ assert((await page('/evidence/inspection-fixture/captured/truncated')).includes('Payload no longer retained locally.'));
  const typ=await page(connector+'/types/payload/InspectionFixture.Payload');assert(typ.includes('Measurement'));assert(typ.includes('title'));assert(typ.includes('value'));
  assert((await page(connector+'/types/report/InspectionFixture.Report')).includes('examined'));
  await page('/evidence/inspection-fixture/captured/missing',404);await page('/connectors/inspection-fixture/missing',404);await page(connector,405,'POST');
@@ -64,7 +64,7 @@ evolution = prepare (pure ()) $ edit (Rationale "Evidence links"
 `);
  await cli(['evolution','check',draft.id]);
  const report=await page('/evolutions/'+draft.id);assert(report.includes('/evidence/inspection-fixture/captured/record%20%2F%20one'));assert(report.includes('Not in local evidence'));
- const current=await page(connector+'?evolution='+draft.id);assert(current.includes('fixture-key'));assert(current.includes('Evolution selection does not change this capture'));
+ const current=await page(connector+'?evolution='+draft.id);assert(current.includes('fixture-key'));assert(current.includes('Local capture · accepted connector configuration'));
  assert.equal(fetches,1);assert.equal(git(kb,'rev-parse','HEAD'),head);assert.deepEqual(await cli(['evidence','list','inspection-fixture','captured']),before);
  const changed=await cli(['evolution','new','producer-changed']);
  fs.appendFileSync(path.join(changed.path,'target/plugins/packages/inspection-fixture/source/src/InspectionFixture.hs'),'\n-- changed producer\n');await accept(changed);
