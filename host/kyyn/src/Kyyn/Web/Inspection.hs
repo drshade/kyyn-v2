@@ -357,6 +357,7 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     typeLink name = if name `elem` names
       then a_ [href_ (inspectionLink selected ["types",Text.pack name])] (toHtml name)
       else code_ (toHtml name)
+    signature :: CheckedContract -> CheckedContract -> Html ()
     signature input output = dl_ $ do
       dt_ "Input"; dd_ (typeLink (haskellType (rootType input)))
       dt_ "Result"; dd_ (typeLink (haskellType (rootType output)))

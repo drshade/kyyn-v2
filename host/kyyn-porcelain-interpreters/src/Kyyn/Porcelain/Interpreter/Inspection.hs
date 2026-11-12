@@ -60,9 +60,9 @@ runInspection = interpret $ \_ -> \case
       definition@(RootDefinition _ _ _ queries tools _ _)) request -> runExceptT $ do
     let source implementation = do
           let name = definingModule implementation
-              suffix = "src/" ++ map (\c -> if c == '.' then '/' else c) name ++ ".hs"
+              suffixes = ["src/" ++ map (\c -> if c == '.' then '/' else c) name ++ extension | extension <- [".hs",".lhs"]]
               candidates = [bytes | (path,bytes) <- files code,
-                relativeName path == suffix || ("/" ++ suffix) `isSuffixOf` relativeName path]
+                any (\suffix -> relativeName path == suffix || ("/" ++ suffix) `isSuffixOf` relativeName path) suffixes]
           body <- case candidates of
             [] -> pure Nothing
             [bytes] -> Just <$> checked (either (Left . show) Right (Text.decodeUtf8' bytes))
