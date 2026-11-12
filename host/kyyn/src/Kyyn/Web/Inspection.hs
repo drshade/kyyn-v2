@@ -22,12 +22,13 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.Git (revisionName)
 import Kyyn.Domain.Inspection
-import Kyyn.Domain.Recipe (RecipeDefinition(..), recipeDefinition)
+import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..))
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
 import Kyyn.Domain.Plugin (MethodName(..))
 import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Secret (secretNameText)
 import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
@@ -43,7 +44,7 @@ import Kyyn.Types.SchemaMetadata
 
 data InspectionRoute = IndexPage | EvolutionPage EvolutionId | CollectionPage String
   | RecordPage String Text | TypePage String
-  | QueryPage String (Maybe Text) | ToolPage String | RecipePage Text
+  | QueryPage String (Maybe Text) | ToolPage String | RecipePage Text | RecipeTypePage Text String
 
 -- Keep routing and data acquisition outside the HTML renderer.
 renderInspection :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> InspectionRoute
@@ -70,7 +71,18 @@ renderInspection selected snapshot route summaries evolution declaration = do
       target <- case [t | t@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root)), haskellType t == name] of
         t:_ -> Right t
         _ -> missing "type" name
-      pure (Text.pack name,typeBody selected root target)
+      pure (Text.pack name,typeBody (inspectionLink selected . ("types":) . pure . Text.pack) (rootSchema root) target)
+    RecipeTypePage recipeName name -> do
+      SnapshotInspection _ _ (Root _ _ _ recipes) _ _ <- snapshot
+      contract <- case [contract | Fact (FactId actual) (StoredRecipe _ _ contract _) <- recipes, actual == recipeName] of
+        [contract] -> Right contract
+        _ -> missing "recipe" (Text.unpack recipeName)
+      target <- case [typ | typ <- reachableTypes (rootType contract), haskellType typ == name] of
+        typ:_ -> Right typ
+        _ -> missing "recipe state type" name
+      pure (Text.pack name, do
+        p_ $ a_ [href_ (inspectionLink selected ["recipes",recipeName])] (toHtml recipeName)
+        typeBody (recipeTypeLink selected recipeName) contract target)
     QueryPage name _ -> declared name
     ToolPage name -> declared name
     RecipePage name -> declared (Text.unpack name)
@@ -172,7 +184,7 @@ collection (SnapshotInspection _ _ (Root root _ _ _) value _) name = case
 collectionBody :: Maybe EvolutionId -> RootContract -> String -> Shape -> [(Text,Value)] -> Html ()
 collectionBody selected root name _ rows = do
   let payloads = [payload | CollectionContract actual _ payload _ <- collectionContracts (rootSchema root), actual == name]
-      titleFields = [field | payload <- payloads, (field,_,_,Title) <- roles root payload]
+      titleFields = [field | payload <- payloads, (field,_,_,Title) <- roles (rootSchema root) payload]
       title value = case (titleFields,value) of
         (field:_,Object fields) -> maybe "" scalarText (Keys.lookup (Key.fromText field) fields)
         _ -> ""
@@ -210,15 +222,19 @@ asText :: Value -> Maybe Text
 asText (String value) = Just value
 asText _ = Nothing
 
-roles :: RootContract -> DataType -> [(Text,Text,Text,Affordance)]
+roles :: CheckedContract -> DataType -> [(Text,Text,Text,Affordance)]
 roles root selected = [(field,role,description,affordance) |
   FieldRole record field assigned <- assignments, Algebraic name _ _ <- [selected], record == Text.pack name,
   RoleDecl role description affordance <- declarations, role == assigned]
-  where SchemaMetadata declarations assignments _ = metadataOf (rootSchema root)
+  where SchemaMetadata declarations assignments _ = metadataOf root
 
-typeBody :: Maybe EvolutionId -> RootContract -> DataType -> Html ()
-typeBody selected root target = do
-  let documents = typeFields (Text.pack (haskellType target)) (descriptionOf (rootSchema root))
+typeBody :: (String -> Text) -> CheckedContract -> DataType -> Html ()
+typeBody link root target = do
+  let documents = typeFields (Text.pack (haskellType target)) (descriptionOf root)
+  case target of
+    Algebraic _ _ _ -> mempty
+    UnitType -> p_ "No state fields."
+    other -> p_ (typeReference link other)
   forM_ [constructors | Algebraic _ _ constructors <- [target]] $ \constructors ->
     forM_ constructors $ \(Constructor name fields) -> do
       h2_ (toHtml name)
@@ -226,9 +242,7 @@ typeBody selected root target = do
         thead_ $ tr_ $ th_ "Field" >> th_ "Type" >> th_ "Description"
         tbody_ $ forM_ fields $ \(field,typ) -> tr_ $ do
           td_ (toHtml (fromMaybe "value" field))
-          td_ $ case typ of
-            Algebraic _ _ _ -> a_ [href_ (inspectionLink selected ["types",Text.pack (haskellType typ)])] (toHtml (haskellType typ))
-            _ -> toHtml (haskellType typ)
+          td_ (typeReference link typ)
           td_ $ toHtml $ fromMaybe "" (field >>= (\f -> lookup (Text.pack f) documents))
   forM_ (roles root target) $ \(field,role,description,affordance) ->
     p_ (toHtml (field <> " · " <> role <> " (" <> affordanceLabel affordance <> ") · " <> description))
@@ -349,8 +363,8 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
         dt_ "Model"; dd_ (toHtml modelName)
         dt_ "Secret reference"; dd_ (toHtml (secretNameText credential))
     implementationBody implementation source
-  RecipeInspection _ method stateType flow -> do
-    case method of
+  RecipeInspection name recipe@(StoredRecipe _ stateType contract (CheckedValue _ state)) flow -> do
+    case recipeDefinition recipe of
       OpenRecipe instructions _ -> h2_ "Instructions" >> expandableText instructions
       ClosedRecipe (FlowEntryRef entry) -> do
         h2_ "Flow"
@@ -361,7 +375,12 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
             summary_ "Mermaid source"
             pre_ [id_ "flow-mermaid"] (toHtml diagram)
     h2_ "State type"
-    typeLink stateType
+    a_ [href_ (recipeTypeLink selected name (haskellType (rootType contract)))] (toHtml stateType)
+    h2_ "Current saved state"
+    if contractShape contract == Record [] then p_ "No state fields." else
+      details_ $ do
+        summary_ "Expand saved checkpoint"
+        renderValue selected (contractShape contract) state
   where
     names = [haskellType typ | typ@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))]
     typeLink :: String -> Html ()
@@ -388,3 +407,13 @@ expandableText text
   | otherwise = details_ [class_ "prompt"] $ do
       summary_ (toHtml (Text.take 240 text <> "…"))
       pre_ (toHtml text)
+
+recipeTypeLink :: Maybe EvolutionId -> Text -> String -> Text
+recipeTypeLink selected recipeName name = inspectionLink selected ["recipes",recipeName,"types",Text.pack name]
+
+typeReference :: (String -> Text) -> DataType -> Html ()
+typeReference link typ = case typ of
+  Algebraic _ _ _ -> a_ [href_ (link (haskellType typ))] (toHtml (haskellType typ))
+  ListType inner -> toHtml ("[" :: Text) >> typeReference link inner >> toHtml ("]" :: Text)
+  OptionalType inner -> toHtml ("Maybe (" :: Text) >> typeReference link inner >> toHtml (")" :: Text)
+  _ -> toHtml (haskellType typ)

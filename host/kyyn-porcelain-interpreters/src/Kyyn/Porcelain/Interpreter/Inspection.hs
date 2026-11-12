@@ -14,7 +14,7 @@ import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
 import Kyyn.Domain.Plugin (MethodName(..))
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.DataType (definingModule)
-import Kyyn.Domain.Recipe (StoredRecipe(..), RecipeDefinition(..), recipeDefinition, DescriptionFormat(Mermaid))
+import Kyyn.Domain.Recipe (RecipeDefinition(..), recipeDefinition, DescriptionFormat(Mermaid))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (files)
@@ -94,14 +94,14 @@ runInspection = interpret $ \_ -> \case
           _ -> unknown "tool" name
         ToolInspection declaration descriptor model <$> source implementation
       RecipeRequest name -> do
-        recipe@(StoredRecipe _ stateType _ _) <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
+        recipe <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
           [value] -> pure value
           _ -> unknown "recipe" (Text.unpack name)
         let method = recipeDefinition recipe
         flow <- case method of
           OpenRecipe _ _ -> pure Nothing
           ClosedRecipe entry -> Just <$> ExceptT (Recipe.describeRecipe (SourceRoot contract code definition []) entry Mermaid)
-        pure (RecipeInspection name method stateType flow)
+        pure (RecipeInspection name recipe flow)
   InspectEvolutionSource workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
     live@(WorkspaceSnapshot manifest@(WorkspaceManifest _ _ _ state _) _ _ _) <- ExceptT (Store.readWorkspace workspace)
     (WorkspaceSnapshot (WorkspaceManifest base name explanation _ kind) target _ _,saved,report) <-

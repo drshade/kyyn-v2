@@ -38,7 +38,8 @@ Web has two kinds of page:
 | `GET /types/<name>` | A schema type's fields, their types and descriptions |
 | `GET /queries/<name>` | Description, input and result types, the module that implements it and, when `input` is given, the result |
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
-| `GET /recipes/<name>` | Instructions or flow structure and its state type, without executing actions |
+| `GET /recipes/<name>` | Instructions or flow structure, state type and saved checkpoint, without executing actions |
+| `GET /recipes/<name>/types/<type>` | Types reachable from this recipe's checked state contract, with fields, descriptions and nested type links |
 
 Each page is complete when opened directly from a link, and links to related
 pages and to the index. The routes are stable and listed in the guide, so a link

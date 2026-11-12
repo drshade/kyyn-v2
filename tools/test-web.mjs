@@ -5,7 +5,8 @@
 // reference links, removed records, read-only routes and accepted refresh.
 // Declarations: explicit-input query results, captured modules, open/closed recipes,
 // and model-capable tools described without execution, local inspection assets,
-// Haskell markup and long instruction/flow fallbacks (browser checks are separate).
+// Haskell markup, long instruction/flow fallbacks and recipe-scoped state contracts
+// and saved checkpoints (browser presentation checks are separate).
 // Host validation and non-view freshness are deliberately deferred to #304.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -95,21 +96,33 @@ type Output = Text
 summary :: Input -> Tool (Either FetchError Output)
 summary input = interpret (A.draft "Summarise" :: Flow Text Text) input
 `);
+  write(path.join(target,'src/Checkpoint.hs'),`{-# LANGUAGE DeriveGeneric, DeriveAnyClass, OverloadedStrings #-}
+module Checkpoint where
+import GHC.Generics (Generic)
+import Data.Text (Text)
+import Kyyn.Schema (Contract(..))
+import qualified Agentic.Contract as A
+data Mark = Pending | Seen { note :: Text } deriving (Eq, Show, Generic, Contract)
+data State = State { marks :: [Mark], latest :: Maybe Mark } deriving (Eq, Show, Generic)
+instance Contract State where
+  contract = A.field "marks" "Previously examined items" A.genericContract
+`);
   const recipeSource=`module DemoRecipe where
 import qualified Agentic as A
 import Kyyn.Agentic (Flow, Step)
 import Kyyn.Recipe
 import Kyyn.Workspace.FactEdits (RootEdit)
 import qualified Schema
-flow :: Flow (RecipeInput Schema.Root () ()) (RecipeProposal RootEdit ())
+import qualified Checkpoint
+flow :: Flow (RecipeInput Schema.Root () Checkpoint.State) (RecipeProposal RootEdit Checkpoint.State)
 flow = A.act action
-action :: RecipeInput Schema.Root () () -> Step (RecipeProposal RootEdit ())
+action :: RecipeInput Schema.Root () Checkpoint.State -> Step (RecipeProposal RootEdit Checkpoint.State)
 action _ = error "RECIPE_ACTION_MUST_NOT_RUN"
 `;
   write(path.join(target,'src/DemoRecipe.hs'),recipeSource);
   const longInstructions="Review tasks <carefully> " + "Keep the complete prompt available. ".repeat(20);
   const recipeEdits=`  createRecipe (RecipeId "open") (openRecipe unitRecipeType "${longInstructions}") ()
-  createRecipe (RecipeId "closed") DemoRecipe.flow ()`;
+  createRecipe (RecipeId "closed") DemoRecipe.flow (Checkpoint.State [Checkpoint.Seen "Saved <checkpoint>"] Nothing)`;
 
   const change=path.join(d.path,'change/Evolution.hs');
   write(path.join(target,'src/Notes.txt'),'<script>alert(1)</script> & source');
@@ -120,6 +133,7 @@ import Kyyn.Schema
 import qualified Schema
 import qualified Kyyn.Workspace.Target as Target
 import qualified Kyyn.Workspace.Target.RecipeFlows.DemoRecipe as DemoRecipe
+import qualified Checkpoint
 evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) $ edit (Rationale "First task" []) $ do
   within Target.todos (append (Fact (FactId "one") (Schema.Todo "First lesson" [])))
@@ -230,6 +244,20 @@ ${recipeEdits}
   await request(preview,'/_inspection/missing.js',{},404);
   await request(preview,'/_inspection/inspection.mjs',{method:'POST'},405);
   assert(closedPage.includes('DemoRecipe.flow'));assert(closedPage.includes('State type'));
+  assert(closedPage.includes('Current saved state'));assert(closedPage.includes('Saved &lt;checkpoint&gt;'));
+  assert(closedPage.includes('href="/recipes/closed/types/Checkpoint.State'+selected+'"'));
+  const stateType=await page('/recipes/closed/types/Checkpoint.State'+selected);
+  assert(stateType.includes('Previously examined items'));
+  assert(stateType.includes('[<a href="/recipes/closed/types/Checkpoint.Mark'+selected+'"'));
+  assert(stateType.includes('Maybe (<a href="/recipes/closed/types/Checkpoint.Mark'+selected+'"'));
+  assert(stateType.includes('href="/recipes/closed'+selected+'"'));
+  const markType=await page('/recipes/closed/types/Checkpoint.Mark'+selected);
+  assert(markType.includes('Pending'));assert(markType.includes('note'));
+  assert((await page('/recipes/open/types/%28%29'+selected)).includes('No state fields.'));
+  await page('/types/Checkpoint.State'+selected,404);
+  await page('/recipes/missing/types/Checkpoint.State'+selected,404);
+  await page('/recipes/open/types/Checkpoint.State'+selected,404);
+  await page('/recipes/closed/types/Schema.Todo'+selected,404);
   for (const kind of ['queries','tools','recipes']) await page('/'+kind+'/missing'+selected,404);
   const candidates=path.join(kb,'.kyyn/candidates');
   assert.equal(fs.readFileSync(path.join(candidates,'checked',d.id),'utf8'),fs.readFileSync(path.join(candidates,'latest',d.id),'utf8'),'Checked candidate should reuse the saved directory');
@@ -263,12 +291,14 @@ ${recipeEdits}
   write(schemaFile,'broken schema');
   assert((await page('/types/Schema.Todo'+selected)).includes('related'));
   assert((await page('/records/todos/one'+selected)).includes('First lesson'));
-  const sources=['Report.hs','DemoTools.hs','DemoRecipe.hs'];
+  const sources=['Report.hs','DemoTools.hs','DemoRecipe.hs','Checkpoint.hs'];
   const backups=sources.map(name=>fs.readFileSync(path.join(target,'src',name),'utf8'));
   sources.forEach(name=>write(path.join(target,'src',name),'broken live source'));
   assert((await page('/queries/titles'+selected+'&input='+encodeURIComponent('{=}'))).includes('First lesson'));
   assert((await page('/tools/summarise'+selected)).includes('module DemoTools where'));
   assert((await page('/recipes/closed'+selected)).includes('DemoRecipe.flow'));
+  assert((await page('/recipes/closed/types/Checkpoint.State'+selected)).includes('Previously examined items'));
+  assert((await page('/recipes/closed'+selected)).includes('Saved &lt;checkpoint&gt;'));
   sources.forEach((name,i)=>write(path.join(target,'src',name),backups[i]));
   write(schemaFile,savedSchema);
   write(change,'broken again');
@@ -286,13 +316,18 @@ ${recipeEdits}
   assert(!(await (await request(accepted,'/kb/views/training/')).text()).includes('UNCOMMITTED'));
   fs.writeFileSync(acceptedPage,committedPage);
   const e=cli(['evolution','new','next-lesson']);
-  write(path.join(e.path,'change/Evolution.hs'),evolution.replace(recipeEdits,'').replace('"one"','"two"').replace('First lesson','Second lesson').replace('Schema.Todo "Second lesson" []','Schema.Todo "Second lesson" [FactId "one"]'));
-  cli(['evolution','check',e.id]);cli(['evolution','ready',e.id]);cli(['evolution','accept',e.id]);
+  write(path.join(e.path,'change/Evolution.hs'),evolution.replace(recipeEdits,'  updateRecipe (RecipeId \"closed\") DemoRecipe.flow (Checkpoint.State [Checkpoint.Seen \"New checkpoint\"] (Just Checkpoint.Pending))').replace('"one"','"two"').replace('First lesson','Second lesson').replace('Schema.Todo "Second lesson" []','Schema.Todo "Second lesson" [FactId "one"]'));
+  cli(['evolution','check',e.id]);
+  assert((await page('/recipes/closed?evolution='+e.id)).includes('New checkpoint'));
+  assert((await page('/recipes/closed')).includes('Saved &lt;checkpoint&gt;'));
+  cli(['evolution','ready',e.id]);cli(['evolution','accept',e.id]);
   assert.deepEqual((await query(accepted,'titles',{})).result,['First lesson','Second lesson']);
   for (const [kind,name] of [['queries','titles'],['tools','summarise'],['recipes','open'],['recipes','closed']]) {
     const rendered=await (await request(accepted,'/'+kind+'/'+name)).text();
     assert(rendered.includes('Accepted KB'));assert(!rendered.includes('Page unavailable'));
   }
+  assert((await page('/recipes/closed')).includes('New checkpoint'));
+  assert((await page('/recipes/closed/types/Checkpoint.State')).includes('Previously examined items'));
   const acceptedQuery=await (await request(accepted,'/queries/titles?input='+encodeURIComponent('{=}'))).text();
   assert(acceptedQuery.includes('Second lesson'));
   const second=await (await request(accepted,'/records/todos/two')).text();
