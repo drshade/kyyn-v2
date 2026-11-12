@@ -84,7 +84,6 @@ where they resolve, not to an inferred historical payload. Blob attachments are 
 metadata. Inspection does not read the secret store.
 
 Plugin and output pages follow the selected accepted or checked snapshot.
-Model and tap configuration are not shown on the index.
 Plugin contract links are scoped by connector and role,
 including captured-method input/result contracts, rather than matched by name
 against the KB schema. Output inspection describes the renderer and sink without
