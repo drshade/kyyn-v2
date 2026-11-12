@@ -33,7 +33,6 @@ import qualified System.Process.Typed as Process
 import Kyyn.Schema
 import Kyyn.Types.Query (Query, CollectionBinding(..), readCollection)
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import qualified Kyyn.Types.Contract as D
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Runtime.Guest
 import qualified Kyyn.Plumbing.Protocol.Frame as Frame

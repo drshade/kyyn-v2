@@ -118,8 +118,8 @@ rules apply unchanged.
 
 Archive export is defined in ADR 0010. Only its notes subtree is
 read from the live workspace; captured manifest fields, source and fixed report
-are not replaced by current files. The host-produced Dhall record and its durable
-version/readability policy are owned there. Root export and archive export return
+are not replaced by current files. The host-produced Dhall record and its structural
+report are owned there. Root export and archive export return
 the two replacements for one commit, not two publication steps.
 
 Keep evaluation, validation and diff inspection available before acceptance.

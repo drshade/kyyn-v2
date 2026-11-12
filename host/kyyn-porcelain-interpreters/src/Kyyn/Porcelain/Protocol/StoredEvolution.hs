@@ -15,7 +15,7 @@ import Data.List (sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout, descriptionOf)
+import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout, rootType)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.CompiledEntry (compiledEntries, entryDescription)
 import Kyyn.Domain.Guest (CheckedGuest, checkedEntries, InspectedSchema(..))
@@ -29,7 +29,7 @@ import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
-import qualified Kyyn.Types.Contract as D
+import Kyyn.Domain.DataType (haskellType)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.SnapshotWire (SnapshotWire)
 import Kyyn.Plumbing.Capability.Failure (Failure)
@@ -94,7 +94,7 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
       contract <- stateContract method declared
       let name = case definition of
             OpenRecipe _ authored -> authored
-            ClosedRecipe _ -> Text.unpack (D.descriptionTypeName (descriptionOf contract))
+            ClosedRecipe _ -> haskellType (rootType contract)
       state <- ExceptT (checkRecipeValue contract value)
       pure (Fact identity (StoredRecipe method name contract state))
     stateContract method name = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,

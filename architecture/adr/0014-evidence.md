@@ -965,9 +965,9 @@ For open recipes the persisted definition includes the selected state type name.
 For closed recipes it contains the flow name instead; inspection derives both
 request and state types from that signature. StoredRecipe.stateType above is the
 resolved in-memory projection, not an additional closed-recipe declaration.
-State decoding and typed state handles match by contract identity. Type names
+State values decode against the current declared or flow-derived type. Type names
 provide source references for open recipes and descriptive labels for closed
-recipes; aliases do not introduce another identity check.
+recipes.
 
 Persist definitions in `root/recipes.dhall` and each state's hermetic Dhall at
 `root/recipes/<recipe-id>/state.dhall`. The selected authored state type determines
@@ -1015,7 +1015,7 @@ Old flow references are read as stored definitions only; migration never imports
 them to discover their former state types.
 
 Creation refuses an existing ID; update/removal refuse a missing ID. Typed update
-checks the currently decoded state contract before applying its conversion. A
+decodes the selected state using its current type before applying its conversion. A
 state-shape change that cannot enter the target-typed phase uses preparation,
 not an attempt to load an obsolete flow. The heterogeneous container stays behind
 the KnowledgeBase wrapper; authors do not handle universal JSON values or codecs.

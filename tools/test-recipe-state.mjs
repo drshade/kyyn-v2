@@ -1,6 +1,7 @@
 // Staged/installed CLI: typed recipe creation, migration, identity and removal.
 // Checks candidate/archive reload, acceptance and per-recipe isolation, including
-// authored recipe-based state edits. No closed flows/providers.
+// authored recipe-based state edits and documentation-only state-type changes.
+// No closed flows/providers.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -89,6 +90,9 @@ import qualified Kyyn.Workspace.Target.RecipeTypes.ReviewV2.State as New`,
   assert.equal(fs.readFileSync(statePath('calendar'), 'utf8'), calendar);
 
   const identity = cli(['evolution', 'new', 'unchanged-recipes']).result;
+  const documentedType = path.join(identity.path, 'target/src/ReviewV2.hs');
+  fs.writeFileSync(documentedType, fs.readFileSync(documentedType, 'utf8')
+    .replace('data State =', '-- | Remember the current review window.\ndata State ='));
   const files = ['mail', 'calendar', 'stateless'].map(name => fs.readFileSync(statePath(name), 'utf8'));
   accept(identity);
   assert.deepEqual(['mail', 'calendar', 'stateless'].map(name => fs.readFileSync(statePath(name), 'utf8')), files);

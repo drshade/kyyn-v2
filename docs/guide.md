@@ -630,7 +630,8 @@ libraries through the KB's flake and update its lock explicitly as part of an
 evolution. Checks may fetch or build locked dependencies; they do not update pins.
 The guest build exports `packages.${system}.kyyn-guest`. Updating the installed
 host does not rewrite existing KB locks or plugin source. If a KB's description
-no longer matches the host protocol, repair its SDK pin/code and check it again.
+returns messages that do not decode under the host protocol types, repair its
+SDK pin/code and check it again.
 
 ### Explore a complete evidence capture
 

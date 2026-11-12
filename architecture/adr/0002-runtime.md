@@ -135,7 +135,7 @@ between describe and invoke. Descriptions may be cached by build identity, but
 are derived data, not an additional authored or committed schema authority.
 
 ```haskell
-data GuestDescription -- current protocol identity, contracts, entries and API exports
+data GuestDescription -- contracts, entries and API exports
 
 data GuestInspection :: Effect where
   DescribeGuest
@@ -157,10 +157,9 @@ not a free-text dispatch name or a separately compiled adapter.
 
 Description takes no facts, secrets or capability grants. It returns build-derived
 structure and pure authored metadata, not query results. The host rejects malformed
-descriptions, unsupported shapes and an incompatible current protocol identity;
-there is no version negotiation or historical runtime. Different SDK revisions may
-implement the same current protocol. The author updates an incompatible pin through
-ordinary source repair; the host does not rewrite the lock automatically.
+descriptions and unsupported shapes. Description and invocation messages decode
+against the current protocol types. Decode failures identify the affected message.
+The author repairs the SDK pin/code through ordinary source changes.
 
 Invocations retain the existing typed entry contracts and capability requests.
 Only request/result data crosses the boundary; a generated adapter holds the live

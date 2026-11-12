@@ -60,6 +60,10 @@ projection or defaulting opportunities. Ordinary target scalar codecs apply when
 selected. There is no extra decode/re-encode equality gate and no assertion that
 an input type reproduces an old nominal contract.
 
+Open recipe definitions declare their state type; closed recipe definitions identify
+the flow from which the current build derives the state type. Recipe state decodes
+against that current type.
+
 All retained fields, facts and recipe states must eventually decode under the
 complete target application and pass its normal validation. Untouched data does
 not bypass that check. Semantic repairs may start from structurally readable but
@@ -499,7 +503,9 @@ steps. Repeated changes to one record retain each step even if the final changes
 cancel. No-op rationales remain visible without inventing changed facts. The
 host archives the fixed report, captured target/change source and base selection
 atomically with the new root under ADR 0012. Reports are readable without running
-historical guest code; no requirement archives failed or abandoned attempts.
+historical guest code. The host decodes the Dhall record against its current
+record type and reports a located decode error if it cannot be read; no requirement
+archives failed or abandoned attempts.
 
 Record history uses Git revisions and `(collection name, FactId)` to find accepted
 report entries. Identity changes have no inferred lineage. Direct Git edits may

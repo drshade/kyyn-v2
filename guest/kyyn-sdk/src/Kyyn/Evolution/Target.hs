@@ -166,5 +166,5 @@ envelopeId _ = failure "Invalid fact envelope"
 recipeContext :: FactId -> Either EvolutionFailure a -> Either EvolutionFailure a
 recipeContext (FactId name) = either (\(EvolutionFailure diagnostics) -> Left (EvolutionFailure
   [Diagnostic level diagnosticCode ("Recipe " <> name <> ": " <> diagnosticMessage <>
-    ". Use migrateRecipe or retireRecipe to replace obsolete stored definitions/state.") diagnosticLocation
+    ". If the stored state cannot decode under the current type, use migrateRecipe or retireRecipe.") diagnosticLocation
   | Diagnostic level diagnosticCode diagnosticMessage diagnosticLocation <- diagnostics])) Right

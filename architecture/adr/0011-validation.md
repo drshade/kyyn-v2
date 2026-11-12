@@ -294,23 +294,11 @@ author code-based checks in the ordinary validator.
 Checking examples is allowed on structurally readable candidates before they earn
 `Validated`; ordinary browsing still requires validation. Incompatible query
 contracts after schema migration produce actionable diagnostics, not silent skips.
-Persist the example's argument/result values and whole-contract fingerprints,
-not just a query name and an untyped expected literal. Metadata records the query
-name, requirement, explanation and the lowercase hexadecimal input/result
-ContractIds from ADR 0005. Compare fingerprints before decoding saved values;
-a mismatch asks the author to rebuild the example, never silently rebinds it.
-The stored identity is enough for compatibility checking. Serializing the complete
-DataType/SchemaMetadata again would only add a second representation to maintain;
-Git retains the schema source for historical inspection. This is contract identity,
-not a code seal or implementation pin. Do not bypass whole-contract identity
-using shape-only equality. Compare the saved argument/result contract identities with the selected query's
-argument/result contracts, not with the whole Root contract. A Root schema change
-alone does not invalidate an assertion whose query contracts remain equal. The
-comparison still uses each whole contract, including its roles; there is no separate
-presentation-only compatibility rule. When a query contract changes, the author explicitly
-rebuilds the example against the new descriptor, checks its values and reviews the
-change. A compatible assertion is carried forward in the target copy without
-re-entering it for every evolution; no automatic compatibility subsystem is needed.
+Persist the example's argument/result values. Metadata records its name, query,
+requirement and explanation. Decode arguments and expected results against the
+selected query's current contracts; a decode failure identifies the example.
+An example whose values decode remains usable after documentation or metadata
+edits. Authors repair values that do not decode under a changed query type.
 `checkCandidate` compiles the candidate's checking code, runs semantic checks and
 examples, and returns the same context and fixed
 evolution report with its validated payload. It does not infer supporting evidence

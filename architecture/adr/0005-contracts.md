@@ -111,11 +111,11 @@ The checker reports the first incoherence. A role may name a single
 reachable instantiation of a polymorphic record, but multiple distinct reachable
 instantiations of that name are ambiguous and are rejected.
 
-The contract identity is SHA-256 of a version-tagged JSON-array encoding
+The contract identity is SHA-256 of a JSON-array encoding
 of resolved types and all metadata, including descriptions and declaration order.
 It does not use derived Show output or claim behavioral/source-package identity.
-Declaration reordering may conservatively invalidate it. There is no separate
-presentation identity or compatibility exception.
+The host computes it from the checked structure and metadata for in-process
+value/contract agreement. Stored values decode against the current type.
 
 A nullary union arm has `Nothing` for its payload shape; that is separate from a
 value of an optional type. Checking rejects duplicate field/case names and invalid

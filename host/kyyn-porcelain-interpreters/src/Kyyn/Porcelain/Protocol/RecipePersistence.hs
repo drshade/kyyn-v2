@@ -13,14 +13,13 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Recipe (recipeId, RecipeId(..))
-import Kyyn.Domain.Recipe (RecipeDefinition, StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
-import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape, descriptionOf)
+import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
+import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape, rootType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import qualified Kyyn.Types.Contract as D
+import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiagnostic)
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..), haskellType)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.Recipes (recipesShape, recipesValue, parseRecipes)
@@ -58,7 +57,7 @@ decodeStoredRecipes definitions tree = runExceptT $ do
     (Fact (FactId name) _,_,contract) <- definitions] tree)
   traverse (\(Fact identity@(FactId name) definition,stateType,contract) -> do
     value <- maybe (bad ("Missing state for " ++ Text.unpack name)) pure (lookup (RecipeId name) states)
-    pure (Fact identity (StoredRecipe (recipeMethod definition) stateType contract value))) definitions
+    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ authored -> authored; ClosedRecipe _ -> stateType) contract value))) definitions
 
 encodeRecipeContracts :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] ByteString)
@@ -78,7 +77,7 @@ decodeRecipeContracts bytes = runExceptT $ do
     (withObject "Recipe contract" $ \fields -> do
       name <- FactId <$> fields .: "id"
       contract <- fields .: "contract" >>= restoreCheckedSnapshot
-      pure ((\checkedContract -> (name,Text.unpack (D.descriptionTypeName (descriptionOf checkedContract)),checkedContract)) <$> contract))) value)
+      pure ((\checkedContract -> (name,haskellType (rootType checkedContract),checkedContract)) <$> contract))) value)
   ExceptT (pure (sequence restored))
 
 recipeContractsShape :: Shape
@@ -105,7 +104,9 @@ decodeRecipeStates entries tree = runExceptT $ do
   traverse (\(path,(ident,contract)) -> do
     bytes <- maybe (bad ("Missing state: " ++ relativeName path)) pure (lookup path (files tree))
     source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
-    value <- ExceptT (decodeValue (contractShape contract) source)
+    value <- ExceptT (fmap (either (Left . map (\(Diagnostic level code message _) ->
+      Diagnostic level code message (Just (SourceLocation (Text.pack (relativeName path)) 1 1)))) Right)
+      (decodeValue (contractShape contract) source))
     pure (ident,CheckedValue (contractId contract) value)) (zip paths entries)
 
 statePaths :: [RecipeId] -> Either String [RelativePath]

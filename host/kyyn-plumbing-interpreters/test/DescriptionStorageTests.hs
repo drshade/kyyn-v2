@@ -1,5 +1,5 @@
 -- Descriptor persistence preserves resolved identity, fields, annotations and
--- metadata; references cannot introduce cycles and fingerprints are rechecked.
+-- metadata; references cannot introduce cycles. Checked identities are derived.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
@@ -47,15 +47,14 @@ main = do
   restored <- right (parseEither restoreSnapshot decoded) >>= right
   unless (restored == contract) (fail "Stored contract changed")
   case decoded of
-    Object fields -> do
-      checked <- right (parseEither restoreSnapshot (Object (Keys.insert "fingerprint" (String "wrong") fields)))
-      unless (isLeft checked) (fail "Forged contract identity accepted")
+    Object fields -> unless (not (Keys.member "fingerprint" fields))
+      (fail "Stored descriptor contains a redundant contract fingerprint")
     _ -> fail "Expected contract object"
   forM_ ["0","-1","01"] $ \index ->
     unless (isLeft (parseEither parseDescription (object
       ["types" .= ([] :: [Value]), "nodes" .= [object ["tag" .= ("List" :: String), "value" .= (index :: String)]]])))
       (fail "Cyclic, negative or noncanonical description reference accepted")
-  putStrLn "Descriptor storage and identity checks passed."
+  putStrLn "Descriptor storage and derived identity checks passed."
   where
     right :: Show e => Either e a -> IO a
     right = either (fail . show) pure

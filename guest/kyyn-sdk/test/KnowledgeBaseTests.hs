@@ -5,8 +5,6 @@ import Kyyn.Evolution
 import Kyyn.Types.StoredShape (StoredShape(..))
 import qualified Kyyn.Edit.Internal as Internal
 import Kyyn.Recipe.Internal (KnowledgeBase(..), RecipeType(..), StoredRecipe(..), storeRecipe)
-import qualified Kyyn.Types.Contract as Contract
-import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Data.Aeson (Value(..))
