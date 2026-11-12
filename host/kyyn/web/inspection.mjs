@@ -70,7 +70,6 @@ async function showFlow(source, container) {
       const button = element('button', label);
       button.type = 'button'; button.addEventListener('click', action); toolbar.append(button);
     }
-    toolbar.append(element('span', 'Select a step to read its details.'));
     for (const node of drawing.querySelectorAll('.node, .cluster')) {
       const id = node.id.match(/^recipe-diagram-flowchart-(n\d+)-\d+$/)?.[1] ?? node.id.replace(/^recipe-diagram-/, '');
       const detail = details.get(id);
@@ -92,7 +91,7 @@ async function showFlow(source, container) {
     resize();
     document.querySelector('#flow-source').open = false;
   } catch {
-    viewport.replaceChildren(element('p', 'Diagram unavailable. Read the steps below or expand the Mermaid source.'));
+    viewport.replaceChildren(element('p', 'Diagram unavailable.'));
     document.querySelector('#flow-source').open = true;
   }
 }

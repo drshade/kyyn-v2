@@ -40,6 +40,9 @@ Web has two kinds of page:
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure, state type and saved checkpoint, without executing actions |
 | `GET /recipes/<name>/types/<type>` | Types reachable from this recipe's checked state contract, with fields, descriptions and nested type links |
+| `GET /connectors/<plugin>/<instance>` | Accepted connector configuration, latest local fetch/report and evidence items |
+| `GET /evidence/<plugin>/<instance>/<id>` | Current local payload, fingerprint, references and blob metadata |
+| `GET /connectors/<plugin>/<instance>/types/<role>/<type>` | Payload or report contract types scoped to the connector capture |
 
 Each page is complete when opened directly from a link, and links to related
 pages and to the index. The routes are stable and listed in the guide, so a link
@@ -66,6 +69,15 @@ context shown. The source diff is that candidate's captured source against
 the base. An evolution with no checked candidate shows its explanation and a
 source diff of the live target, labelled as unchecked. Check diagnostics are
 not stored; the command that ran the check reports them.
+
+Connector and evidence pages show this machine's current local capture and use
+accepted connector configuration; `?evolution` does not select their data. The
+index labels that section separately from snapshot configuration. Reads use the
+existing evidence store and never fetch. Fetch summaries and reports describe
+only the latest capture. Not-fetched and changed-producer diagnostics remain
+visible. Evidence references in evolution rationales link to current local items
+where they resolve, not to an inferred historical payload. Blob attachments are listed as
+metadata. Inspection does not read the secret store.
 
 Query and tool pages show the captured module that contains the implementation,
 whole, not an extracted definition.

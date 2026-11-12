@@ -1,6 +1,13 @@
-{-# LANGUAGE GADTs, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE GADTs, LambdaCase, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Porcelain.Interpreter.Inspection (runInspection) where
 
+import Control.Monad (forM)
+import Kyyn.Domain.Evidence
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), PayloadLocation(..), indexedEvidence)
+import Kyyn.Types.Evidence (EvidenceRef(..))
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as EvidenceStore
+import qualified Kyyn.Porcelain.Capability.EvidenceInspection as EvidenceRead
+import qualified Kyyn.Porcelain.Capability.PluginPreparation as Plugins
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (nub, sort, isSuffixOf)
 import qualified Data.Text as Text
@@ -11,7 +18,7 @@ import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
-import Kyyn.Domain.Plugin (MethodName(..))
+import Kyyn.Domain.Plugin (MethodName(..), ConnectorName(..), pluginName)
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.DataType (definingModule)
 import Kyyn.Domain.Recipe (RecipeDefinition(..), recipeDefinition, DescriptionFormat(Mermaid))
@@ -35,9 +42,44 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, loadRootValueForChecking, readRootDefinition)
 
 runInspection :: (RootOpening :> es, RootStore :> es, Store.EvolutionStore :> es, Git.Git :> es,
+  Plugins.PluginPreparation :> es, EvidenceStore.EvidenceStore :> es, EvidenceRead.EvidenceInspection :> es,
   Query.RootExecution :> es, Tool.ToolPreparation :> es, Recipe.RecipeInspection :> es, Dhall.DhallHandling :> es)
   => Eff (Inspection : es) a -> Eff es a
 runInspection = interpret $ \_ -> \case
+  InspectConnectors (SnapshotInspection _ _ (Root _ _ code _) _ _) -> runExceptT $ do
+    plugins <- ExceptT (Plugins.preparePlugins code)
+    forM [(package,name,binding,connector,payload,config) |
+      Plugins.PreparedPlugin package instances <- plugins,
+      Plugins.ConfiguredConnector name binding connector@Plugins.PreparedConnector{Plugins.payloadContract = payload} config <- instances] $
+      \(Plugins.PreparedPackage plugin identity _,name@(ConnectorName instanceName),binding,connector,payload,config) -> do
+        captured <- ExceptT (Right <$> EvidenceStore.openCurrentEvidence
+          (EvidenceSelection (ConnectorInstanceRef plugin instanceName) connector.connectorType identity))
+        let current = case captured of
+              Left problem -> Left [evidenceProblemDiagnostic problem]
+              Right Nothing -> Left [evidenceProblemDiagnostic NotFetched]
+              Right (Just index) -> Right index
+        pure (ConnectorInspection plugin identity name binding connector.connectorType
+          connector.configContract config payload current)
+  InspectEvidenceItem connector key -> runExceptT $ do
+    index <- ExceptT (pure connector.capture)
+    found <- ExceptT (fmap (either (Left . pure . evidenceProblemDiagnostic) Right) (EvidenceStore.readCapturedEvidence index key))
+    item <- maybe (throwE [errorDiagnostic "inspection.unknown" "No current evidence with this ID"]) pure found
+    let refs = case indexedEvidence index key of
+          Just (Evidence _ _ (Available (PayloadLocation _ _ blobs))) -> blobs
+          _ -> []
+    pure (EvidenceItemInspection key item refs)
+  InspectEvidenceReferences kb revision references -> do
+    groups <- forM (nub [(ref.producer,ref.instanceName) | ref <- references]) $ \(producer,instanceName) -> do
+      current <- runExceptT $ do
+        plugin <- checked (pluginName (Text.unpack producer))
+        selection <- ExceptT (EvidenceRead.selectEvidence kb revision plugin (ConnectorName (Text.unpack instanceName)))
+        ExceptT (EvidenceRead.currentEvidence selection)
+      pure ((producer,instanceName),current)
+    pure [(ref,do
+      EvidenceCapture _ _ items _ <- maybe (Left [errorDiagnostic "evidence.not-found" "Not in local evidence"]) id
+        (lookup (ref.producer,ref.instanceName) groups)
+      if any (\(EvidenceId key,_,_) -> key == ref.source) items then Right ()
+      else Left [errorDiagnostic "evidence.not-found" "Not in local evidence"]) | ref <- references]
   InspectSnapshot kb@(KnowledgeBase repository _) revision selected -> runExceptT $ do
     (base,root@(Root _ _ code _)) <- case selected of
       Nothing -> do

@@ -1,6 +1,12 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 module Kyyn.Web.Inspection
-  ( InspectionRoute(..), renderInspection, renderInspectionError, inspectionLink ) where
+  ( InspectionRoute(..), renderInspection, renderInspectionError, inspectionLink, connectorFor, localRoute ) where
 
+import qualified Data.Map.Strict as Map
+import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..), EvidenceId(..), EvidenceFingerprint(..), FetchSummary(..), FetchId(..), FetchReport(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..))
+import Kyyn.Domain.Blob (BlobRef(..), sdkBlobRefType)
+import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), ConnectorTypeName(..), BindingName(..), PackageIdentity(..))
 import Control.Monad (forM_, unless)
 import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
 import Data.Aeson (Value(..), encode)
@@ -45,15 +51,16 @@ import Kyyn.Types.SchemaMetadata
 data InspectionRoute = IndexPage | EvolutionPage EvolutionId | CollectionPage String
   | RecordPage String Text | TypePage String
   | QueryPage String (Maybe Text) | ToolPage String | RecipePage Text | RecipeTypePage Text String
+  | ConnectorPage Text Text | EvidencePage Text Text Text | CaptureTypePage Text Text Text String
 
 -- Keep routing and data acquisition outside the HTML renderer.
 renderInspection :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> InspectionRoute
-  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Maybe DeclarationInspection -> Either [Diagnostic] (Html ())
-renderInspection selected snapshot route summaries evolution declaration = do
+  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Maybe DeclarationInspection -> LocalInspection -> Either [Diagnostic] (Html ())
+renderInspection selected snapshot route summaries evolution declaration local@(LocalInspection _ _ references) = do
   (title,body) <- case route of
-    IndexPage -> Right ("Knowledge base", indexBody selected snapshot summaries)
+    IndexPage -> Right ("Knowledge base", indexBody selected snapshot summaries >> localIndex local)
     EvolutionPage identity -> case evolution of
-      Just details -> Right ("Evolution " <> Text.pack (evolutionIdName identity), evolutionBody selected snapshot details)
+      Just details -> Right ("Evolution " <> Text.pack (evolutionIdName identity), evolutionBody selected snapshot details references)
       Nothing -> missing "evolution" (evolutionIdName identity)
     CollectionPage name -> do
       current <- snapshot
@@ -85,6 +92,31 @@ renderInspection selected snapshot route summaries evolution declaration = do
           toHtml ("State type for " :: Text)
           a_ [href_ (inspectionLink selected ["recipes",recipeName])] (toHtml recipeName)
         typeBody (recipeTypeLink selected recipeName) contract target)
+    ConnectorPage plugin name -> do
+      connector <- connectorFor local plugin name
+      pure (plugin <> " / " <> name, connectorBody connector)
+    EvidencePage plugin name _ -> do
+      connector <- connectorFor local plugin name
+      case local of
+        LocalInspection _ (Just item) _ -> pure (plugin <> " / " <> name, evidenceItemBody connector item)
+        _ -> missing "evidence" "item"
+    CaptureTypePage plugin name role nameOfType -> do
+      connector <- connectorFor local plugin name
+      contract <- case role of
+        "payload" -> Right (capturePayload connector)
+        "report" -> do
+          index <- connector.capture
+          case index.report of
+            Just (FetchReport contract _) -> Right contract
+            Nothing -> missing "fetch report" (Text.unpack name)
+        _ -> missing "capture contract" (Text.unpack role)
+      target <- case [t | t <- reachableTypes (rootType contract), haskellType t == nameOfType] of
+        t:_ -> Right t
+        _ -> missing "capture type" nameOfType
+      pure (Text.pack nameOfType, do
+        localNotice
+        p_ $ a_ [href_ (connectorLink connector)] "Connector"
+        typeBody (captureTypeLink connector role) contract target)
     QueryPage name _ -> declared name
     ToolPage name -> declared name
     RecipePage name -> declared (Text.unpack name)
@@ -219,6 +251,9 @@ renderValue selected shape value = case (shape,value) of
     case (lookup (Text.unpack tag) arms,Keys.lookup "value" fields) of
       (Just (Just inner),Just payload) -> renderValue selected inner payload
       _ -> mempty
+  (Scalar (ExactScalar Contract.BlobRefScalar),_) ->
+    either (const (toHtml (scalarText value))) (\fields -> renderValue selected fields value) (shapeOf sdkBlobRefType)
+  (Scalar TextScalar,String text) -> span_ [style_ "white-space:pre-wrap;overflow-wrap:anywhere"] (toHtml text)
   (Reference target,String identity) -> a_ [href_ (inspectionLink selected ["records",Text.pack target,identity])] (toHtml identity)
   _ -> toHtml (scalarText value)
 
@@ -276,8 +311,8 @@ typeFields wanted description = case description of
     fields (Contract.CheckedDescription _ inner) = fields inner
     fields inner = typeFields wanted inner
 
-evolutionBody :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> EvolutionInspection -> Html ()
-evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ explanation state _) source report changes) = do
+evolutionBody :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> EvolutionInspection -> [(EvidenceRef,Either [Diagnostic] ())] -> Html ()
+evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ explanation state _) source report changes) references = do
   p_ (toHtml explanation)
   p_ (toHtml (stateLabel state <> " · base " <> Text.pack (revisionName base)))
   p_ $ case source of
@@ -289,7 +324,7 @@ evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ e
     Just (EvolutionReport _ steps) -> forM_ (zip [1 :: Int ..] steps) $ \(number,SnapshotStep origin (Rationale why evidence) changed) -> section_ $ do
       h3_ (toHtml (Text.pack (show number) <> " · " <> originLabel origin))
       p_ (toHtml why)
-      forM_ evidence evidenceBody
+      forM_ evidence (evidenceBody references)
       forM_ changed $ \change -> case change of
         SnapshotFactChange name (FactId identity) before after -> do
           h4_ $ recordLink name identity (name <> "/" <> identity)
@@ -311,13 +346,16 @@ evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ e
     members name identities = if null identities then p_ "No records." else
       ul_ $ forM_ identities $ \(FactId identity) -> li_ (recordLink name identity identity)
 
-evidenceBody :: EvidenceRef -> Html ()
-evidenceBody (EvidenceRef producer instanceName source references) = details_ $ do
+evidenceBody :: [(EvidenceRef,Either [Diagnostic] ())] -> EvidenceRef -> Html ()
+evidenceBody resolved ref@(EvidenceRef producer instanceName source references) = details_ $ do
   summary_ "Evidence"
   dl_ $ do
     dt_ "Producer"; dd_ (toHtml producer)
     dt_ "Instance"; dd_ (toHtml instanceName)
-    dt_ "Source"; dd_ (toHtml source)
+    dt_ "Source"; dd_ $ case lookup ref resolved of
+      Just (Right ()) -> a_ [href_ (inspectionLink Nothing ["evidence",producer,instanceName,source])] (toHtml source)
+      Just (Left diagnostics) -> toHtml source >> diagnosticsBody diagnostics
+      Nothing -> toHtml source
     dt_ "References"; dd_ $ ul_ $ forM_ references (li_ . toHtml)
 
 recipeBody :: Maybe EvolutionId -> RecordedRecipe -> Html ()
@@ -388,7 +426,7 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     h2_ "Current saved state"
     if contractShape contract == Record [] then p_ "No state fields." else
       details_ $ do
-        summary_ "Expand saved checkpoint"
+        summary_ "State"
         renderValue selected (contractShape contract) state
   where
     names = [haskellType typ | typ@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))]
@@ -426,3 +464,110 @@ typeReference link typ = case typ of
   ListType inner -> toHtml ("[" :: Text) >> typeReference link inner >> toHtml ("]" :: Text)
   OptionalType inner -> toHtml ("Maybe (" :: Text) >> typeReference link inner >> toHtml (")" :: Text)
   _ -> toHtml (haskellType typ)
+
+localRoute :: InspectionRoute -> Bool
+localRoute ConnectorPage{} = True
+localRoute EvidencePage{} = True
+localRoute CaptureTypePage{} = True
+localRoute _ = False
+
+connectorFor :: LocalInspection -> Text -> Text -> Either [Diagnostic] ConnectorInspection
+connectorFor (LocalInspection result _ _) plugin name = do
+  connectors <- result
+  case [c | c <- connectors, Text.pack (pluginNameText c.plugin) == plugin,
+    let ConnectorName actual = c.name, Text.pack actual == name] of
+    [c] -> Right c
+    _ -> Left [errorDiagnostic "inspection.unknown" "Unknown source connector instance"]
+
+localNotice :: Html ()
+localNotice = p_ [class_ "context"] "Local capture · accepted connector configuration"
+
+connectorLink :: ConnectorInspection -> Text
+connectorLink c = let ConnectorName name = c.name
+  in inspectionLink Nothing ["connectors",Text.pack (pluginNameText c.plugin),Text.pack name]
+
+captureTypeLink :: ConnectorInspection -> Text -> String -> Text
+captureTypeLink c role name = connectorLink c <> "/types/" <> role <> "/" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 (Text.pack name)))
+
+itemLink :: ConnectorInspection -> Text -> Text
+itemLink c key = let ConnectorName name = c.name
+  in inspectionLink Nothing ["evidence",Text.pack (pluginNameText c.plugin),Text.pack name,key]
+
+capturePayload :: ConnectorInspection -> CheckedContract
+capturePayload c = either (const c.payloadContract) (\index -> index.payloadContract) c.capture
+
+localIndex :: LocalInspection -> Html ()
+localIndex (LocalInspection result _ _) = do
+  h2_ "Connectors"
+  localNotice
+  case result of
+    Left diagnostics -> diagnosticsBody diagnostics
+    Right [] -> p_ "No source connectors configured."
+    Right connectors -> ul_ $ forM_ connectors $ \c -> li_ $ do
+      let ConnectorName name = c.name; ConnectorTypeName kind = c.kind
+      a_ [href_ (connectorLink c)] (toHtml (pluginNameText c.plugin ++ " / " ++ name))
+      toHtml (" · " ++ kind)
+      case c.capture of
+        Left diagnostics -> diagnosticsBody diagnostics
+        Right index -> fetchSummaryBody False index.latest
+
+fetchSummaryBody :: Bool -> FetchSummary -> Html ()
+fetchSummaryBody detailed (FetchSummary (FetchId identity) time added updated removed options) = do
+  p_ (toHtml (time ++ " · " ++ show added ++ " added · " ++ show updated ++ " updated · " ++ show removed ++ " removed"))
+  if detailed then do
+    p_ (toHtml ("Fetch: " ++ identity))
+    h3_ "Supplied options"
+    maybe (p_ "None supplied.") (pre_ . toHtml) options
+  else mempty
+
+connectorBody :: ConnectorInspection -> Html ()
+connectorBody c = do
+  localNotice
+  let ConnectorTypeName kind = c.kind; BindingName binding = c.binding; PackageIdentity identity = c.package
+  dl_ $ do
+    dt_ "Connector type"; dd_ (toHtml kind)
+    dt_ "Binding"; dd_ (toHtml binding)
+    dt_ "Producer package"; dd_ (toHtml identity)
+  h2_ "Configuration"
+  let CheckedValue _ configuration = c.configuration
+  renderValue Nothing (contractShape c.configurationContract) configuration
+  h2_ "Payload type"
+  let name = haskellType (rootType (capturePayload c))
+  a_ [href_ (captureTypeLink c "payload" name)] (toHtml name)
+  h2_ "Latest fetch"
+  case c.capture of
+    Left diagnostics -> diagnosticsBody diagnostics
+    Right index -> do
+      fetchSummaryBody True index.latest
+      forM_ index.report $ \(FetchReport contract (CheckedValue _ value)) -> do
+        h2_ "Fetch report"
+        let reportType = haskellType (rootType contract)
+        p_ $ a_ [href_ (captureTypeLink c "report" reportType)] (toHtml reportType)
+        renderValue Nothing (contractShape contract) value
+      h2_ "Evidence"
+      if Map.null index.items then p_ "No captured items." else table_ $ do
+        thead_ $ tr_ $ th_ "Item" >> th_ "Fingerprint" >> th_ "Payload"
+        tbody_ $ forM_ (Map.toAscList index.items) $ \(key,Evidence (EvidenceFingerprint fingerprint) _ payload) -> tr_ $ do
+          td_ $ a_ [href_ (itemLink c key)] (toHtml key)
+          td_ (toHtml fingerprint)
+          td_ (toHtml (case payload of Available _ -> "Available" :: Text; Truncated -> "Truncated"))
+
+evidenceItemBody :: ConnectorInspection -> EvidenceItemInspection -> Html ()
+evidenceItemBody c (EvidenceItemInspection (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) blobs) = do
+  localNotice
+  p_ $ a_ [href_ (connectorLink c)] "Connector and latest fetch"
+  h2_ (toHtml key)
+  dl_ $ do
+    dt_ "Fingerprint"; dd_ (toHtml fingerprint)
+    dt_ "Source references"; dd_ $ ul_ $ forM_ refs (li_ . toHtml)
+  h2_ "Payload"
+  case payload of
+    Truncated -> p_ "Payload no longer retained locally."
+    Available (CheckedValue _ value) -> renderValue Nothing (contractShape (capturePayload c)) value
+  unless (null blobs) $ do
+    h2_ "Blobs"
+    forM_ blobs $ \(BlobRef digest size media name) -> dl_ $ do
+      dt_ "Name"; dd_ (toHtml (fromMaybe "Unnamed" name))
+      dt_ "Bytes"; dd_ (toHtml (show size))
+      dt_ "Media type"; dd_ (toHtml media)
+      dt_ "SHA-256"; dd_ (toHtml digest)
