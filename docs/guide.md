@@ -336,6 +336,16 @@ back to the index and related pages.
 | `/tools/NAME` | Description, input/result types, model selection and captured implementation module |
 | `/recipes/NAME` | Instructions or flow structure, state type and expandable saved checkpoint |
 | `/recipes/NAME/types/TYPE` | Checked recipe state type, fields and descriptions, with nested type links |
+| `/connectors/PLUGIN/INSTANCE` | Accepted configuration, latest local fetch/report and captured items |
+| `/evidence/PLUGIN/INSTANCE/ID` | Current local payload, fingerprint, references and blob metadata |
+| `/connectors/PLUGIN/INSTANCE/types/ROLE/TYPE` | Checked payload or fetch-report types (`ROLE` is `payload` or `report`) |
+
+The Connectors section shows this machine's current captured evidence, using
+accepted connector configuration. Connector/evidence pages ignore evolution
+selection and never fetch. Only the latest fetch is retained. Evolution evidence
+references link to current locally retained items where available.
+Stored connector configuration is displayed as written: keep credentials in the
+secret store and reference them by name; inspection never reads secret values.
 
 Haskell code is highlighted. Recipe diagrams show compact labels; select a step
 with the mouse or keyboard to expand its full prompt or questions. Use Fit and
