@@ -79,7 +79,12 @@ process.stdin.on('end', () => {
   fs.writeFileSync(nix, `#!${process.execPath}
 const fs = require('node:fs');
 const output = ${JSON.stringify(output)};
-const retention = process.argv[process.argv.indexOf('--out-link') + 1];
+const linkIndex = process.argv.indexOf('--out-link');
+if (linkIndex < 0) {
+  require('node:child_process').execFileSync('nix', process.argv.slice(2), { stdio: 'inherit' });
+  process.exit(0);
+}
+const retention = process.argv[linkIndex + 1];
 fs.symlinkSync(output, retention);
 process.stdout.write(JSON.stringify([{ drvPath: output + '.drv', outputs: { out: output } }]));
 `, { mode: 0o755 });
