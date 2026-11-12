@@ -1,7 +1,7 @@
 module Kyyn.Web.Inspection
   ( InspectionRoute(..), renderInspection, renderInspectionError, inspectionLink ) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, unless)
 import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
 import Data.Aeson (Value(..), encode)
 import qualified Data.Aeson.Key as Key
@@ -112,7 +112,10 @@ document selected snapshot title content = doctypehtml_ $ do
     meta_ [charset_ "utf-8"]
     meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1"]
     title_ (toHtml title)
-    style_ ("body{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#202832}a{color:#245a94}nav{display:flex;gap:1rem}h1{line-height:1.2}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #ddd;vertical-align:top}dt{font-weight:600}dd{margin-bottom:1rem}dd,td{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f7;padding:1rem}details{margin:1rem 0}.context{color:#556}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:1rem;min-width:0}.comparison>div{min-width:0}.diff-added{background:#e5f5e8}.diff-removed{background:#fbe7e7}.diff-context pre{color:#667}@media(max-width:700px){.comparison{grid-template-columns:1fr}}" :: Text)
+    link_ [rel_ "stylesheet", href_ "/_inspection/vendor/prism.css"]
+    script_ [src_ "/_inspection/vendor/prism.js", defer_ ""] ("" :: Text)
+    script_ [src_ "/_inspection/inspection.mjs", type_ "module"] ("" :: Text)
+    style_ ("body{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#202832}a{color:#245a94}nav{display:flex;gap:1rem}h1{line-height:1.2}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #ddd;vertical-align:top}dt{font-weight:600}dd{margin-bottom:1rem}dd,td{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f7;padding:1rem}details{margin:1rem 0}summary{cursor:pointer;overflow-wrap:anywhere}pre[class],code[class]{white-space:pre-wrap;overflow-wrap:anywhere}code[class]{text-shadow:none}.flow-viewport{overflow:auto;max-height:65vh;border:1px solid #ddd;margin:1rem 0}.flow-viewport svg{max-width:none!important;display:block}.flow-toolbar{display:flex;gap:.5rem}.flow-viewport [role=button]{cursor:pointer}.flow-viewport [role=button]:focus{outline:2px solid #245a94}.flow-step:target{border-left:3px solid #245a94;padding-left:1rem}.context{color:#556}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:1rem;min-width:0}.comparison>div{min-width:0}.diff-added{background:#e5f5e8}.diff-removed{background:#fbe7e7}.diff-context pre{color:#667}@media(max-width:700px){.comparison{grid-template-columns:1fr}}" :: Text)
   body_ $ do
     nav_ $ do
       a_ [href_ (inspectionLink selected [])] "Index"
@@ -219,7 +222,7 @@ typeBody selected root target = do
   forM_ [constructors | Algebraic _ _ constructors <- [target]] $ \constructors ->
     forM_ constructors $ \(Constructor name fields) -> do
       h2_ (toHtml name)
-      table_ $ do
+      unless (null fields) $ table_ $ do
         thead_ $ tr_ $ th_ "Field" >> th_ "Type" >> th_ "Description"
         tbody_ $ forM_ fields $ \(field,typ) -> tr_ $ do
           td_ (toHtml (fromMaybe "value" field))
@@ -274,7 +277,7 @@ evolutionBody selected snapshot (EvolutionInspection (WorkspaceManifest base _ e
   h2_ "Source changes"
   if null changes then p_ "No source changes." else forM_ changes $ \(SourceChange path before after) -> details_ $ do
     summary_ (toHtml (relativeName path))
-    sourceDiff (Text.decodeUtf8With lenientDecode <$> before) (Text.decodeUtf8With lenientDecode <$> after)
+    sourceDiff (Text.isSuffixOf ".hs" (Text.pack (relativeName path)) || Text.isSuffixOf ".lhs" (Text.pack (relativeName path))) (Text.decodeUtf8With lenientDecode <$> before) (Text.decodeUtf8With lenientDecode <$> after)
   where
     recorded = fmap (\(RecordedValue shape value) -> renderValue selected shape value)
     recordLink :: Text -> Text -> Text -> Html ()
@@ -298,7 +301,7 @@ recipeBody :: Maybe EvolutionId -> RecordedRecipe -> Html ()
 recipeBody selected (RecordedRecipe definition (RecordedValue shape value)) = do
   case definition of
     OpenRecipe instructions stateType -> do
-      p_ (toHtml instructions)
+      expandableText instructions
       p_ (toHtml ("State type: " <> Text.pack stateType))
     ClosedRecipe (FlowEntryRef flow) -> p_ (toHtml ("Flow: " <> flow))
   h5_ "State"
@@ -309,18 +312,22 @@ comparison before after = div_ [class_ "comparison"] $ do
   div_ $ h4_ "Before" >> fromMaybe (p_ "Absent") before
   div_ $ h4_ "After" >> fromMaybe (p_ "Absent") after
 
-sourceDiff :: Maybe Text -> Maybe Text -> Html ()
-sourceDiff Nothing (Just after) = h4_ "Added file" >> pre_ [class_ "diff-added"] (toHtml after)
-sourceDiff (Just before) Nothing = h4_ "Removed file" >> pre_ [class_ "diff-removed"] (toHtml before)
-sourceDiff (Just before) (Just after) = do
+sourceDiff :: Bool -> Maybe Text -> Maybe Text -> Html ()
+sourceDiff hs Nothing (Just after) = h4_ "Added file" >> pre_ [class_ "diff-added"] (sourceCode hs after)
+sourceDiff hs (Just before) Nothing = h4_ "Removed file" >> pre_ [class_ "diff-removed"] (sourceCode hs before)
+sourceDiff hs (Just before) (Just after) = do
   -- Keep line endings in the comparison so a missing final newline is visible.
   forM_ (getGroupedDiff (Text.splitOn "\n" before) (Text.splitOn "\n" after)) $ \chunk -> case chunk of
-    First removed -> pre_ [class_ "diff-removed"] (toHtml (Text.unlines (map ("- " <>) removed)))
-    Second added -> pre_ [class_ "diff-added"] (toHtml (Text.unlines (map ("+ " <>) added)))
+    First removed -> pre_ [class_ "diff-removed"] (sourceCode hs (Text.unlines (map ("- " <>) removed)))
+    Second added -> pre_ [class_ "diff-added"] (sourceCode hs (Text.unlines (map ("+ " <>) added)))
     Both unchanged _ -> details_ [class_ "diff-context"] $ do
       summary_ (toHtml (Text.pack (show (length unchanged)) <> " unchanged lines"))
-      pre_ (toHtml (Text.unlines unchanged))
-sourceDiff Nothing Nothing = mempty
+      pre_ (sourceCode hs (Text.unlines unchanged))
+sourceDiff _ Nothing Nothing = mempty
+
+sourceCode :: Bool -> Text -> Html ()
+sourceCode True text = code_ [class_ "language-haskell"] (toHtml text)
+sourceCode False text = toHtml text
 
 declarationBody :: Maybe EvolutionId -> SnapshotInspection -> DeclarationInspection -> Html ()
 declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declaration = case declaration of
@@ -344,11 +351,15 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     implementationBody implementation source
   RecipeInspection _ method stateType flow -> do
     case method of
-      OpenRecipe instructions _ -> h2_ "Instructions" >> p_ (toHtml instructions)
+      OpenRecipe instructions _ -> h2_ "Instructions" >> expandableText instructions
       ClosedRecipe (FlowEntryRef entry) -> do
         h2_ "Flow"
         p_ (toHtml entry)
-        forM_ flow (pre_ . toHtml)
+        forM_ flow $ \diagram -> do
+          div_ [id_ "recipe-flow"] mempty
+          details_ [id_ "flow-source"] $ do
+            summary_ "Mermaid source"
+            pre_ [id_ "flow-mermaid"] (toHtml diagram)
     h2_ "State type"
     typeLink stateType
   where
@@ -368,5 +379,12 @@ implementationBody implementation (ImplementationSource name contents) = do
   p_ (toHtml implementation)
   h3_ (toHtml name)
   case contents of
-    Just text -> pre_ (toHtml text)
+    Just text -> pre_ $ code_ [class_ "language-haskell"] (toHtml text)
     Nothing -> p_ "This module is supplied by a dependency; its source is not in the captured KB."
+
+expandableText :: Text -> Html ()
+expandableText text
+  | Text.length text <= 240 = pre_ (toHtml text)
+  | otherwise = details_ [class_ "prompt"] $ do
+      summary_ (toHtml (Text.take 240 text <> "…"))
+      pre_ (toHtml text)
