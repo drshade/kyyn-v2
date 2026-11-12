@@ -187,6 +187,8 @@ ${recipeEdits}
   const selected='?evolution='+d.id;
   const index=await page('/'+selected);
   assert(index.includes('/collections/todos'+selected));
+  assert(index.includes('href="/recipes/closed/types/Checkpoint.State'+selected+'" title="Checkpoint.State">State</a>'));
+  assert(index.includes('/recipes/open/types/%28%29'+selected));
   const listed=await page('/collections/todos'+selected);
   assert(listed.includes('First lesson'));assert(listed.includes('/records/todos/one'+selected));
   const record=await page('/records/todos/one'+selected);

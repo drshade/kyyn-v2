@@ -166,9 +166,16 @@ indexBody selected snapshot summaries = do
         a_ [href_ (inspectionLink selected ["tools",Text.pack name])] (toHtml name)
         toHtml (" · " ++ description)
       h2_ "Recipes"
-      ul_ $ forM_ recipes $ \(Fact (FactId name) recipe) -> li_ $ do
+      ul_ $ forM_ recipes $ \(Fact (FactId name) recipe@(StoredRecipe _ _ contract _)) -> li_ $ do
         a_ [href_ (inspectionLink selected ["recipes",name])] (toHtml name)
         toHtml (case recipeDefinition recipe of OpenRecipe _ _ -> " · Instructions" :: Text; ClosedRecipe _ -> " · Flow")
+        toHtml (" · State: " :: Text)
+        let typ = rootType contract
+            fullName = haskellType typ
+            label = case typ of
+              Algebraic typeName [] _ -> Text.takeWhileEnd (/= '.') (Text.pack typeName)
+              _ -> Text.pack fullName
+        a_ [href_ (recipeTypeLink selected name fullName), title_ (Text.pack fullName)] (toHtml label)
 
 diagnosticsBody :: [Diagnostic] -> Html ()
 diagnosticsBody diagnostics = forM_ diagnostics $ \(Diagnostic _ _ message _) -> p_ (toHtml message)
