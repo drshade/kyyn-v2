@@ -80,6 +80,7 @@ inspectPage host scope path parameters = case selection of
         ["queries",name] -> QueryPage (Text.unpack name) <$> inputParameter
         ["tools",name] -> Right (ToolPage (Text.unpack name))
         ["recipes",name] -> Right (RecipePage name)
+        ["recipes",name,"types",typ] -> Right (RecipeTypePage name (Text.unpack typ))
         _ -> Left [errorDiagnostic "inspection.unknown" "Unknown inspection page"]
       Right (selected,route)
     inputParameter = case [value | ("input",value) <- parameters] of

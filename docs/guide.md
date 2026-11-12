@@ -334,7 +334,8 @@ back to the index and related pages.
 | `/types/NAME` | Checked fields, types, descriptions and presentation roles |
 | `/queries/NAME` | Description, input/result types, captured implementation module and optional query result |
 | `/tools/NAME` | Description, input/result types, model selection and captured implementation module |
-| `/recipes/NAME` | Instructions or flow structure, and state type |
+| `/recipes/NAME` | Instructions or flow structure, state type and expandable saved checkpoint |
+| `/recipes/NAME/types/TYPE` | Checked recipe state type, fields and descriptions, with nested type links |
 
 Haskell code is highlighted. Recipe diagrams show compact labels; select a step
 with the mouse or keyboard to expand its full prompt or questions. Use Fit and
