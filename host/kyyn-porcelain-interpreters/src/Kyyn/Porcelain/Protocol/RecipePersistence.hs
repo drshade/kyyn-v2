@@ -13,13 +13,13 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Recipe (recipeId, RecipeId(..))
-import Kyyn.Domain.Recipe (RecipeDefinition, StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
-import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
+import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
+import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape, rootType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..), haskellType)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.Recipes (recipesShape, recipesValue, parseRecipes)
@@ -57,16 +57,16 @@ decodeStoredRecipes definitions tree = runExceptT $ do
     (Fact (FactId name) _,_,contract) <- definitions] tree)
   traverse (\(Fact identity@(FactId name) definition,stateType,contract) -> do
     value <- maybe (bad ("Missing state for " ++ Text.unpack name)) pure (lookup (RecipeId name) states)
-    pure (Fact identity (StoredRecipe (recipeMethod definition) stateType contract value))) definitions
+    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ authored -> authored; ClosedRecipe _ -> stateType) contract value))) definitions
 
 encodeRecipeContracts :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] ByteString)
 encodeRecipeContracts recipes = fmap (fmap Text.encodeUtf8) $ encodeValue recipeContractsShape
   (toValue recipes)
   where
-    toValue entries = toJSON [object ["id" .= name,"stateType" .= stateType,
+    toValue entries = toJSON [object ["id" .= name,
       "contract" .= checkedSnapshotValue contract] |
-      Fact (FactId name) (StoredRecipe _ stateType contract _) <- entries]
+      Fact (FactId name) (StoredRecipe _ _ contract _) <- entries]
 
 decodeRecipeContracts :: DhallHandling :> es
   => ByteString -> Eff es (Either [Diagnostic] [(FactId,String,CheckedContract)])
@@ -76,13 +76,12 @@ decodeRecipeContracts bytes = runExceptT $ do
   restored <- checked (parseEither (\v -> parseJSON v >>= traverse
     (withObject "Recipe contract" $ \fields -> do
       name <- FactId <$> fields .: "id"
-      stateType <- fields .: "stateType"
       contract <- fields .: "contract" >>= restoreCheckedSnapshot
-      pure ((name,stateType,) <$> contract))) value)
+      pure ((\checkedContract -> (name,haskellType (rootType checkedContract),checkedContract)) <$> contract))) value)
   ExceptT (pure (sequence restored))
 
 recipeContractsShape :: Shape
-recipeContractsShape = List (Record [("id",Scalar TextScalar),("stateType",Scalar TextScalar),("contract",snapshotShape)])
+recipeContractsShape = List (Record [("id",Scalar TextScalar),("contract",snapshotShape)])
 
 encodeRecipeStates :: DhallHandling :> es
   => [(RecipeId, CheckedContract, CheckedValue)] -> Eff es (Either [Diagnostic] FileTree)
@@ -105,7 +104,9 @@ decodeRecipeStates entries tree = runExceptT $ do
   traverse (\(path,(ident,contract)) -> do
     bytes <- maybe (bad ("Missing state: " ++ relativeName path)) pure (lookup path (files tree))
     source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
-    value <- ExceptT (decodeValue (contractShape contract) source)
+    value <- ExceptT (fmap (either (Left . map (\(Diagnostic level code message location) ->
+      Diagnostic level code (Text.pack (relativeName path) <> ": " <> message) location)) Right)
+      (decodeValue (contractShape contract) source))
     pure (ident,CheckedValue (contractId contract) value)) (zip paths entries)
 
 statePaths :: [RecipeId] -> Either String [RelativePath]

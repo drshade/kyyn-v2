@@ -38,8 +38,7 @@ select plugin kind choose = do
   (result,_,_) <- brokerRequest Normal (\_ _ _ _ -> fail "Description invoked a host capability")
     (proc executable []) (toJSON G.Describe)
   described <- maybe (fail "No guest description") pure result
-  G.GuestDescription protocol entries _ <- right (eitherDecodeStrict (Lazy.toStrict (encode described)))
-  assert "Guest protocol changed" (protocol == G.protocolIdentity)
+  G.GuestDescription entries _ <- right (eitherDecodeStrict (Lazy.toStrict (encode described)))
   case [entry | G.ConnectorEntry (G.ConnectorIdentity p k) roles <- entries, p == plugin, k == kind, entry <- choose roles] of
     [entry] -> pure (NativeProgram (proc executable []) entry)
     _ -> fail "Missing or duplicate provider fixture entry"

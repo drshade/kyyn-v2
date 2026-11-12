@@ -38,7 +38,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest), (path "flake.nix","recorded fixture"), (path "flake.lock","recorded lock")]
       root = Root contract facts code []
       entry = fixtureProgram
-      checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+      checked = either (error . show) id (checkGuest (G.GuestDescription
         [G.ValidatorEntry "validate" (G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) [])] []))
       inspect = interpret (\_ (DescribeGuest _) -> pure (Right checked))
       execute compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope

@@ -180,4 +180,4 @@ metadataValue (SchemaMetadata roles fields collections) = toJSON
 
 describeRootContract :: RootContract -> Value
 describeRootContract root = let contract = rootSchema root in toJSON
-  (1 :: Int, contractFingerprint (contractId contract), toJSON (descriptionOf contract), metadataValue (metadataOf contract))
+  (contractFingerprint (contractId contract), toJSON (descriptionOf contract), metadataValue (metadataOf contract))

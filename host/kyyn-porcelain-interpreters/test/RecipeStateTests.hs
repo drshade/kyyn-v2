@@ -4,6 +4,8 @@
 module Main (main) where
 
 import Control.Monad (unless)
+import qualified Data.Text as Text
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Data.Aeson (object, (.=), Value(..))
 import qualified Data.ByteString.Char8 as Bytes
 import Effectful (runPureEff)
@@ -53,7 +55,10 @@ main = do
   assert "Claimed identity bypasses host value checking" (isFailure (run
     (encodeRecipeStates [(third,unit,CheckedValue (contractId unit) (String "not unit"))])))
   malformed <- right (fileTree [(path "recipes/stateless/state.dhall","\"not unit\"")])
-  assert "Malformed stored state accepted" (isFailure (run (decodeRecipeStates [(third,unit)] malformed)))
+  case run (decodeRecipeStates [(third,unit)] malformed) of
+    Left diagnostics -> assert "State decode failure does not identify its file"
+      (any (\(Diagnostic _ _ message _) -> "recipes/stateless/state.dhall" `Text.isInfixOf` message) diagnostics)
+    Right _ -> fail "Malformed stored state accepted"
   imported <- right (fileTree [(path "recipes/stateless/state.dhall","./external.dhall")])
   assert "Dhall import accepted in stored state" (isFailure (run (decodeRecipeStates [(third,unit)] imported)))
   let stored =

@@ -6,8 +6,6 @@ import Kyyn.Types.StoredShape (storedShape)
 import Data.Text (Text)
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact)
-import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.Types.Guest (describeContract, DescribedContract(..))
 import Kyyn.Optics (Lens')
 import Kyyn.Edit.Internal (Collection(..))
 import Kyyn.Evolution (RecipeType, RecipeDefinition)
@@ -29,10 +27,9 @@ contractCodec = runtimeCodec . (.codec) <$> compileContract (contract @value)
 recipeType :: forall state. Contract state => Text -> Either ProjectionError (RecipeType state)
 recipeType name = do
   compiled <- compileContract (contract @state)
-  let description = describeContract compiled.description (SchemaMetadata [] [] []) []
-      codec = runtimeCodec compiled.codec
+  let codec = runtimeCodec compiled.codec
   shape <- either (Left . ProjectionError []) Right (storedShape compiled.description)
-  pure (Recipe.RecipeType name description.identity shape (Wire.encodeWith codec) (Wire.decodeWith codec))
+  pure (Recipe.RecipeType name shape (Wire.encodeWith codec) (Wire.decodeWith codec))
 
 inferredRecipeType :: forall state. Contract state => Either ProjectionError (RecipeType state)
 inferredRecipeType = do

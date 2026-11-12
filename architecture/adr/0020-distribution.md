@@ -87,10 +87,9 @@ checked through ordinary build/describe operations. A nonempty outstanding list 
 Setup and readiness remain separate operations, not a persisted approval workflow.
 
 Changing a flake or lock is an ordinary reviewed KB source/configuration change.
-The host does not maintain compatibility readers, select historical SDKs or rewrite
-pins. An incompatible protocol produces a precise diagnostic; the author repairs
-the SDK pin/code and reprovisions. A host upgrade does not by itself rewrite a KB.
-SDK source revisions are external dependency pins, not a protocol-version matrix.
+The host decodes guest messages using the current protocol types. A message that
+does not decode produces a precise diagnostic; the author repairs the SDK pin/code
+and rebuilds. SDK source revisions are external dependency pins.
 
 ### Distribution boundaries
 

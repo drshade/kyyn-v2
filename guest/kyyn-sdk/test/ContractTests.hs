@@ -86,7 +86,7 @@ main = do
   let description = compiledItem.description
       metadata = SchemaMetadata [] [] []
       identity = D.contractIdentity description metadata
-  expect "stable identity golden" (D.fingerprint (D.contractIdentity D.UnitDescription metadata) == "b7d9436b9428811f8400304bd59d0a3a7a04968a23ba3876cc414c503e759783")
+  expect "stable identity golden" (D.fingerprint (D.contractIdentity D.UnitDescription metadata) == "0a2be7bc5ffad562c7e09df18af88cf127d22abb46d71af0cca016a77ef9c8f8")
   expect "description transport round trip" (Json.eitherDecode (Json.encode description) == Right description)
   expect "identity transport round trip" (D.parseFingerprint (D.fingerprint identity) == Right identity)
   expect "metadata participates in identity" (identity /= D.contractIdentity description

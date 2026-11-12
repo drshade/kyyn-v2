@@ -33,7 +33,6 @@ import qualified System.Process.Typed as Process
 import Kyyn.Schema
 import Kyyn.Types.Query (Query, CollectionBinding(..), readCollection)
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import qualified Kyyn.Types.Contract as D
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Runtime.Guest
 import qualified Kyyn.Plumbing.Protocol.Frame as Frame
@@ -165,9 +164,7 @@ check executable = do
   unless (isLeft unsupported) (fail "Build preflight accepted an unsupported query result contract")
   descriptionValue <- invoke executable (object ["operation" .= ("describe" :: String)])
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
-  unless (description.protocol == G.protocolIdentity) (fail "Wrong protocol identity")
   _ <- right (Host.checkGuest description)
-  unless (isLeft (Host.checkGuest description { G.protocol = "unexpected" })) (fail "Unknown guest protocol accepted")
   unless (isLeft (Host.checkGuest description { G.entries = description.entries ++ description.entries })) (fail "Duplicate entries accepted")
   let field signature = G.ExportDescription "value" signature "Records.value" Nothing G.ExportValue
       exports = G.ModuleDescription "Records" "" Nothing [] [field "value :: First -> Integer",field "value :: Second -> Integer"]
@@ -175,15 +172,13 @@ check executable = do
   unless (isLeft (Host.checkGuest description { G.modules = [exports { G.moduleExports = exports.moduleExports ++ exports.moduleExports }] }))
     (fail "Duplicate exported selectors accepted")
   let changeContracts change = description { G.entries = map (fmap change) description.entries }
-  unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.identity = "incorrect" }))))
-    (fail "Incorrect contract fingerprint accepted")
   unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.loadedSources = ["../outside.hs"] }))))
     (fail "Source traversal accepted")
   unless (concatMap G.entryNames description.entries == ["validate","total"]) (fail "Wrong registered entries")
   selectedRoot <- case [root | G.ValidatorEntry _ root <- description.entries] of
     [root] -> pure root
     _ -> fail "Missing validator contract"
-  let malformed entry = object ["protocol" .= G.protocolIdentity,"entries" .= [entry],"modules" .= ([] :: [Value])]
+  let malformed entry = object ["entries" .= [entry],"modules" .= ([] :: [Value])]
       rejects value = unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription))
         (fail "Malformed guest description passed the strict reader")
   forM_ [
@@ -203,8 +198,6 @@ check executable = do
     _ -> fail "Export encoder returned a non-object"
   forM_ description.entries $ \entry -> forM_ entry $ \selected ->
     do
-      unless (selected.identity == D.fingerprint (D.contractIdentity selected.structure selected.metadata))
-        (fail "Guest description fingerprint disagrees")
       unless ("src/Annotations.hs" `notElem` selected.loadedSources)
         (fail "Metadata-only source included in schema dependency closure")
   forM_ [selected | G.QueryEntry _ (G.QueryContracts _ arguments result) <- description.entries,

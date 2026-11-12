@@ -5,7 +5,7 @@ module Kyyn.Types.Guest
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
   , QueryContracts(..), ToolContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
-  , protocolIdentity, describeContract
+  , describeContract
   ) where
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject, withText)
@@ -148,12 +148,8 @@ instance FromJSON contract => FromJSON (SinkContracts contract) where
   parseJSON = exactObject "sink contracts" ["config","options","input","result"] $ \fields ->
     SinkContracts <$> fields .: "config" <*> fields .: "options" <*> fields .: "input" <*> fields .: "result"
 
--- Protocol equality selects the current interface; there is no negotiation.
-protocolIdentity :: Text
-protocolIdentity = "kyyn-guest-1"
-
 data DescribedContract = DescribedContract
-  { structure :: Description, metadata :: SchemaMetadata, identity :: Text
+  { structure :: Description, metadata :: SchemaMetadata
   , loadedSources :: [Text]
   } deriving (Eq, Show)
 
@@ -301,15 +297,15 @@ data ModuleDescription = ModuleDescription
   } deriving (Eq, Show)
 
 data GuestDescription = GuestDescription
-  { protocol :: Text, entries :: [EntryDescription], modules :: [ModuleDescription]
+  { entries :: [EntryDescription], modules :: [ModuleDescription]
   } deriving (Eq, Show)
 
 instance ToJSON DescribedContract where
-  toJSON (DescribedContract description annotations digest sources) = object
-    ["structure" .= description,"metadata" .= annotations,"identity" .= digest,"loadedSources" .= sources]
+  toJSON (DescribedContract description annotations sources) = object
+    ["structure" .= description,"metadata" .= annotations,"loadedSources" .= sources]
 instance FromJSON DescribedContract where
-  parseJSON = exactObject "described contract" ["structure","metadata","identity","loadedSources"] $ \fields ->
-    DescribedContract <$> fields .: "structure" <*> fields .: "metadata" <*> fields .: "identity" <*> fields .: "loadedSources"
+  parseJSON = exactObject "described contract" ["structure","metadata","loadedSources"] $ \fields ->
+    DescribedContract <$> fields .: "structure" <*> fields .: "metadata" <*> fields .: "loadedSources"
 
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
@@ -376,12 +372,11 @@ instance FromJSON ModuleDescription where
       <*> fields .: "instances" <*> fields .: "exports"
 
 instance ToJSON GuestDescription where
-  toJSON (GuestDescription selectedProtocol selectedEntries selectedModules) = object
-    ["protocol" .= selectedProtocol,"entries" .= selectedEntries,"modules" .= selectedModules]
+  toJSON (GuestDescription selectedEntries selectedModules) = object
+    ["entries" .= selectedEntries,"modules" .= selectedModules]
 instance FromJSON GuestDescription where
-  parseJSON = exactObject "guest description" ["protocol","entries","modules"] $ \fields ->
-    GuestDescription <$> fields .: "protocol" <*> fields .: "entries" <*> fields .: "modules"
+  parseJSON = exactObject "guest description" ["entries","modules"] $ \fields ->
+    GuestDescription <$> fields .: "entries" <*> fields .: "modules"
 
 describeContract :: Description -> SchemaMetadata -> [Text] -> DescribedContract
-describeContract description annotations sources = DescribedContract description annotations
-  (fingerprint (contractIdentity description annotations)) sources
+describeContract = DescribedContract

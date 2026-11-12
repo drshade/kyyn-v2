@@ -52,7 +52,7 @@ workspaceApiTests = do
       expected = [ModuleDescription name ".kyyn-generated/Fixture.hs" Nothing [] [] |
         name <- ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Target","Kyyn.Workspace.Target.Fields"]]
       program = fixtureProgram "not executed"
-      checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+      checked = either (error . show) id (checkGuest (G.GuestDescription
         [G.ContractEntry "$evolution.target" (described "Target" "src/Target.hs")]
         (ModuleDescription "Private" "src/Target.hs" Nothing [] [] : expected)))
       perform :: Bool -> WorkspaceSnapshot -> IO (Either [Diagnostic] WorkspaceCatalogue, [String])

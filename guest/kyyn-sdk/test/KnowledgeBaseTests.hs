@@ -5,8 +5,6 @@ import Kyyn.Evolution
 import Kyyn.Types.StoredShape (StoredShape(..))
 import qualified Kyyn.Edit.Internal as Internal
 import Kyyn.Recipe.Internal (KnowledgeBase(..), RecipeType(..), StoredRecipe(..), storeRecipe)
-import qualified Kyyn.Types.Contract as Contract
-import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Data.Aeson (Value(..))
@@ -37,9 +35,6 @@ main = do
       updateTask = do
         updateRecipe unitRecipeType ident changedDefinition Right
         modifying facts (+ 1)
-  case storeRecipe definition () of
-    StoredRecipe _ _ identity _ -> assert "unit recipe state uses the shared contract identity"
-      (identity == Contract.fingerprint (Contract.contractIdentity Contract.UnitDescription (SchemaMetadata [] [] [])))
   assert "append recipe preserves domain facts" (execute appendTask initial == Right withTask)
   assert "recipe/domain edits share one state action" (execute updateTask withTask == Right edited)
   assert "remove recipe preserves domain facts" (execute (removeRecipe ident) withTask == Right initial)
@@ -80,7 +75,7 @@ main = do
     Right (KnowledgeBase 7 [Fact key (storeRecipe boolDefinition True)]))
   assert "an alias name with the same contract can decode selected state" (execute
     (updateRecipe (renamedType boolType) ident boolDefinition Right) both == Right both)
-  assert "changed contract with the same name refuses before decoding" (isFailure (execute
+  assert "current decoder rejects invalid state" (isFailure (execute
     (updateRecipe (changedContract boolType) ident boolDefinition Right) both))
   assert "failed migration returns no partial root" (execute
     (do modifying facts (+ 1); updateRecipe boolType ident stringDefinition (const (Left failure))) both == Left failure)
@@ -88,8 +83,8 @@ main = do
     (do removeRecipe ident; createRecipe ident stringDefinition "Fresh") both ==
     Right (KnowledgeBase 7 [secondValue,Fact key (storeRecipe stringDefinition "Fresh")]))
   let malformed = case secondValue of
-        Fact name (StoredRecipe method typeName fingerprint _) ->
-          Fact name (StoredRecipe method typeName fingerprint (Array mempty))
+        Fact name (StoredRecipe selectedDefinition _) ->
+          Fact name (StoredRecipe selectedDefinition (Array mempty))
       withMalformed = KnowledgeBase (7 :: Integer) [firstValue, malformed]
   assert "editing a recipe does not decode another recipe's state" (execute
     (updateRecipe boolType ident boolDefinition Right) withMalformed == Right withMalformed)
@@ -98,23 +93,23 @@ main = do
   putStrLn "Typed recipe creation, migration, isolation, removal and atomic refusal passed."
 
 boolType :: RecipeType Bool
-boolType = RecipeType "Flags.State" "flags-contract" StoredBool Bool decode
+boolType = RecipeType "Flags.State" StoredBool Bool decode
   where
     decode (Bool value) = Right value
     decode _ = Left "Expected Bool"
 
 stringType :: RecipeType String
-stringType = RecipeType "Notes.State" "notes-contract" StoredText (String . Text.pack) decode
+stringType = RecipeType "Notes.State" StoredText (String . Text.pack) decode
   where
     decode (String value) = Right (Text.unpack value)
     decode _ = Left "Expected String"
 
 renamedType :: RecipeType state -> RecipeType state
-renamedType (RecipeType _ identity shape encode decode) = RecipeType "Other.State" identity shape encode decode
+renamedType (RecipeType _ shape encode decode) = RecipeType "Other.State" shape encode decode
 
 changedContract :: RecipeType state -> RecipeType state
-changedContract (RecipeType name _ shape encode _) = RecipeType name "changed-contract" shape encode
-  (\_ -> error "A mismatched contract must not reach the decoder")
+changedContract (RecipeType name shape encode _) = RecipeType name shape encode
+  (\_ -> Left "The current decoder rejects this state")
 
 execute :: Edit a r -> a -> Either EvolutionFailure a
 execute = Internal.execStateT

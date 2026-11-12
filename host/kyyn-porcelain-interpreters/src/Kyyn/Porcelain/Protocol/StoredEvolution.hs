@@ -15,11 +15,11 @@ import Data.List (sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout)
+import Kyyn.Domain.Contract (contractId, rootSchema, checkRootLayout, rootType)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.CompiledEntry (compiledEntries, entryDescription)
 import Kyyn.Domain.Guest (CheckedGuest, checkedEntries, InspectedSchema(..))
-import Kyyn.Domain.Recipe (KnowledgeBase(..), ProposedRecipe(..), StoredRecipe(..))
+import Kyyn.Domain.Recipe (KnowledgeBase(..), ProposedRecipe(..), StoredRecipe(..), RecipeDefinition(..), recipeMethod)
 import Kyyn.Domain.StoredSnapshot (StoredSnapshot)
 import Kyyn.Domain.SnapshotReport
 import Kyyn.Domain.Root (Root(..))
@@ -28,7 +28,8 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..))
+import Kyyn.Domain.DataType (haskellType)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.SnapshotWire (SnapshotWire)
 import Kyyn.Plumbing.Capability.Failure (Failure)
@@ -87,18 +88,21 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
       root <- ExceptT (checkRootValue target value)
       states <- traverse checkState recipes
       ExceptT (materializeRoot target targetCode (KnowledgeBase root states))
-    checkState (Fact identity (ProposedRecipe method name fingerprint value)) = do
-      contract <- stateContract method name
-      unless (contractId contract == fingerprint) (bad "Returned recipe state has the wrong target contract")
+    checkState (Fact identity (ProposedRecipe definition value)) = do
+      let method = recipeMethod definition
+      contract <- stateContract definition
+      let name = case definition of
+            OpenRecipe _ authored -> authored
+            ClosedRecipe _ -> haskellType (rootType contract)
       state <- ExceptT (checkRecipeValue contract value)
       pure (Fact identity (StoredRecipe method name contract state))
-    stateContract method name = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,
-        selected == reference method name] of
+    stateContract definition = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,
+        selected == reference definition] of
       [contract] -> pure contract
       _ -> bad "Returned recipe has no unique compiler-described target state"
-    reference (OpenAgent _) "()" = "$import.unit"
-    reference (OpenAgent _) name = "$import.state.Target." <> Text.pack name
-    reference (ClosedAgent (FlowEntryRef flow)) _ = "$import.flow." <> flow
+    reference (OpenRecipe _ "()") = "$import.unit"
+    reference (OpenRecipe _ name) = "$import.state.Target." <> Text.pack name
+    reference (ClosedRecipe (FlowEntryRef flow)) = "$import.flow." <> flow
     snapshotOf (Root _ facts _ recipes) = do
       definitions <- ExceptT (encodeRootRecipes recipes)
       tree <- either bad pure (fileTree (files facts ++ files definitions))

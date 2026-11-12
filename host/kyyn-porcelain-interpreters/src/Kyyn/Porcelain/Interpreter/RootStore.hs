@@ -240,7 +240,7 @@ loadValue (Root selected snapshot _ _) = do
 
 exampleShape :: Shape
 exampleShape = Record ([(name, Scalar TextScalar) | name <-
-  ["name", "query", "inputContract", "resultContract", "explanation"]] ++
+  ["name", "query", "explanation"]] ++
   [("requirement", Union [("Required",Nothing),("Illustrative",Nothing)])])
 
 exampleDirectory :: String -> String
@@ -253,7 +253,6 @@ saveExample (Example name (QueryDescriptor queryName _ input result) (CheckedVal
   ensure (argId == contractId input && resultId == contractId result) "Example values belong to different query contracts"
   let prefix = exampleDirectory name
       metadata = object ["name" .= name, "query" .= queryName,
-        "inputContract" .= contractFingerprint argId, "resultContract" .= contractFingerprint resultId,
         "explanation" .= explanation, "requirement" .= object ["tag" .= show requirement]]
   manifest <- encodeFile (prefix ++ "example.dhall") exampleShape metadata
   args <- encodeFile (prefix ++ "arguments.dhall") (contractShape input) arguments
@@ -283,11 +282,6 @@ loadExamples code descriptors = do
         [d | d@(QueryDescriptor n _ _ _) <- descriptors, n == queryName] of
           [d] -> pure d
           _ -> problem ("Unknown query " ++ queryName ++ "; update the example")
-      inputId <- field "inputContract" values >>= text
-      resultId <- field "resultContract" values >>= text
-      ensure (inputId == Text.pack (contractFingerprint (contractId input)) &&
-        resultId == Text.pack (contractFingerprint (contractId result)))
-        (queryName ++ ": contracts changed; rebuild the example against the current query")
       requirementTag <- field "requirement" values >>= record >>= field "tag" >>= text
       requirement <- case requirementTag of
         "Required" -> pure Required

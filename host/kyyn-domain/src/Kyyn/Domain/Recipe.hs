@@ -12,7 +12,7 @@ import Control.Monad (unless)
 import Data.List (nub)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Plugin (qualifiedTypeName, bindingModule, bindingName)
-import Kyyn.Domain.Contract (CheckedContract, ContractId, contractId)
+import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Guest (DescriptionFormat(..))
@@ -34,13 +34,13 @@ data RecipeDefinition
   | ClosedRecipe FlowEntryRef
   deriving (Eq, Show)
 
-data ProposedRecipe = ProposedRecipe Recipe String ContractId Value deriving (Eq, Show)
+data ProposedRecipe = ProposedRecipe RecipeDefinition Value deriving (Eq, Show)
 
 data StoredRecipe = StoredRecipe Recipe String CheckedContract CheckedValue deriving (Eq, Show)
 
 proposedRecipe :: StoredRecipe -> ProposedRecipe
-proposedRecipe (StoredRecipe method stateType contract (CheckedValue _ value)) =
-  ProposedRecipe method stateType (contractId contract) value
+proposedRecipe recipe@(StoredRecipe _ _ _ (CheckedValue _ value)) =
+  ProposedRecipe (recipeDefinition recipe) value
 
 recipeMethod :: RecipeDefinition -> Recipe
 recipeMethod (OpenRecipe instructions _) = OpenAgent instructions
@@ -52,9 +52,7 @@ recipeDefinition (StoredRecipe method name _ _) = case method of
   ClosedAgent entry -> ClosedRecipe entry
 
 proposedDefinition :: ProposedRecipe -> RecipeDefinition
-proposedDefinition (ProposedRecipe method name _ _) = case method of
-  OpenAgent instructions -> OpenRecipe instructions name
-  ClosedAgent entry -> ClosedRecipe entry
+proposedDefinition (ProposedRecipe definition _) = definition
 
 checkRecipeDefinitions :: [Fact RecipeDefinition] -> Either [Diagnostic] [Fact RecipeDefinition]
 checkRecipeDefinitions definitions = do

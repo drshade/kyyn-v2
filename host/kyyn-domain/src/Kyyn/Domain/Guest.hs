@@ -28,7 +28,6 @@ checkedModules (CheckedGuest _ exports) = exports
 
 checkGuest :: G.GuestDescription -> Either [Diagnostic] CheckedGuest
 checkGuest description = do
-  ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
   unique "entry" (concatMap G.entryNames description.entries)
   entries <- traverse checkEntry description.entries
   unique "recipe" [name | G.RecipeEntry _ name _ <- entries]
@@ -77,8 +76,6 @@ checkEntry entry = case entry of
     check selected = do
       sources <- traverse source selected.loadedSources
       contract <- checkContract selected.structure selected.metadata
-      ensure (contractFingerprint (contractId contract) == Text.unpack selected.identity)
-        "guest.identity" "Guest contract fingerprint disagrees with its structure and metadata"
       pure (InspectedSchema contract sources)
 
 -- Required roles are structural. Repeated type contracts must still agree:

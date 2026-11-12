@@ -123,7 +123,7 @@ readRecipeState (RecipeId name) = readSnapshot $ \(StoredSnapshot _ _ recipes) -
 
 migrateRecipe :: Contract input => Rationale -> RecipeId -> RecipeDefinition output
   -> (input -> Either EvolutionFailure output) -> Preparation root ()
-migrateRecipe rationale (RecipeId name) (RecipeDefinition method (RecipeType typeName _ shape encode _)) convert =
+migrateRecipe rationale (RecipeId name) (RecipeDefinition method (RecipeType typeName shape encode _)) convert =
   mutate rationale $ \(StoredSnapshot fields collections recipes) -> do
     StoredRecipe _ _ state <- required ("recipe " <> name) (FactId name) [(ident,value) | Fact ident value <- recipes]
     output <- decodeStored state >>= convert

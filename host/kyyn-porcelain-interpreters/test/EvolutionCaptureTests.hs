@@ -76,7 +76,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
   let initialManifest = maybe (error "Missing fixture manifest") id (lookup (either error id (relativePath "kb.dhall")) (files sourceCode))
       described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) ["src/Schema.hs","src/Helpers.hs"]
-      guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+      guest = either (error . show) id (checkGuest (G.GuestDescription
         [G.ContractEntry "$evolution.target" described] []))
       compiled :: Eff (GuestCompilation : es) a -> Eff es a
       compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation

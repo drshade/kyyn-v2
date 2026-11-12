@@ -42,6 +42,7 @@ node tools/test-unit-contract.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-web.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-evidence-web.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-configuration-web.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-current-examples.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-query-cli.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-output-cli.mjs "$journey_stage/install/bin/kyyn-v2"
 KYYN_TEST_ROOT="$PWD" KYYN_TEST_CLI="$journey_stage/install/bin/kyyn-v2" \

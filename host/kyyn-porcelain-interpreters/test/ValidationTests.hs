@@ -86,8 +86,9 @@ validationTests contract facts = do
   presentationChanged <- either (fail . show) pure
     (checkContract (scalar "Bool" D.BoolScalar) (SchemaMetadata [RoleDecl "badge" "Changed presentation" Badge] [] []))
   case storage (readExamples root [QueryDescriptor "isDone" "" input presentationChanged]) of
-    Left _ -> pure ()
-    _ -> fail "Role-only query contract change bypassed the whole fingerprint"
+    Right [Example _ (QueryDescriptor _ _ _ current) _ (CheckedValue identity (Bool True)) _ _]
+      | current == presentationChanged && identity == contractId presentationChanged -> pure ()
+    other -> fail ("Current query metadata prevented decoding a readable example: " ++ show other)
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
   changedRoot <- either (fail . show) pure (checkContract (descriptionOf (rootSchema contract))
     (SchemaMetadata (RoleDecl "root-extra" "Unrelated root change" Title : roles) assignments collections) >>= checkRootLayout)
@@ -113,7 +114,7 @@ validationTests contract facts = do
       failed = runPureEff . runFailure . failingExecution failure
         . runDhallHandling . runRootStore $ checkRoot noExamples
   unless (failed == Left failure) (fail "Runtime failure became a validation report")
-  putStrLn "Saved example round trips, contract staleness, required/illustrative outcomes and Validated minting passed."
+  putStrLn "Saved example round trips, current-type decoding, required/illustrative outcomes and Validated minting passed."
 
 executionMock :: Root -> QueryDescriptor -> Either [Diagnostic] () -> ValidationReport -> Bool
   -> Eff (RootExecution : es) a -> Eff es a

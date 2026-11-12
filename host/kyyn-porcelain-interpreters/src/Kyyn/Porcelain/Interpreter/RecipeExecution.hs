@@ -35,7 +35,7 @@ import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 runRecipeExecution :: (EvidenceStore :> es, RootStore :> es, PluginPreparation :> es, GuestInspection :> es, GuestCompilation :> es,
   GuestExecution :> es, PluginRead :> es, Failure :> es, Judgement :> es, ModelTurn :> es, DhallHandling :> es)
   => Eff (RecipeExecution : es) a -> Eff es a
-runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ code _) (FlowEntryRef name) (CheckedValue stateIdentity stateValue) request) -> runExceptT $ do
+runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ code _) (FlowEntryRef name) (CheckedValue _ stateValue) request) -> runExceptT $ do
   let checked = either (throwE . pure . errorDiagnostic "recipe.execution") pure
   source <- checked (guestSources (RecipeEntries [ClosedFlow name]) (files code))
   program <- ExceptT (compileGuest source)
@@ -48,7 +48,6 @@ runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ cod
   unless (contractId actualRoot == contractId (rootSchema contract))
     (throwE [errorDiagnostic "recipe.root-type" "Recipe flow takes a different Root contract"])
   plugins <- ExceptT (preparePluginsFromGuest code program description)
-  unless (stateIdentity == contractId stateContract) (throwE [errorDiagnostic "recipe.state-contract" "Stored recipe state differs from the flow's state type"])
   _ <- ExceptT (encodeValue (contractShape stateContract) stateValue)
   input <- case request of
     Just authored -> ExceptT (decodeValue (contractShape inputContract) authored)
