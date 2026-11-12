@@ -321,7 +321,7 @@ main = do
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
-  putStrLn "Evidence store: current payloads, latest summary, Dhall, producer reset, clear and concurrent publication passed."
+  putStrLn "Evidence store: current payloads, latest summary, Dhall, source-edit continuity, clear and concurrent publication passed."
 
 positionProof :: IO ()
 positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do

@@ -26,14 +26,17 @@ validate _ = ValidationReport []
 
 capture :: Config -> Maybe Options -> FetchContext Integer -> EvidenceSnapshot Payload
   -> Acquisition Payload (Either FetchError (FetchResult Payload Integer Report))
-capture (Config url _) options (FetchContext _ prior) _ = do
+capture (Config url _) options (FetchContext _ prior) snapshot = do
+  previous <- listEvidenceIds snapshot
   result <- storeBlob (BlobDownload (HttpRequest "GET" url [] "") (Just "fixture.bin") (Just "application/octet-stream"))
-  pure $ case result of
-    Right (BlobResponse 200 _ (Just ref@(BlobRef hash _ _ _))) ->
-      let change = case prior of Nothing -> NewEvidence; Just _ -> UpdatedEvidence
-          entry key payload = change (EvidenceId key) (Evidence (EvidenceFingerprint hash) ["fixture source <reference>"] payload)
-      in Right (FetchResult
-        [entry "record / one" (Available (Document "Captured <document>" ("First line\nSecond line\n" <> Text.replicate 300 "long mail body ") ref)),
-         entry "positional" (Available (Measurement 90)), entry "truncated" Truncated]
-        1 (Report 3 ["Fixture coverage", maybe "No options" (\(Options text) -> text) options]))
-    _ -> Left (FetchError "Fixture download failed")
+  pure $ do
+    known <- previous
+    case result of
+      Right (BlobResponse 200 _ (Just ref@(BlobRef hash _ _ _))) ->
+        let change key = if EvidenceId key `elem` known then UpdatedEvidence else NewEvidence
+            entry key payload = change key (EvidenceId key) (Evidence (EvidenceFingerprint hash) ["fixture source <reference>"] payload)
+        in Right (FetchResult
+          [entry "record / one" (Available (Document "Captured <document>" ("First line\nSecond line\n" <> Text.replicate 300 "long mail body ") ref)),
+           entry "positional" (Available (Measurement 90)), entry "truncated" Truncated]
+          1 (Report 3 ["Fixture coverage", maybe "No position" (const "Continued position") prior, maybe "No options" (\(Options text) -> text) options]))
+      _ -> Left (FetchError "Fixture download failed")

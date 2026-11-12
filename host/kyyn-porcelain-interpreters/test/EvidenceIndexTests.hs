@@ -71,20 +71,20 @@ main = do
       optionalValue :: Maybe Value -> Value
       optionalValue Nothing = object ["tag" .= ("None" :: String)]
       optionalValue (Just v) = object ["tag" .= ("Some" :: String), "value" .= v]
-      header legacy = Record ([("producer",scalar),("connector",scalar),("payloadType",descriptionShape),
-        ("positionType",Optional descriptionShape)] ++ [("reportType",Optional descriptionShape) | not legacy])
+      header missingReportDescriptor = Record ([("producer",scalar),("connector",scalar),("payloadType",descriptionShape),
+        ("positionType",Optional descriptionShape)] ++ [("reportType",Optional descriptionShape) | not missingReportDescriptor])
       latest = Record [("identity",scalar),("fetchedAt",scalar),("added",natural),("updated",natural),("removed",natural),("options",Optional scalar)]
       location = Record [("sha256",scalar),("size",natural),("blobs",List (Record
         [("sha256",scalar),("size",natural),("mediaType",scalar),("name",Optional scalar)]))]
       entry = Record [("id",scalar),("evidence",Record [("fingerprint",scalar),("externalReferences",List scalar),
         ("payload",Union [("Available",Just location),("Truncated",Nothing)])])]
       raw = rawWith False
-      rawWith legacy reportDescriptor reportShape reportBody = runPureEff $ runDhallHandling $ encodeBinaryValue
-        (Record [("header",header legacy),("body",Record [("latest",latest),("values",List entry),
+      rawWith missingReportDescriptor reportDescriptor reportShape reportBody = runPureEff $ runDhallHandling $ encodeBinaryValue
+        (Record [("header",header missingReportDescriptor),("body",Record [("latest",latest),("values",List entry),
           ("position",Optional natural),("report",Optional reportShape)])])
         (object ["header" .= object (["producer" .= ("source" :: String),"connector" .= ("Mail" :: String),
           "payloadType" .= descriptionValue textDescription,"positionType" .= optionalValue (Just (descriptionValue integerDescription))] ++
-          ["reportType" .= optionalValue reportDescriptor | not legacy]),
+          ["reportType" .= optionalValue reportDescriptor | not missingReportDescriptor]),
           "body" .= object ["latest" .= object ["identity" .= ("first" :: String),"fetchedAt" .= ("now" :: String),
             "added" .= ("0" :: String),"updated" .= ("0" :: String),"removed" .= ("0" :: String),"options" .= optionalValue Nothing],
             "values" .= ([] :: [Value]),"position" .= optionalValue (Just (String "42")),"report" .= optionalValue reportBody]])

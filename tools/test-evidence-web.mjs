@@ -72,7 +72,16 @@ evolution = prepare (pure ()) $ edit (Rationale "Evidence links"
  assert((await page('/evidence/inspection-fixture/captured/record%20%2F%20one')).includes('Captured &lt;document&gt;'));
  assert.deepEqual(await cli(['evidence','list','inspection-fixture','captured']),before);
  await cli(['evidence','fetch','inspection-fixture','captured']);assert.equal(fetches,2);
- const continued=await page(connector);assert(continued.includes('0 added'));assert(continued.includes('3 updated'));
+ const continued=await page(connector);assert(continued.includes('0 added'));assert(continued.includes('3 updated'));assert(continued.includes('Continued position'));
+ const broken=await cli(['evolution','new','position-type']);
+ const source=path.join(broken.path,'target/plugins/packages/inspection-fixture/source/src/InspectionFixture.hs');
+ fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('FetchContext Integer','FetchContext Bool').replace('FetchResult Payload Integer Report','FetchResult Payload Bool Report').replace('1 (Report 3','False (Report 3'));
+ await accept(broken);
+ const failure=spawn(executable,['--kb',kb,'--json','evidence','fetch','inspection-fixture','captured'],{env});let diagnostic='';failure.stdout.on('data',x=>diagnostic+=x);failure.stderr.on('data',x=>diagnostic+=x);
+ const [failureCode]=await once(failure,'exit');assert.notEqual(failureCode,0,diagnostic);assert.equal(fetches,2);
+ assert((await page(connector)).includes('Continued position'));
+ await cli(['evidence','fetch','inspection-fixture','captured','--restart-sync']);assert.equal(fetches,3);
+ const restarted=await page(connector);assert(restarted.includes('No position'));assert(restarted.includes('3 updated'));
  console.log('Evidence inspection journey passed: latest capture, typed payloads/reports, references, blobs, scoped types, secrets excluded and read-only GETs.');
 } finally {
  await Promise.all(children.map(async c=>{if(c.exitCode===null){c.kill();await once(c,'exit');}}));
