@@ -81,7 +81,9 @@ renderInspection selected snapshot route summaries evolution declaration = do
         typ:_ -> Right typ
         _ -> missing "recipe state type" name
       pure (Text.pack name, do
-        p_ $ a_ [href_ (inspectionLink selected ["recipes",recipeName])] (toHtml recipeName)
+        p_ $ do
+          toHtml ("State type for " :: Text)
+          a_ [href_ (inspectionLink selected ["recipes",recipeName])] (toHtml recipeName)
         typeBody (recipeTypeLink selected recipeName) contract target)
     QueryPage name _ -> declared name
     ToolPage name -> declared name
