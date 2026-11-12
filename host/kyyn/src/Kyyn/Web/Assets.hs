@@ -2,7 +2,7 @@
 module Kyyn.Web.Assets (inspectionAsset) where
 
 import Data.ByteString (ByteString)
-import Data.FileEmbed (embedDir)
+import Data.FileEmbed (embedDir, embedFile)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Language.Haskell.TH.Syntax (loc_filename, runIO)
@@ -12,12 +12,13 @@ import System.FilePath ((</>), takeDirectory)
 
 inspectionAsset :: [Text] -> Maybe ByteString
 inspectionAsset ("vendor":path) = lookup (Text.unpack (Text.intercalate "/" path)) vendor
-inspectionAsset path = lookup (Text.unpack (Text.intercalate "/" path)) assets
+inspectionAsset ["inspection.mjs"] = Just script
+inspectionAsset _ = Nothing
 
-assets :: [(FilePath,ByteString)]
-assets = $(do
+script :: ByteString
+script = $(do
   source <- loc_filename <$> TH.location
-  embedDir (takeDirectory source </> "../../../web"))
+  embedFile (takeDirectory source </> "../../../web/inspection.mjs"))
 
 vendor :: [(FilePath,ByteString)]
 vendor = $(runIO (getEnv "KYYN_WEB_VENDOR_DIR") >>= embedDir)

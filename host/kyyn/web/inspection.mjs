@@ -98,7 +98,6 @@ async function showFlow(source, container) {
 }
 
 if (typeof document !== 'undefined') {
-  globalThis.Prism?.highlightAll();
   const source = document.querySelector('#flow-mermaid');
   const container = document.querySelector('#recipe-flow');
   if (source && container) showFlow(source, container);
