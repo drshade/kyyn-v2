@@ -1,4 +1,4 @@
-// Installed local-evidence inspection: unfetched/changed producers, typed reports,
+// Installed local-evidence inspection: unfetched captures/source edits, typed reports,
 // payload record/positional sums, blobs, secret references without secret values,
 // accepted configuration versus local capture, rationale resolution and no GET fetches.
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ const env={...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',
  GIT_AUTHOR_NAME:'Inspection fixture',GIT_AUTHOR_EMAIL:'test@example.invalid',GIT_COMMITTER_NAME:'Inspection fixture',GIT_COMMITTER_EMAIL:'test@example.invalid'};
 const secret='SENTINEL_SECRET_VALUE_MUST_NEVER_APPEAR';
 const children=[];let fetches=0;
-const server=http.createServer((_,res)=>{fetches++;res.end('binary fixture bytes');});
+const server=http.createServer((_,res)=>{fetches++;res.end('binary fixture bytes '+fetches);});
 server.listen(0,'127.0.0.1');await once(server,'listening');
 function write(file,text){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);}
 async function cli(args,input){
@@ -68,7 +68,11 @@ evolution = prepare (pure ()) $ edit (Rationale "Evidence links"
  assert.equal(fetches,1);assert.equal(git(kb,'rev-parse','HEAD'),head);assert.deepEqual(await cli(['evidence','list','inspection-fixture','captured']),before);
  const changed=await cli(['evolution','new','producer-changed']);
  fs.appendFileSync(path.join(changed.path,'target/plugins/packages/inspection-fixture/source/src/InspectionFixture.hs'),'\n-- changed producer\n');await accept(changed);
- assert((await page(connector)).includes('plugin source or evidence schema has changed'));assert.equal(fetches,1);
+ assert((await page(connector)).includes('Fixture coverage'));assert.equal(fetches,1);
+ assert((await page('/evidence/inspection-fixture/captured/record%20%2F%20one')).includes('Captured &lt;document&gt;'));
+ assert.deepEqual(await cli(['evidence','list','inspection-fixture','captured']),before);
+ await cli(['evidence','fetch','inspection-fixture','captured']);assert.equal(fetches,2);
+ const continued=await page(connector);assert(continued.includes('0 added'));assert(continued.includes('3 updated'));
  console.log('Evidence inspection journey passed: latest capture, typed payloads/reports, references, blobs, scoped types, secrets excluded and read-only GETs.');
 } finally {
  await Promise.all(children.map(async c=>{if(c.exitCode===null){c.kill();await once(c,'exit');}}));

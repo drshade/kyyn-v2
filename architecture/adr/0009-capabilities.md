@@ -409,7 +409,7 @@ callback. Each method executes in the plugin's captured-read context. The first
 implementation starts a method guest per call, without a plugin-process pool.
 
 A method's declared `FetchError` remains a typed value that the helper may handle.
-Not-fetched, incompatible-producer and invalid stored evidence stop the invocation
+Not-fetched and invalid stored evidence stop the invocation
 with a diagnostic naming the instance; these are not converted into catchable
 method failures. Acquisition and sink requests are absent from this caller row.
 
@@ -458,8 +458,8 @@ Guest evidence enumeration uses that captured index; individual reads use
 EvidenceStore to decode only the selected payload under [ADR 0014](0014-evidence.md).
 The broker does not reopen a newer index for each request. Publication uses the
 captured fetch as its expected base.
-When the producer has changed, acquisition instead starts empty and uses the
-head observed before the refused load as its replacement base.
+Source edits retain the captured baseline. Selected payload reads decode against
+the current plugin contract; they do not use source identity as a compatibility gate.
 
 GuestExecution supplies both one-shot evaluation and conversational execution
 (ADR 0002). The latter preserves the broker callback's effect row while the guest

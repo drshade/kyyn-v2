@@ -728,7 +728,7 @@ history. Clearing an instance removes its current evidence, summary and position
 not accepted facts, recipe state or citations.
 
 EvidenceStore is a porcelain capability. Its interpreter owns delta application,
-producer checks and expected-base publication. Scoped DocumentPersistence from
+value validation and expected-base publication. Scoped DocumentPersistence from
 [ADR 0003](0003-effects.md) owns native locking and atomic index replacement;
 FileSystem owns payload-file IO. Neither introduces IOE into porcelain.
 The checkout-local ignore rule belongs to `.kyyn/.gitignore`.
@@ -814,9 +814,9 @@ Report contract checking includes ADR 0029's exclusion of nested BlobRefs.
 
 Persist the payload descriptor as part of the capture so generic inspection needs
 no compiler. Its authority is the successful checked fetch that wrote it, bound to
-the existing producer identity. This is a projection of the Haskell contract, not
-a second schema to maintain. Producer mismatch refuses the read as before; do not
-reinterpret old payloads or introduce a new compatibility policy.
+recorded producer identity as provenance. This is a projection of the Haskell
+contract, not a second schema to maintain. Generic inspection uses this stored
+descriptor; plugin consumers decode requested payloads using their current contract.
 
 Self-contained Dhall alone is insufficient here: it proves that a value has some
 type, not that it has the expected connector payload type. Its structural type
@@ -826,7 +826,7 @@ requires the expected contract. Retain one generated payload descriptor per capt
 rather than introducing a separate generic Dhall reader for browsing or invoking
 the compiler merely to recover that contract. Do not duplicate it per payload.
 
-Opening a capture reads and decodes the index once, checking its shape, producer,
+Opening a capture reads and decodes the index once, checking its shape,
 nonempty identities/fingerprints and unique IDs. Use a keyed representation or
 sorting for identity validation, not quadratic duplicate scanning. Do not parse the
 same document again to extract its header. Inspection never walks attachment
@@ -873,14 +873,13 @@ files usable. No old indices or payload generations are deliberately retained.
 Explicit clear removes index (including report and position), payloads and blobs. Sync positions remain
 connector-owned data with the behavior specified by ADR 0029.
 
-The layout change needs no automatic upgrade mechanism: old monolithic captures
-are refused with a clear/refetch diagnostic, not silently discarded or interpreted
-as empty. An explicit clear removes the old capture.
+Malformed captures fail normal decoding; there are no alternate-format readers
+or migration negotiation. An explicit clear removes the capture.
 
-Distinguish unfetched, fetched-empty, incompatible producer, truncated payload,
+Distinguish unfetched, fetched-empty, truncated payload,
 malformed storage and publication conflict. A missing ID or cleared cache is not
 proof of upstream deletion.
-After refetch, recipe code decides what a changed producer means for its own task.
+Recipe code decides what newly fetched evidence means for its own task.
 
 ### Investigation reads the current evidence
 
@@ -1124,12 +1123,28 @@ need fingerprints, source versions or content hashes. The connector's change tok
 supports operational refresh; it is not an immutable provenance proof and does
 not establish whether the external source has changed since a citation was made.
 
-### Plugin changes and cache replacement
+### Current contracts and source provenance
 
-Current evidence is bound to producing plugin source and payload contract. Do not
-reinterpret incompatible values under a new producer. Successful refetch replaces
-the capture and position; failed refetch publishes nothing. Recipe state remains
-unchanged. Authors decide how to adapt their methods.
+There is one implied current version. Plugin-source hashes and captured contract
+identities are provenance and integrity metadata, not compatibility gates.
+Source edits do not block evidence inspection, discard prior evidence or reset
+sync positions. Versioning and compatibility policy are deferred; no supported
+version matrix, migration negotiation or playground-format adapters are added.
+
+Generic inspection reads the capture's self-describing payload and report
+contracts without preparing plugin code. A current plugin reads selected payloads
+under its current expected type; normal value decoding reports an actual mismatch
+when that value is consumed. A changed contract identity alone does not refuse a
+read. Publication retains unchanged entries and validates supplied values against
+the current contract. It does not scan or migrate untouched payloads.
+
+A fetch starts from existing evidence and its saved position regardless of source
+identity. The current position type is checked when that position is passed to
+the guest. Explicit restart ignores the position; explicit clear removes the
+capture. There is no automatic reset after a source or contract change. Broken
+playground data is repaired or cleared by its author. Failed publication changes
+neither the capture nor sync progress. Source provenance is refreshed by a
+successful fetch; recipe state remains unchanged.
 
 ## Verification
 
@@ -1137,12 +1152,12 @@ Exercise connector additions, updates, removals, payload truncation/restoration,
 stable fingerprints, failed pages and expected-base conflicts. Verify that only
 current payloads and the latest fetch summary remain, with no acquisition history.
 Test consistent reads within an invocation and fresh reads in the next, instance
-isolation, empty versus unfetched captures, and producer replacement.
+isolation, empty versus unfetched captures, and continued reads after source edits.
 
 Instrument storage reads: list opens no payload/blob files; show opens
 only the selected payload; repeated guest reads reuse the captured index. A bad
 unrelated payload must not prevent listing or reading another valid item. Verify
-missing selected files, invalid payloads, duplicate index IDs and producer mismatch
+missing selected files, invalid payloads, duplicate index IDs and source edits without invalidation
 remain explicit failures. Generic inspection must succeed with compiler execution
 disabled, including with cold compilation caches.
 

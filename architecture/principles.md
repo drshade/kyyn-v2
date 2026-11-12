@@ -24,7 +24,9 @@ A KB is a hermetically sealed unit: its facts, code, configuration, vendored plu
 source and evolution records describe themselves in the current types. Kyyn is
 likewise sealed to one current host protocol and set of types. The KB's lock
 pins its SDK as an ordinary dependency, not as a compatibility declaration.
-Neither carries knowledge of the other's past: no version
+There is one implied current version; versioning and compatibility policy are
+future work. Source hashes do not enforce data compatibility or invalidate
+evidence/sync progress. Neither carries knowledge of the other's past: no version
 numbers, compatibility readers, defaults for missing fields, legacy detectors or
 migration hints.
 

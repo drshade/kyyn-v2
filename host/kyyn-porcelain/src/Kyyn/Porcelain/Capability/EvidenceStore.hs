@@ -15,7 +15,7 @@ import Kyyn.Domain.Blob (BlobRef)
 import Kyyn.Domain.EvidenceIndex (EvidenceSelection, EvidenceIndex)
 
 data EvidenceStore :: Effect where
-  BeginFetch :: EvidenceSelection -> CheckedContract -> Maybe CheckedContract
+  BeginFetch :: EvidenceSelection -> CheckedContract
     -> EvidenceStore m (Either EvidenceProblem FetchBaseline)
   OpenCurrentEvidence :: EvidenceSelection -> EvidenceStore m (Either EvidenceProblem (Maybe EvidenceIndex))
   ReadCapturedEvidence :: EvidenceIndex -> EvidenceId -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
@@ -31,9 +31,9 @@ type instance DispatchOf EvidenceStore = Dynamic
 data FetchBaseline = FetchBaseline String (Maybe FetchId) (Maybe EvidenceIndex) (Maybe CheckedValue)
   deriving (Eq, Show)
 
-beginFetch :: EvidenceStore :> es => EvidenceSelection -> CheckedContract -> Maybe CheckedContract
+beginFetch :: EvidenceStore :> es => EvidenceSelection -> CheckedContract
   -> Eff es (Either EvidenceProblem FetchBaseline)
-beginFetch selection payload = send . BeginFetch selection payload
+beginFetch selection = send . BeginFetch selection
 
 discardFetchBlobs :: EvidenceStore :> es => ConnectorInstanceRef -> Maybe FetchId -> [BlobRef] -> Eff es ()
 discardFetchBlobs instanceRef base = send . DiscardFetchBlobs instanceRef base

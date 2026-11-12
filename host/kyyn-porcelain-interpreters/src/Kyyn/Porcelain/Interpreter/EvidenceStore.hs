@@ -30,25 +30,21 @@ import System.FilePath ((</>))
 runEvidenceStore :: forall es a. (Blobs.BlobStorage :> es, DocumentPersistence :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)
   => DirectoryScope -> Eff (EvidenceStore : es) a -> Eff es a
 runEvidenceStore kb = interpret $ \_ -> \case
-  BeginFetch (EvidenceSelection instanceRef kind package) contract positionContract -> lockedIndex instanceRef $ runExceptT $ do
+  BeginFetch (EvidenceSelection instanceRef _ _) contract -> lockedIndex instanceRef $ runExceptT $ do
     DocumentStamp _ started <- ExceptT (Right <$> Document.freshStamp)
     bytes <- readCurrent
     document <- traverse (ExceptT . decodeIndex) bytes
     let base = case document of
           Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> Just key
           Nothing -> Nothing
-    case document of
-      Just selected@(IndexDocument stored connector payload _ position _)
-        | stored == package && connector == kind && contractId payload == contractId contract
-        , fmap (contractId . fst) position == fmap contractId positionContract ->
-          pure (FetchBaseline started base (Just (capturedIndex instanceRef selected)) (snd <$> position))
-      _ -> pure (FetchBaseline started base Nothing Nothing)
-  OpenCurrentEvidence (EvidenceSelection instanceRef kind package) -> lockedIndex instanceRef $ runExceptT $ do
+    let prior = fmap (\selected -> (capturedIndex instanceRef selected) { payloadContract = contract }) document
+        position = case document of
+          Just (IndexDocument _ _ _ _ saved _) -> snd <$> saved
+          Nothing -> Nothing
+    pure (FetchBaseline started base prior position)
+  OpenCurrentEvidence (EvidenceSelection instanceRef _ _) -> lockedIndex instanceRef $ runExceptT $ do
     bytes <- readCurrent
-    traverse (\contents -> do
-      document@(IndexDocument stored selected _ _ _ _) <- ExceptT (decodeIndex contents)
-      unless (stored == package && selected == kind) (throwE ProducerContractChanged)
-      pure (capturedIndex instanceRef document)) bytes
+    traverse (\contents -> capturedIndex instanceRef <$> ExceptT (decodeIndex contents)) bytes
   ReadCapturedEvidence index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ contract _ _) key -> runExceptT $
     case indexedEvidence index key of
       Nothing -> pure Nothing
@@ -66,8 +62,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
             Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> Just key
             Nothing -> Nothing
           old = case prior of
-            Just (IndexDocument stored selected oldContract (EvidenceState _ values) _ _)
-              | stored == package && selected == kind && contractId oldContract == contractId contract -> values
+            Just (IndexDocument _ _ _ (EvidenceState _ values) _ _) -> values
             _ -> []
       unless (current == expected) (throwE BaseSnapshotConflict)
       staged <- traverse (stageChange instanceRef contract) changes

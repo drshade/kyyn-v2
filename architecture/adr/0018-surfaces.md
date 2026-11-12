@@ -242,7 +242,7 @@ generated adapter, enforces it for every batch and records it in opt-in timings
 under ADR 0019. Other CLI operations do not parse or depend on this override.
 
 Clearing removes only the instance's local capture, latest summary, report and position,
-not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
+not accepted facts or recipe state. Distinguish unfetched,
 publication conflict, malformed delta/storage and unavailable payload. Missing
 evidence does not claim upstream deletion. ADR 0014 owns these semantics.
 

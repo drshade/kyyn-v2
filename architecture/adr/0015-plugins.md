@@ -501,7 +501,7 @@ The `PluginRead` porcelain capability receives a resolved instance, producer,
 payload contract, prepared method and structural input. Its interpreter validates
 the input against that method's contract, loads current evidence once, and calls
 the captured-read broker with that immutable value. It has no file-acquisition
-capability. `evidence.not-fetched`, producer-change and invalid-cache diagnostics
+capability. `evidence.not-fetched` and invalid-cache diagnostics
 are preserved; absence never becomes an empty snapshot. The result is checked
 against the inspected output contract. ADR 0018 owns direct discovery/invocation;
 generated KB-caller proxies and helper registration remain separate implementation.
@@ -637,13 +637,15 @@ commit or silently accept a new root. Adopt changes through the ordinary code-on
 evolution route, or ordinary Git with checking on load under ADR 0013. Git exposes
 the source diff and can recover committed earlier code. Compiler diagnostics,
 KB checks and human/agent review provide the repair workflow; typechecking alone
-does not detect every behavior change. Old evidence may still require refetch.
+does not detect every behavior change. Broken data may require explicit repair or refetch; source edits alone do not invalidate evidence.
 
-This is sufficient for the first release, not temporary scaffolding awaiting a
-version-management system. No plugin version pins, SDK/runtime compatibility
-declarations, negotiation, supported-version matrix or backward-compatibility
-promise is required. Add such machinery only if actual support experience
-demonstrates a need, not simply because Kyyn is being released.
+There is one implied current version. Versioning and compatibility policy are
+future requirements, not mechanisms for disposable playgrounds. No plugin version
+pins, SDK/runtime compatibility declarations, negotiation, supported-version
+matrix or backward-compatibility promise is implemented. Ordinary compilation
+and value decoding still enforce the current types. Build fingerprints select
+compiled artifacts; source fingerprints describe provenance, not permission to
+read stored evidence or reuse sync progress (ADR 0014).
 
 Template creation copies files and substitutions, after which the owner controls
 them. Later template improvements are explicit changes, not overwrites. Vendored
