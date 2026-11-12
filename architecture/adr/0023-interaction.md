@@ -31,7 +31,7 @@ Web has two kinds of page:
 
 | Route | Shows |
 | --- | --- |
-| `GET /` | Index: evolutions, collections, types, queries, tools, recipes and a link to `/kb/` |
+| `GET /` | Index: evolutions, collections, types, queries, tools, recipes, local runs and a link to `/kb/` |
 | `GET /evolutions/<id>` | Explanation, lifecycle state, the step report with each changed record's before and after values, and the source diff against the base |
 | `GET /collections/<collection>` | The records of one collection |
 | `GET /records/<collection>/<id>` | One record as labelled fields, with references to other records as links |
@@ -103,8 +103,8 @@ designed for a domain belongs in a domain view. A one-off explanatory page is a
 view declared in a draft; its pages are served live without a check.
 
 Pages are server-rendered HTML produced by the host from the same typed
-operations CLI and MCP use. No client framework or separate JSON API is needed
-for them.
+operations CLI and MCP use. The run viewer below additionally reads event pages
+to update its diagram.
 
 ### Recipe run observation
 
@@ -121,8 +121,9 @@ iterations appear in the node inspector rather than expanding a separate graph
 for each item. An empty page while active means wait; a terminal or interrupted
 run stops following. Clearing a run makes subsequent requests return not-found.
 
-Playback and following are read operations. Run, cancel, clear and acceptance
-remain CLI/MCP operations; this page introduces no mutation endpoint.
+Playback and following are read operations. Starting runs, clearing recordings
+and acceptance remain CLI/MCP operations. Cancellation is interruption by the
+execution's owning caller; this page introduces no mutation endpoint.
 
 ### Authoring workflow
 

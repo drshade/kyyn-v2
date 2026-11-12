@@ -846,8 +846,10 @@ inspection pages show the same state through the same operations; they are
 read-only and defined in [ADR 0023](0023-interaction.md).
 
 Recipe runs use ADR 0028's RecipeRunStore through shared CLI/MCP reads:
-`recipe run list [--recipe NAME]`, `recipe run show ID`,
-`recipe run events ID [--after N] [--limit L]` and `recipe run clear ID`.
+`run list [--recipe NAME]`, `run show ID` and `run clear ID`.
+These KB-local recording commands do not open or validate the current root.
+`show` prints the captured header, derived activity/outcome and draft link when
+present. Event paging is the Web viewer's read operation.
 Starting a run retains `root recipe run NAME`; it reports the run ID and browser
 path as soon as recording starts, and reports the resulting draft on completion.
 Web routes and live/playback presentation belong to ADR 0023.

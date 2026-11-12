@@ -331,6 +331,7 @@ The guest captures this graph from the same immutable build it invokes. Node
 identifiers identify positions in this graph, not note text or rendered labels;
 they have no identity promise across builds. Mermaid is a rendering of that
 stored graph, not the source from which execution addresses are reconstructed.
+The graph retains authored labels, descriptions and static prompt text.
 
 Each entry into a node has a distinct occurrence identifier and its parent
 occurrence. Iteration context distinguishes Each elements, Repeat passes and
@@ -339,7 +340,7 @@ occurrences therefore remain distinguishable. The diagram aggregates occurrences
 the node inspector lists their individual histories. Branch events identify the
 selected graph edge; the viewer does not infer branch selection from missing events.
 
-Graph-linked enter/return events and invocation context are an upstream
+Graph-linked enter/return/failure events and invocation context are an upstream
 Agentic extension. Kyyn consumes that extension through its generated runtime
 adapter rather than implementing a second interpreter. Arbitrary pure functions
 remain opaque. A return event means the interpreter returned from the observed
@@ -356,8 +357,8 @@ small closed vocabulary before transport. The host adds ordering and timing:
 data FlowObservation
   = NodeEntered NodeId OccurrenceId (Maybe OccurrenceId) IterationContext
   | NodeReturned OccurrenceId
+  | NodeFailed OccurrenceId
   | BranchSelected OccurrenceId EdgeId
-  | IterationProgress OccurrenceId Natural (Maybe Natural)
   | TurnTaken OccurrenceId TurnAction [ToolName]
   | ToolReturned OccurrenceId ToolName ToolOutcome
   | Judged OccurrenceId Natural
@@ -367,6 +368,7 @@ data FlowObservation
 data ObserveFlow result where
   ObserveFlow :: FlowObservation -> ObserveFlow ()
 
+-- Before/build identify provenance; reading a run does not resolve them.
 data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
   , before :: GitRevision, build :: BuildIdentity
@@ -374,39 +376,43 @@ data RecipeRunHeader = RecipeRunHeader
   }
 
 data RunEvent = RunEvent
-  { sequence :: Natural, elapsed :: Duration, body :: RunEventBody }
+  { elapsed :: Duration, body :: RunEventBody }
+
+-- Sequence is the complete record's zero-based position in events.jsonl.
+data SequencedRunEvent = SequencedRunEvent Natural RunEvent
 
 data RunEventBody
-  = RunStarted
-  | FlowObserved FlowObservation
+  = FlowObserved FlowObservation
   | RunCompleted EvolutionId
   | RunFailed [Diagnostic]
   | RunCancelled
 ```
 
 `TurnAction` distinguishes final responses from tool requests; tool outcomes
-record return/failure status, not result values. Iteration progress reports
-completed count and a total only when known. These summaries exclude automatic
+record return/failure status, not result values. Each scope entry includes the
+known item total in IterationContext; completed counts derive from returned child
+occurrences. Repeat scopes have no predicted total. These summaries exclude automatic
 copies of requests, intermediate state, evidence payloads, prompts, full model
 conversations and tool results. Diagnostic and rejection text may quote values;
 this projection is not a detector for sensitive text supplied by trusted code.
-Static graph descriptions retain authored labels and descriptions.
 
-The observation request is available only within recorded recipe execution,
+The observation request is available only within closed recipe execution,
 including nested flow tool bodies in that invocation. Describe, query, validation,
 rendering and evolution contexts do not receive it. It uses the ordinary
 HostRequest/HostResponse transport under [ADR 0007](0007-wire.md); a unit response
 acknowledges a successful append. Recording failure aborts the invocation through
 the existing operational-failure channel, rather than acknowledging a lost event.
-The observer does not give the guest filesystem access.
 
-The host serializes appends, assigning strictly increasing sequence numbers
-and nondecreasing elapsed time from a monotonic clock at receipt. RunStarted is
-sequence zero. Guest observations are the only account of flow/model/tool
-progress; capability brokers do not duplicate those events. The host adds the
-lifecycle events it owns. The persisted RunEvent is also the browser record;
-the guest observation is its payload, not a second competing timeline.
-Concurrent appends are ordered by receipt, not by a claimed global guest clock.
+The host serializes appends and stamps nondecreasing elapsed time from a
+monotonic clock at receipt. The immutable header records the start. The read
+operation assigns sequence numbers from complete-record positions, so they are
+also the paging cursors. The same RunEvent is stored and served; the browser's
+SequencedRunEvent wrapper adds that position. The guest observation is its payload.
+Guest observations are the only account of flow/model/tool progress; capability
+brokers do not duplicate those events. The host adds the lifecycle events it owns.
+NodeFailed identifies an occurrence only when the interpreter can attribute the
+failure. RunFailed owns the failure diagnostics. Other unfinished scopes remain
+unresolved; OutputRejected describes a handled rejection, not a terminal failure.
 
 #### Local lifetime and failure
 
@@ -461,7 +467,7 @@ missing node returns. Browser disconnection has no effect on execution.
 
 Readers expose the complete event prefix while an append is in progress. A partial
 final line after writer death marks an incomplete recording; malformed complete
-records and sequence gaps are located decode errors. They are not silently skipped.
+records are located decode errors. They are not silently skipped.
 No terminal event may be followed by another event. A recording write failure
 stops further dispatch and reports the run path. Prior external actions are not
 rolled back. If draft creation succeeded before the terminal append failed, the
@@ -510,7 +516,8 @@ Verify graph/event correspondence for unnamed steps, repeated labels, both branc
 Each/Repeat and nested concurrent tools. Live attachment, refresh and playback of
 the same event prefix must yield identical node/occurrence state. Exercise a failed
 flow, cancellation, killed writer, partial final append, malformed complete record,
-recording-write failure after draft creation, active-clear refusal and missing
+recording-write failure after draft creation, active-clear refusal, two concurrent
+runs of different recipes recorded/listed independently, and missing
 source/build provenance. A built-guest installed journey must run from the CLI
 while a separate Web process observes, then replay without providers or compilation.
 
