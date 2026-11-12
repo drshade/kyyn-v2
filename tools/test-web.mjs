@@ -4,7 +4,8 @@
 // Inspection: saved candidate schema/facts, context selection, escaped source,
 // reference links, removed records, read-only routes and accepted refresh.
 // Declarations: explicit-input query results, captured modules, open/closed recipes,
-// and model-capable tools described without execution.
+// and model-capable tools described without execution, local inspection assets,
+// Haskell markup and long instruction/flow fallbacks (browser checks are separate).
 // Host validation and non-view freshness are deliberately deferred to #304.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -106,7 +107,8 @@ action :: RecipeInput Schema.Root () () -> Step (RecipeProposal RootEdit ())
 action _ = error "RECIPE_ACTION_MUST_NOT_RUN"
 `;
   write(path.join(target,'src/DemoRecipe.hs'),recipeSource);
-  const recipeEdits=`  createRecipe (RecipeId "open") (openRecipe unitRecipeType "Review tasks <carefully>") ()
+  const longInstructions="Review tasks <carefully> " + "Keep the complete prompt available. ".repeat(20);
+  const recipeEdits=`  createRecipe (RecipeId "open") (openRecipe unitRecipeType "${longInstructions}") ()
   createRecipe (RecipeId "closed") DemoRecipe.flow ()`;
 
   const change=path.join(d.path,'change/Evolution.hs');
@@ -203,7 +205,7 @@ ${recipeEdits}
   }
   assert((await page('/queries/never'+selected)).includes('Execution canary'),'Query description must not execute');
   const queryPage=await page('/queries/titles'+selected);
-  assert(queryPage.includes('module Report where'));assert(!queryPage.includes('<h2>Result</h2>'));
+  assert(queryPage.includes('module Report where'));assert(queryPage.includes('class="language-haskell"'));assert(!queryPage.includes('<h2>Result</h2>'));
   assert((await page('/queries/titles'+selected+'&input='+encodeURIComponent('{=}'))).includes('<h2>Result</h2>'));
   const echo=await page('/queries/echo'+selected+'&input='+encodeURIComponent('{ title = "<demo>", related = [] : List Text }'));
   assert(echo.includes('&lt;demo&gt;'));assert(echo.includes('href="/types/Schema.Todo'+selected+'"'));
@@ -213,8 +215,20 @@ ${recipeEdits}
   const toolPage=await page('/tools/summarise'+selected+'&input="not executed"');
   assert(toolPage.includes('OpenAI'));assert(toolPage.includes('test-model'));
   assert(toolPage.includes('UNCONFIGURED_WEB_TEST'));assert(toolPage.includes('module DemoTools where'));
-  assert((await page('/recipes/open'+selected)).includes('Review tasks &lt;carefully&gt;'));
+  const openPage=await page('/recipes/open'+selected);
+  assert(openPage.includes('Review tasks &lt;carefully&gt;'));
+  assert(openPage.includes('<details class="prompt">'));
+  assert(openPage.includes(longInstructions.replaceAll('<','&lt;').replaceAll('>','&gt;')));
   const closedPage=await page('/recipes/closed'+selected);
+  assert(closedPage.includes('flowchart TD'));
+  assert(closedPage.includes('id="flow-source" open'));
+  for (const asset of ['inspection.mjs','vendor/prism.js','vendor/mermaid.js','vendor/prism.css']) {
+    const response=await request(preview,'/_inspection/'+asset);
+    assert.match(response.headers.get('content-type'), /javascript|css/);
+    assert((await response.text()).length > 100);
+  }
+  await request(preview,'/_inspection/missing.js',{},404);
+  await request(preview,'/_inspection/inspection.mjs',{method:'POST'},405);
   assert(closedPage.includes('DemoRecipe.flow'));assert(closedPage.includes('State type'));
   for (const kind of ['queries','tools','recipes']) await page('/'+kind+'/missing'+selected,404);
   const candidates=path.join(kb,'.kyyn/candidates');

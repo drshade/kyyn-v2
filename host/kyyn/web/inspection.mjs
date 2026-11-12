@@ -88,7 +88,9 @@ async function showFlow(source, container) {
         if (event.key === 'Enter' || event.key === ' ') {event.preventDefault(); select(event);}
       });
     }
-    fit();
+    scale = Math.min(1, (viewport.clientWidth - 8) / bounds.width);
+    resize();
+    document.querySelector('#flow-source').open = false;
   } catch {
     viewport.replaceChildren(element('p', 'Diagram unavailable. Read the steps below or expand the Mermaid source.'));
     document.querySelector('#flow-source').open = true;

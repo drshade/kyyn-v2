@@ -336,6 +336,11 @@ back to the index and related pages.
 | `/tools/NAME` | Description, input/result types, model selection and captured implementation module |
 | `/recipes/NAME` | Instructions or flow structure, and state type |
 
+Haskell code is highlighted. Recipe diagrams show compact labels; select a step
+with the mouse or keyboard to expand its full prompt or questions. Use Fit and
+Zoom to navigate larger flows. Long instructions are expandable, and Mermaid
+source remains readable without JavaScript. These assets are served locally.
+
 URL-encode each name or ID as a path segment. For example,
 `/records/people/alex?evolution=000009-update-people` shows a draft record.
 `?evolution=ID` selects the last successfully checked candidate for inspection

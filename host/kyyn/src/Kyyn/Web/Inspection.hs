@@ -357,7 +357,7 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
         p_ (toHtml entry)
         forM_ flow $ \diagram -> do
           div_ [id_ "recipe-flow"] mempty
-          details_ [id_ "flow-source"] $ do
+          details_ [id_ "flow-source", open_ ""] $ do
             summary_ "Mermaid source"
             pre_ [id_ "flow-mermaid"] (toHtml diagram)
     h2_ "State type"
