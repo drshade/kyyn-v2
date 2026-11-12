@@ -28,7 +28,6 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.Git (revisionName, gitUrlText, TreePath(..))
 import Kyyn.Domain.Output (OutputDefinition(..), SinkReference(..))
-import Kyyn.Domain.Tap (Tap(..), tapNameText)
 import Kyyn.Domain.Inspection
 import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..))
@@ -639,20 +638,13 @@ originBody (PluginOrigin repository path revision) = dl_ $ do
   dt_ "Pinned revision"; dd_ (toHtml (revisionName revision))
 
 catalogueIndex :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> CatalogueInspection -> Html ()
-catalogueIndex selected snapshot (CatalogueInspection configuration taps) = do
+catalogueIndex selected snapshot (CatalogueInspection configuration) = do
   h2_ "Plugins"
   case configuration of
     Left diagnostics -> diagnosticsBody diagnostics
-    Right (ConfigurationInspection plugins model) -> do
+    Right (ConfigurationInspection plugins) -> do
       ul_ $ forM_ plugins $ \(plugin,_) -> li_ $
         a_ [href_ (inspectionLink selected ["plugins",Text.pack (pluginNameText plugin)])] (toHtml (pluginNameText plugin))
-      h2_ "Model"
-      case model of
-        Nothing -> p_ "No model configured."
-        Just (ModelConfiguration provider name credential) -> dl_ $ do
-          dt_ "Provider"; dd_ (toHtml (show provider))
-          dt_ "Model"; dd_ (toHtml name)
-          dt_ "Credential name"; dd_ (toHtml (secretNameText credential))
   case snapshot of
     Right (SnapshotInspection _ _ _ _ (RootDefinition _ _ _ _ _ _ outputs)) -> do
       h2_ "Outputs"
@@ -660,12 +652,3 @@ catalogueIndex selected snapshot (CatalogueInspection configuration taps) = do
         a_ [href_ (inspectionLink selected ["outputs",Text.pack name])] (toHtml name)
         toHtml (" · " ++ description)
     Left _ -> mempty
-  h2_ "Taps"
-  p_ [class_ "context"] "Local discovery configuration"
-  case taps of
-    Left diagnostics -> diagnosticsBody diagnostics
-    Right entries -> dl_ $ forM_ entries $ \(Tap name url,revision) -> do
-      dt_ (toHtml (tapNameText name))
-      dd_ $ do
-        toHtml (gitUrlText url)
-        toHtml (maybe " · Not synced" (\r -> " · " ++ revisionName r) revision)

@@ -1,6 +1,6 @@
 // Installed configuration inspection: snapshot-selected plugin origins/contracts,
-// source and sink instances, output wiring, model names without stored secrets,
-// local taps and read-only GETs. Uses no external model, fetch or publication.
+// source and sink instances, output wiring,
+// and read-only GETs. Uses no external model, fetch or publication.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -45,7 +45,7 @@ page (Heading title) = pure title
  server=spawn(executable,['--kb',kb,'web','serve','--port','0'],{env});
  const base=await new Promise((resolve,reject)=>{let out='';server.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});server.on('exit',()=>reject(new Error('Server exited')));});
  async function page(url,status=200){const r=await fetch(base+url);const text=await r.text();assert.equal(r.status,status,text);assert(!text.includes(secret));return text;}
- const index=await page('/');assert(index.includes('/plugins/local-file'));assert(index.includes('/outputs/website'));assert(index.includes('fixture-model'));assert(index.includes('fixture-credential'));assert(index.includes('Local discovery configuration'));assert(index.includes('Not synced'));
+ const index=await page('/');assert(index.includes('/plugins/local-file'));assert(index.includes('/outputs/website'));
  const plugin=await page('/plugins/local-file');assert(plugin.includes('Pinned revision'));assert(plugin.includes('plugins/local-file'));assert(plugin.includes('Source connector'));assert(plugin.includes('Sink connector'));assert(plugin.includes('Captured methods'));assert(plugin.includes('content'));assert(plugin.includes('published/index.html'));assert(plugin.includes('/connectors/local-file/documents'));assert(!plugin.includes('/connectors/local-file/website'));
  assert((await page('/plugins/local-file/types/Folder/configuration/LocalFile.Types.FolderConfig')).includes('recursive'));
  assert((await page('/plugins/local-file/types/Folder/payload/LocalFile.Types.Document')).includes('text'));
@@ -61,7 +61,7 @@ page (Heading title) = pure title
  const selector='?evolution='+draft.id;
  assert((await page('/outputs/website'+selector)).includes('Draft output'));assert(!(await page('/outputs/website')).includes('Draft output'));
  assert((await page('/plugins/local-file'+selector)).includes('published/draft.html'));assert(!(await page('/plugins/local-file')).includes('published/draft.html'));
- const draftIndex=await page('/'+selector);assert(draftIndex.includes('draft-model'));assert(draftIndex.includes('Local discovery configuration'));assert(draftIndex.includes('/plugins/local-file'+selector));
+ const draftIndex=await page('/'+selector);assert(draftIndex.includes('/plugins/local-file'+selector));
  assert.equal(head(),accepted);assert(!fs.existsSync(path.join(kb,'published')));assert.deepEqual(captureEntries(),capturesBefore);
- console.log('Configuration inspection journey passed: captured plugins/contracts, output wiring, model references, local taps, snapshot isolation and read-only GETs.');
+ console.log('Configuration inspection journey passed: captured plugins/contracts, output wiring, snapshot isolation and read-only GETs.');
 } finally {if(server&&server.exitCode===null){server.kill();await once(server,'exit');}fs.rmSync(temp,{recursive:true,force:true});}

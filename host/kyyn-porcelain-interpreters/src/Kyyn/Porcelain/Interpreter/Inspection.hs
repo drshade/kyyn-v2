@@ -20,7 +20,6 @@ import qualified Kyyn.Domain.Output
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
 import Kyyn.Domain.Plugin (ConnectorName(..), PluginName, PluginOrigin, pluginName, MethodName(..))
-import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 import Kyyn.Plumbing.Protocol.Plugin (decodeOrigin)
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.DataType (definingModule)
@@ -51,8 +50,7 @@ runInspection :: (RootOpening :> es, RootStore :> es, Store.EvolutionStore :> es
 runInspection = interpret $ \_ -> \case
   InspectConfiguration (SnapshotInspection _ _ (Root _ _ code _) _ _) -> runExceptT $ do
     origins <- inspectOrigins code
-    model <- ExceptT (readModelConfiguration code)
-    pure (ConfigurationInspection origins model)
+    pure (ConfigurationInspection origins)
   InspectConnectors (SnapshotInspection _ _ (Root _ _ code _) _ _) -> runExceptT $ do
     plugins <- ExceptT (Plugins.preparePlugins code)
     forM [(package,name,binding,connector,payload,config) |

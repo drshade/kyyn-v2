@@ -22,8 +22,6 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.EvidenceInspection (runEvidenceInspection)
 import Kyyn.Domain.Workspace (WorkspaceManifest(..), EvolutionState(..))
 import Kyyn.Domain.Path (DirectoryScope)
-import qualified Kyyn.Porcelain.Capability.PluginDiscovery as Discovery
-import Kyyn.Porcelain.Interpreter.PluginDiscovery (runPluginDiscovery)
 import Kyyn.Porcelain.Capability.Inspection
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
@@ -49,7 +47,7 @@ inspectPage host scope path parameters = case selection of
         Left message -> pure (failed selected (refusal [errorDiagnostic "kb.path" message]))
         Right kbScope -> do
           result <- withRuntimeResult host $ \settings -> runRuntime host settings . runDocumentPersistenceIO . runBlobStorageIO kbScope . runEvidenceStore kbScope
-            . runPluginDiscovery . runEvidenceInspection . runPluginPreparation . runToolPreparation
+            . runEvidenceInspection . runPluginPreparation . runToolPreparation
             . runRootOpening . runWorkspaceStore . runEvolutionStore . runRootExecution . runRecipeInspection . runInspection $ runExceptT $ do
               details <- case route of
                 EvolutionPage identity -> Just <$> ExceptT (inspectEvolutionSource (EvolutionWorkspace kb identity))
@@ -66,10 +64,7 @@ inspectPage host scope path parameters = case selection of
                 _ -> pure []
               configuration <- case route of
                 IndexPage -> ExceptT (Right <$> either (pure . Left) inspectConfiguration snapshot)
-                _ -> pure (Right (ConfigurationInspection [] Nothing))
-              taps <- case route of
-                IndexPage -> ExceptT (Right <$> Discovery.listTaps kb)
-                _ -> pure (Right [])
+                _ -> pure (Right (ConfigurationInspection []))
               declaration <- case route of
                 PluginPage name -> Just <$> (ExceptT (pure snapshot) >>= \current -> ExceptT (inspectDeclaration current (PluginRequest name)))
                 PluginTypePage name _ _ _ -> Just <$> (ExceptT (pure snapshot) >>= \current -> ExceptT (inspectDeclaration current (PluginRequest name)))
@@ -95,7 +90,7 @@ inspectPage host scope path parameters = case selection of
                       concat [refs | SnapshotStep _ (Rationale _ refs) _ <- steps]
                     _ -> []
               references <- ExceptT (Right <$> inspectEvidenceReferences kb revision evidence)
-              ExceptT (pure (renderInspection shown snapshot route summaries details declaration (LocalInspection connectors item references) (CatalogueInspection configuration taps)))
+              ExceptT (pure (renderInspection shown snapshot route summaries details declaration (LocalInspection connectors item references) (CatalogueInspection configuration)))
           pure $ case result of
             Left response -> failed selected response
             Right (Left failure) -> failed selected (operationalFailure failure)

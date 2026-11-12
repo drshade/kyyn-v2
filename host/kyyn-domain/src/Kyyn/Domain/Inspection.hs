@@ -12,7 +12,6 @@ import Kyyn.Domain.EvidenceIndex (EvidenceIndex)
 import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorName, ConnectorTypeName, BindingName, PluginOrigin, MethodName)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Output (OutputDefinition)
-import Kyyn.Domain.Tap (Tap)
 import Kyyn.Domain.Blob (BlobRef)
 import Kyyn.Types.Evidence (EvidenceRef)
 import Data.Aeson (Value)
@@ -66,9 +65,9 @@ data LocalInspection = LocalInspection
   [(EvidenceRef, Either [Diagnostic] ())]
 
 -- Snapshot configuration and machine-local discovery are deliberately separate.
-data ConfigurationInspection = ConfigurationInspection [(PluginName, PluginOrigin)] (Maybe ModelConfiguration)
+data ConfigurationInspection = ConfigurationInspection [(PluginName, PluginOrigin)]
 data CatalogueInspection = CatalogueInspection
-  (Either [Diagnostic] ConfigurationInspection) (Either [Diagnostic] [(Tap, Maybe GitRevision)])
+  (Either [Diagnostic] ConfigurationInspection)
 data ConnectorDeclarationInspection = ConnectorDeclarationInspection
   ConnectorTypeName Bool [(String, CheckedContract)] [(MethodName, String)]
   [(ConnectorName, BindingName, CheckedValue)]

@@ -348,8 +348,7 @@ The Connectors section shows this machine's current captured evidence, using
 accepted connector configuration. Connector/evidence pages ignore evolution
 selection and never fetch. Only the latest fetch is retained. Evolution evidence
 references link to current locally retained items where available.
-Plugin and output pages follow `?evolution`. Taps are this machine's discovery
-configuration.
+Plugin and output pages follow `?evolution`.
 
 Stored connector configuration is displayed as written: keep credentials in the
 secret store and reference them by name; inspection never reads secret values.
