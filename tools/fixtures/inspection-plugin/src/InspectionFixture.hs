@@ -1,6 +1,7 @@
 module InspectionFixture where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import GHC.Generics (Generic)
 import Kyyn.Schema (Contract)
 import Kyyn.Plugin
@@ -11,7 +12,7 @@ data Auth = Anonymous | Credential { secretName :: Text }
   deriving stock (Eq, Show, Generic) deriving anyclass Contract
 data Config = Config { endpoint :: Text, authentication :: Auth }
   deriving stock Generic deriving anyclass Contract
-data Payload = Document { title :: Text, attachment :: BlobRef }
+data Payload = Document { title :: Text, body :: Text, attachment :: BlobRef }
   | Measurement Integer | Empty
   deriving stock Generic deriving anyclass Contract
 newtype Options = Options { marker :: Text } deriving stock Generic deriving anyclass Contract
@@ -32,7 +33,7 @@ capture (Config url _) options (FetchContext _ prior) _ = do
       let change = case prior of Nothing -> NewEvidence; Just _ -> UpdatedEvidence
           entry key payload = change (EvidenceId key) (Evidence (EvidenceFingerprint hash) ["fixture source <reference>"] payload)
       in Right (FetchResult
-        [entry "record / one" (Available (Document "Captured <document>" ref)),
+        [entry "record / one" (Available (Document "Captured <document>" ("First line\nSecond line\n" <> Text.replicate 300 "long mail body ") ref)),
          entry "positional" (Available (Measurement 90)), entry "truncated" Truncated]
         1 (Report 3 ["Fixture coverage", maybe "No options" (\(Options text) -> text) options]))
     _ -> Left (FetchError "Fixture download failed")

@@ -251,6 +251,7 @@ renderValue selected shape value = case (shape,value) of
     case (lookup (Text.unpack tag) arms,Keys.lookup "value" fields) of
       (Just (Just inner),Just payload) -> renderValue selected inner payload
       _ -> mempty
+  (Scalar TextScalar,String text) -> span_ [style_ "white-space:pre-wrap;overflow-wrap:anywhere"] (toHtml text)
   (Reference target,String identity) -> a_ [href_ (inspectionLink selected ["records",Text.pack target,identity])] (toHtml identity)
   _ -> toHtml (scalarText value)
 
