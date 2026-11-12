@@ -48,7 +48,7 @@ in [ { name = "captured", binding = "captured", connector = Connector.Capture { 
  assert(detail.includes('record%20%2F%20one'));assert(detail.includes('Truncated'));
  assert((await page('/evidence/inspection-fixture/captured/record%20%2F%20one')).includes('Captured &lt;document&gt;'));
  const blob=await page('/evidence/inspection-fixture/captured/record%20%2F%20one');assert(blob.includes('fixture.bin'));assert(blob.includes('SHA-256'));assert(!blob.includes('binary fixture bytes'));
- const positional=await page('/evidence/inspection-fixture/captured/positional');assert(positional.includes('Measurement'));assert(positional.includes('minutes'));assert(positional.includes('90'));
+ const positional=await page('/evidence/inspection-fixture/captured/positional');assert(positional.includes('Measurement'));assert(positional.includes('90'));
  assert((await page('/evidence/inspection-fixture/captured/truncated')).includes('Payload truncated'));
  const typ=await page(connector+'/types/payload/InspectionFixture.Payload');assert(typ.includes('Measurement'));assert(typ.includes('title'));assert(typ.includes('value'));
  assert((await page(connector+'/types/report/InspectionFixture.Report')).includes('examined'));

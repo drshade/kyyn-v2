@@ -12,7 +12,7 @@ data Auth = Anonymous | Credential { secretName :: Text }
 data Config = Config { endpoint :: Text, authentication :: Auth }
   deriving stock Generic deriving anyclass Contract
 data Payload = Document { title :: Text, attachment :: BlobRef }
-  | Measurement Text Integer | Empty
+  | Measurement Integer | Empty
   deriving stock Generic deriving anyclass Contract
 newtype Options = Options { marker :: Text } deriving stock Generic deriving anyclass Contract
 data Report = Report { examined :: Integer, notes :: [Text] }
@@ -33,6 +33,6 @@ capture (Config url _) options (FetchContext _ prior) _ = do
           entry key payload = change (EvidenceId key) (Evidence (EvidenceFingerprint hash) ["fixture source <reference>"] payload)
       in Right (FetchResult
         [entry "record / one" (Available (Document "Captured <document>" ref)),
-         entry "positional" (Available (Measurement "minutes" 90)), entry "truncated" Truncated]
+         entry "positional" (Available (Measurement 90)), entry "truncated" Truncated]
         1 (Report 3 ["Fixture coverage", maybe "No options" (\(Options text) -> text) options]))
     _ -> Left (FetchError "Fixture download failed")
