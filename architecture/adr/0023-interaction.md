@@ -83,10 +83,9 @@ visible. Evidence references in evolution rationales link to current local items
 where they resolve, not to an inferred historical payload. Blob attachments are listed as
 metadata. Inspection does not read the secret store.
 
-Plugin and output pages follow the selected accepted or checked snapshot. The
-index also shows its model provider, model and credential name. Taps are labelled
-as local discovery configuration with their cached revision; viewing them never
-updates the catalogue. Plugin contract links are scoped by connector and role,
+Plugin and output pages follow the selected accepted or checked snapshot.
+Model and tap configuration are not shown on the index.
+Plugin contract links are scoped by connector and role,
 including captured-method input/result contracts, rather than matched by name
 against the KB schema. Output inspection describes the renderer and sink without
 running the query or publishing anything.
