@@ -232,6 +232,8 @@ ${recipeEdits}
   const openPage=await page('/recipes/open'+selected);
   assert(openPage.includes('Review tasks &lt;carefully&gt;'));
   assert(openPage.includes('<details class="prompt">'));
+  assert(openPage.includes('No state fields.'));
+  assert(!openPage.includes('Expand saved checkpoint'));
   assert(openPage.includes(longInstructions.replaceAll('<','&lt;').replaceAll('>','&gt;')));
   const closedPage=await page('/recipes/closed'+selected);
   assert(closedPage.includes('flowchart TD'));
