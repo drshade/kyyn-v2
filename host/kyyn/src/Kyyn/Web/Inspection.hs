@@ -22,7 +22,14 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.Git (revisionName)
 import Kyyn.Domain.Inspection
-import Kyyn.Domain.Recipe (RecipeDefinition(..))
+import Kyyn.Domain.Recipe (RecipeDefinition(..), recipeDefinition)
+import Kyyn.Domain.Root (Root(..), RootDefinition(..))
+import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..))
+import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
+import Kyyn.Domain.Plugin (MethodName(..))
+import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
+import Kyyn.Domain.Secret (secretNameText)
+import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Domain.Path (relativeName)
@@ -36,11 +43,12 @@ import Kyyn.Types.SchemaMetadata
 
 data InspectionRoute = IndexPage | EvolutionPage EvolutionId | CollectionPage String
   | RecordPage String Text | TypePage String
+  | QueryPage String (Maybe Text) | ToolPage String | RecipePage Text
 
 -- Keep routing and data acquisition outside the HTML renderer.
 renderInspection :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> InspectionRoute
-  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Either [Diagnostic] (Html ())
-renderInspection selected snapshot route summaries evolution = do
+  -> [EvolutionSummary] -> Maybe EvolutionInspection -> Maybe DeclarationInspection -> Either [Diagnostic] (Html ())
+renderInspection selected snapshot route summaries evolution declaration = do
   (title,body) <- case route of
     IndexPage -> Right ("Knowledge base", indexBody selected snapshot summaries)
     EvolutionPage identity -> case evolution of
@@ -58,13 +66,22 @@ renderInspection selected snapshot route summaries evolution = do
         p_ $ a_ [href_ (inspectionLink selected ["collections",Text.pack name])] (toHtml name)
         renderValue selected shape value)
     TypePage name -> do
-      SnapshotInspection _ _ root _ <- snapshot
+      SnapshotInspection _ _ (Root root _ _ _) _ _ <- snapshot
       target <- case [t | t@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root)), haskellType t == name] of
         t:_ -> Right t
         _ -> missing "type" name
       pure (Text.pack name,typeBody selected root target)
+    QueryPage name _ -> declared name
+    ToolPage name -> declared name
+    RecipePage name -> declared (Text.unpack name)
   pure $ document selected snapshot title body
-  where missing kind name = Left [errorDiagnostic "inspection.unknown" ("Unknown " ++ kind ++ ": " ++ name)]
+  where
+    declared name = do
+      current <- snapshot
+      case declaration of
+        Just value -> Right (Text.pack name,declarationBody selected current value)
+        Nothing -> missing "declaration" name
+    missing kind name = Left [errorDiagnostic "inspection.unknown" ("Unknown " ++ kind ++ ": " ++ name)]
 
 renderInspectionError :: Maybe EvolutionId -> [Diagnostic] -> Html ()
 renderInspectionError selected diagnostics =
@@ -102,7 +119,7 @@ document selected snapshot title content = doctypehtml_ $ do
       a_ [href_ "/kb/"] "Views"
       case selected of Nothing -> mempty; Just _ -> a_ [href_ "/"] "Accepted KB"
     p_ [class_ "context"] $ toHtml $ case snapshot of
-      Right (SnapshotInspection revision draft _ _) -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i) <> " · last checked candidate") draft <>
+      Right (SnapshotInspection revision draft _ _ _) -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i) <> " · last checked candidate") draft <>
         " · " <> Text.pack (revisionName revision)
       Left _ -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i)) selected
     h1_ (toHtml title)
@@ -116,19 +133,31 @@ indexBody selected snapshot summaries = do
     toHtml (" · " <> stateLabel state)
   case snapshot of
     Left diagnostics -> diagnosticsBody diagnostics
-    Right (SnapshotInspection _ _ root _) -> do
+    Right (SnapshotInspection _ _ (Root root _ _ recipes) _ (RootDefinition _ _ _ queries tools _ _)) -> do
       h2_ "Collections"
       ul_ $ forM_ (collectionContracts (rootSchema root)) $ \(CollectionContract name _ _ _) ->
         li_ $ a_ [href_ (inspectionLink selected ["collections",Text.pack name])] (toHtml name)
       h2_ "Types"
       ul_ $ forM_ [haskellType t | t@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))] $ \name ->
         li_ $ a_ [href_ (inspectionLink selected ["types",Text.pack name])] (toHtml name)
+      h2_ "Queries"
+      ul_ $ forM_ queries $ \(QueryDefinition name description _ _ _ _ _) -> li_ $ do
+        a_ [href_ (inspectionLink selected ["queries",Text.pack name])] (toHtml name)
+        toHtml (" · " ++ description)
+      h2_ "Tools"
+      ul_ $ forM_ tools $ \(ToolDefinition (MethodName name) description _ _ _) -> li_ $ do
+        a_ [href_ (inspectionLink selected ["tools",Text.pack name])] (toHtml name)
+        toHtml (" · " ++ description)
+      h2_ "Recipes"
+      ul_ $ forM_ recipes $ \(Fact (FactId name) recipe) -> li_ $ do
+        a_ [href_ (inspectionLink selected ["recipes",name])] (toHtml name)
+        toHtml (case recipeDefinition recipe of OpenRecipe _ _ -> " · Instructions" :: Text; ClosedRecipe _ -> " · Flow")
 
 diagnosticsBody :: [Diagnostic] -> Html ()
 diagnosticsBody diagnostics = forM_ diagnostics $ \(Diagnostic _ _ message _) -> p_ (toHtml message)
 
 collection :: SnapshotInspection -> String -> Either [Diagnostic] (RootContract,Shape,[(Text,Value)])
-collection (SnapshotInspection _ _ root value) name = case
+collection (SnapshotInspection _ _ (Root root _ _ _) value _) name = case
   [c | c@(CollectionContract actual _ _ _) <- collectionContracts (rootSchema root), actual == name] of
     [CollectionContract _ field _ shape] -> case value of
       Object fields | Just (Array values) <- Keys.lookup (Key.fromString field) fields ->
@@ -292,3 +321,51 @@ sourceDiff (Just before) (Just after) = do
       summary_ (toHtml (Text.pack (show (length unchanged)) <> " unchanged lines"))
       pre_ (toHtml (Text.unlines unchanged))
 sourceDiff Nothing Nothing = mempty
+
+declarationBody :: Maybe EvolutionId -> SnapshotInspection -> DeclarationInspection -> Html ()
+declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declaration = case declaration of
+  QueryInspection (QueryDefinition _ _ implementation _ _ _ _) (QueryDescriptor _ description input output) source result -> do
+    p_ (toHtml description)
+    signature input output
+    implementationBody implementation source
+    case result of
+      Nothing -> p_ "Add an input parameter to the URL to run this query."
+      Just value -> h2_ "Result" >> renderValue selected (contractShape output) value
+  ToolInspection (ToolDefinition _ _ _ _ implementation) (ToolDescriptor _ description input output) model source -> do
+    p_ (toHtml description)
+    signature input output
+    h2_ "Model"
+    case model of
+      Nothing -> p_ "No model configured."
+      Just (ModelConfiguration provider modelName credential) -> dl_ $ do
+        dt_ "Provider"; dd_ $ toHtml (case provider of OpenAI -> "OpenAI" :: Text; Anthropic -> "Anthropic")
+        dt_ "Model"; dd_ (toHtml modelName)
+        dt_ "Secret reference"; dd_ (toHtml (secretNameText credential))
+    implementationBody implementation source
+  RecipeInspection _ method stateType flow -> do
+    case method of
+      OpenRecipe instructions _ -> h2_ "Instructions" >> p_ (toHtml instructions)
+      ClosedRecipe (FlowEntryRef entry) -> do
+        h2_ "Flow"
+        p_ (toHtml entry)
+        forM_ flow (pre_ . toHtml)
+    h2_ "State type"
+    typeLink stateType
+  where
+    names = [haskellType typ | typ@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))]
+    typeLink :: String -> Html ()
+    typeLink name = if name `elem` names
+      then a_ [href_ (inspectionLink selected ["types",Text.pack name])] (toHtml name)
+      else code_ (toHtml name)
+    signature input output = dl_ $ do
+      dt_ "Input"; dd_ (typeLink (haskellType (rootType input)))
+      dt_ "Result"; dd_ (typeLink (haskellType (rootType output)))
+
+implementationBody :: String -> ImplementationSource -> Html ()
+implementationBody implementation (ImplementationSource name contents) = do
+  h2_ "Implementation"
+  p_ (toHtml implementation)
+  h3_ (toHtml name)
+  case contents of
+    Just text -> pre_ (toHtml text)
+    Nothing -> p_ "This module is supplied by a dependency; its source is not in the captured KB."

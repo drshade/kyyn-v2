@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.Inspection
-  ( Inspection(..), inspectSnapshot, inspectEvolutionSource ) where
+  ( Inspection(..), inspectSnapshot, inspectEvolutionSource, inspectDeclaration ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -11,6 +11,8 @@ import Kyyn.Domain.Inspection
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 
 data Inspection :: Effect where
+  InspectDeclaration :: SnapshotInspection -> DeclarationRequest
+    -> Inspection m (Either [Diagnostic] DeclarationInspection)
   InspectSnapshot :: KnowledgeBase -> GitRevision -> Maybe EvolutionId
     -> Inspection m (Either [Diagnostic] SnapshotInspection)
   InspectEvolutionSource :: EvolutionWorkspace
@@ -25,3 +27,7 @@ inspectSnapshot kb revision = send . InspectSnapshot kb revision
 inspectEvolutionSource :: Inspection :> es => EvolutionWorkspace
   -> Eff es (Either [Diagnostic] EvolutionInspection)
 inspectEvolutionSource = send . InspectEvolutionSource
+
+inspectDeclaration :: Inspection :> es => SnapshotInspection -> DeclarationRequest
+  -> Eff es (Either [Diagnostic] DeclarationInspection)
+inspectDeclaration snapshot = send . InspectDeclaration snapshot
