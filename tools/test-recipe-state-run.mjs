@@ -1,6 +1,7 @@
 // Real closed-flow request/state execution, state-only frozen proposal, discovery
 // and acceptance without rerunning the flow. Recipes are created through generated
 // flow-definition handles, deriving request/state types from authored signatures.
+// Documentation edits retain state; a genuinely incompatible state type fails.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -65,6 +66,13 @@ evolution = prepare (pure ()) $ edit (Rationale "Teach review recipes" []) $ do
   cli(['evolution', 'accept', setup.id]);
   rootLocation = 'root';
   cli(['root', 'check']);
+  const documented = cli(['evolution', 'new', 'document-flow-state']).result;
+  const stateSource = fs.readFileSync(path.join(kb, 'root/src/Review.hs'), 'utf8');
+  fs.writeFileSync(path.join(documented.path, 'target/src/Review.hs'),
+    stateSource.replace('data State =', '-- | Messages already reviewed.\ndata State ='));
+  cli(['evolution', 'check', documented.id]);
+  cli(['evolution', 'ready', documented.id]);
+  cli(['evolution', 'accept', documented.id]);
   assert.match(JSON.stringify(cli(['root', 'recipe', 'run', 'review'], 1)), /recipe.input-required/);
   assert.match(JSON.stringify(cli(['root', 'recipe', 'run', 'review', '--input', 'True'], 1)), /dhall.type/);
   console.log('Running typed recipe and freezing its state-only proposal');
@@ -92,7 +100,16 @@ evolution = prepare (pure ()) $ edit (Rationale "Teach review recipes" []) $ do
   cli(['root', 'check']);
   const unit = cli(['root', 'recipe', 'run', 'unit']).result;
   cli(['evolution', 'check', unit.id]);
-  console.log('Typed requests, unit input, state-only freezing, discovery and acceptance passed.');
+  const incompatible = cli(['evolution', 'new', 'incompatible-state']).result;
+  fs.writeFileSync(path.join(incompatible.path, 'target/src/Review.hs'),
+    stateSource.replace('seen :: [Text]', 'seen :: Bool'));
+  fs.writeFileSync(path.join(incompatible.path, 'target/src/Flows.hs'), flowSource
+    .replace('Review.State seen', 'Review.State _')
+    .replace('Review.State (seen ++ [request])', 'Review.State True'));
+  const failed = cli(['evolution', 'check', incompatible.id], 1);
+  assert.match(JSON.stringify(failed), /Recipe review:/);
+  assert.match(JSON.stringify(failed), /state shape differs from target|state.*decode/);
+  console.log('Closed-flow documentation edit, typed state execution, acceptance and incompatible-state diagnostic passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

@@ -55,7 +55,7 @@ runRootExecution = interpret $ \_ -> \case
     _ <- forM (zip recipes states) $ \(Fact identity (StoredRecipe _ _ _ (CheckedValue _ value)),
       (Fact actual _,_,inspected)) -> do
         unless (identity == actual)
-          (throwE [errorDiagnostic "recipe.state-missing" "Recipe state does not match the selected recipe ID"])
+          (throwE [errorDiagnostic "recipe.inspection-order" "Inspected recipe order differs from the requested recipe order"])
         ExceptT (checkRecipeValue inspected value)
     queries <- forM declarations $ \(QueryDefinition name documentation _ _ _ _ _) ->
       case [(entry,input.contract,result.contract) | entry <- entries,

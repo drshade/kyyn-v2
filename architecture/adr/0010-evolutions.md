@@ -60,9 +60,7 @@ projection or defaulting opportunities. Ordinary target scalar codecs apply when
 selected. There is no extra decode/re-encode equality gate and no assertion that
 an input type reproduces an old nominal contract.
 
-Open recipe definitions declare their state type; closed recipe definitions identify
-the flow from which the current build derives the state type. Recipe state decodes
-against that current type.
+ADR 0014 owns recipe state declarations and current-type decoding.
 
 All retained fields, facts and recipe states must eventually decode under the
 complete target application and pass its normal validation. Untouched data does

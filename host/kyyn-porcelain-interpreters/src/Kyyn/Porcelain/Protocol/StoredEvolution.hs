@@ -28,7 +28,7 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..))
 import Kyyn.Domain.DataType (haskellType)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.SnapshotWire (SnapshotWire)
@@ -90,20 +90,19 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
       ExceptT (materializeRoot target targetCode (KnowledgeBase root states))
     checkState (Fact identity (ProposedRecipe definition value)) = do
       let method = recipeMethod definition
-          declared = case definition of OpenRecipe _ name -> name; ClosedRecipe _ -> ""
-      contract <- stateContract method declared
+      contract <- stateContract definition
       let name = case definition of
             OpenRecipe _ authored -> authored
             ClosedRecipe _ -> haskellType (rootType contract)
       state <- ExceptT (checkRecipeValue contract value)
       pure (Fact identity (StoredRecipe method name contract state))
-    stateContract method name = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,
-        selected == reference method name] of
+    stateContract definition = case [schema.contract | G.ContractEntry selected schema <- checkedEntries guest,
+        selected == reference definition] of
       [contract] -> pure contract
       _ -> bad "Returned recipe has no unique compiler-described target state"
-    reference (OpenAgent _) "()" = "$import.unit"
-    reference (OpenAgent _) name = "$import.state.Target." <> Text.pack name
-    reference (ClosedAgent (FlowEntryRef flow)) _ = "$import.flow." <> flow
+    reference (OpenRecipe _ "()") = "$import.unit"
+    reference (OpenRecipe _ name) = "$import.state.Target." <> Text.pack name
+    reference (ClosedRecipe (FlowEntryRef flow)) = "$import.flow." <> flow
     snapshotOf (Root _ facts _ recipes) = do
       definitions <- ExceptT (encodeRootRecipes recipes)
       tree <- either bad pure (fileTree (files facts ++ files definitions))

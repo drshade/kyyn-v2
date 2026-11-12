@@ -61,7 +61,7 @@ answer () = pure (Answer 7)
   fs.writeFileSync(path.join(incompatible.path, 'target/src/Reporting.hs'), source.replace('count :: Integer', 'count :: Bool').replace('Answer 7', 'Answer True'));
   const rejected = cli(['evolution', 'check', incompatible.id], 1);
   assert.match(JSON.stringify(rejected), /dhall.type/);
-  assert.match(JSON.stringify(rejected), /answer/);
+  assert(rejected.diagnostics.some(d => d.location?.kind === "example" && d.location.name === "answer"), JSON.stringify(rejected));
   assert.doesNotMatch(JSON.stringify(rejected), /contracts changed|rebuild the example/);
   const mismatch = cli(['evolution', 'new', 'guest-shape-mismatch']).result;
   fs.appendFileSync(path.join(mismatch.path, 'target/src/Reporting.hs'), '\n-- Distinct build for the malformed guest fixture.\n');

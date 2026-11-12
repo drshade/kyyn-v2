@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Runtime.Evolution (knowledgeBaseCodec, rejectionValue) where
 import Kyyn.Types.Evolution (EvolutionFailure(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
-import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..), StoredDefinition(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Data.Aeson (Value)
@@ -30,17 +30,17 @@ knowledgeBaseCodec valueCodec = Codec encode decode
       payload <- field "value" payloadCodec values
       pure (Fact (FactId name) payload)
     payloadCodec = Codec encodeStored decodeStored
-    encodeStored (StoredRecipe method authored state) = record
-      [("definition",encodeDefinition method authored),("state",state)]
+    encodeStored (StoredRecipe definition state) = record
+      [("definition",encodeDefinition definition),("state",state)]
     decodeStored value = do
       values <- fields ["definition","state"] value
-      (method,authored) <- field "definition" definitionCodec values
-      StoredRecipe method authored <$> field "state" (Codec id Right) values
-    definitionCodec = Codec (uncurry encodeDefinition) decodeDefinition
-    encodeDefinition (OpenAgent instructions) authored = tagged "OpenAgent" (Just
+      definition <- field "definition" definitionCodec values
+      StoredRecipe definition <$> field "state" (Codec id Right) values
+    definitionCodec = Codec encodeDefinition decodeDefinition
+    encodeDefinition (OpenDefinition instructions authored) = tagged "OpenAgent" (Just
       (record [("instructions",encodeWith textCodec instructions),
-        ("stateType",encodeWith textCodec (maybe "" id authored))]))
-    encodeDefinition (ClosedAgent (FlowEntryRef entry)) _ = tagged "ClosedAgent" (Just
+        ("stateType",encodeWith textCodec authored)]))
+    encodeDefinition (ClosedDefinition (FlowEntryRef entry)) = tagged "ClosedAgent" (Just
       (record [("flow",encodeWith textCodec entry)]))
     decodeDefinition value = do
       (name, payload) <- variant value
@@ -49,9 +49,9 @@ knowledgeBaseCodec valueCodec = Codec encode decode
           values <- fields ["instructions","stateType"] contents
           instructions <- field "instructions" textCodec values
           authored <- field "stateType" textCodec values
-          pure (OpenAgent instructions,Just authored)
+          pure (OpenDefinition instructions authored)
         ("ClosedAgent", Just contents) -> do
           values <- fields ["flow"] contents
           entry <- field "flow" textCodec values
-          pure (ClosedAgent (FlowEntryRef entry),Nothing)
+          pure (ClosedDefinition (FlowEntryRef entry))
         _ -> Left "Expected OpenAgent or ClosedAgent recipe"

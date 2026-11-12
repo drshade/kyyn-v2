@@ -18,7 +18,7 @@ import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape, rootTyp
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
-import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..), haskellType)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
@@ -104,8 +104,8 @@ decodeRecipeStates entries tree = runExceptT $ do
   traverse (\(path,(ident,contract)) -> do
     bytes <- maybe (bad ("Missing state: " ++ relativeName path)) pure (lookup path (files tree))
     source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
-    value <- ExceptT (fmap (either (Left . map (\(Diagnostic level code message _) ->
-      Diagnostic level code message (Just (SourceLocation (Text.pack (relativeName path)) 1 1)))) Right)
+    value <- ExceptT (fmap (either (Left . map (\(Diagnostic level code message location) ->
+      Diagnostic level code (Text.pack (relativeName path) <> ": " <> message) location)) Right)
       (decodeValue (contractShape contract) source))
     pure (ident,CheckedValue (contractId contract) value)) (zip paths entries)
 

@@ -83,8 +83,8 @@ main = do
     (do removeRecipe ident; createRecipe ident stringDefinition "Fresh") both ==
     Right (KnowledgeBase 7 [secondValue,Fact key (storeRecipe stringDefinition "Fresh")]))
   let malformed = case secondValue of
-        Fact name (StoredRecipe method typeName _) ->
-          Fact name (StoredRecipe method typeName (Array mempty))
+        Fact name (StoredRecipe selectedDefinition _) ->
+          Fact name (StoredRecipe selectedDefinition (Array mempty))
       withMalformed = KnowledgeBase (7 :: Integer) [firstValue, malformed]
   assert "editing a recipe does not decode another recipe's state" (execute
     (updateRecipe boolType ident boolDefinition Right) withMalformed == Right withMalformed)

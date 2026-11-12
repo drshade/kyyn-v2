@@ -59,11 +59,15 @@ targetBinding (SchemaMetadata _ _ collections) bindings = do
       _ -> failure "Recipe definition has no unique target state binding"
     decodeRecipe (StoredRecipe method authored (RecordedValue actual value)) = do
       reference <- key method authored
-      RecipeBinding _ (RecipeType _ shape encode decode) <- select reference
+      RecipeBinding _ binding@(RecipeType _ shape _ decode) <- select reference
       unless (canonicalShape actual == canonicalShape shape) (failure "Recipe state shape differs from target")
       state <- either (failure . Text.pack) Right (decode value)
-      pure (Typed.StoredRecipe method authored (encode state))
-    encodeRecipe (Typed.StoredRecipe method authored value) = do
+      pure (Typed.storeRecipe (RecipeDefinition method binding) state)
+    encodeRecipe (Typed.StoredRecipe definition value) = do
+      let method = Typed.recipeMethod definition
+          authored = case definition of
+            Typed.OpenDefinition _ name -> Just name
+            Typed.ClosedDefinition _ -> Nothing
       reference <- key method authored
       RecipeBinding _ (RecipeType _ shape encode decode) <- select reference
       state <- either (failure . Text.pack) Right (decode value)
@@ -89,8 +93,8 @@ targetRecipeEvolutionEntry metadata recipes stateType (RecipeEvolution steps) =
         _ -> failure ("Recipe " <> identity <> " is missing or ambiguous")
       state <- Typed.readRecipeState (RecipeId identity) stateType original
       ((),(newRoot,newState)) <- runStateT action (root,state)
-      let Typed.StoredRecipe method _ _ = original
-          changed = Typed.storeRecipe (Typed.RecipeDefinition method stateType) newState
+      let Typed.StoredRecipe definition _ = original
+          changed = Typed.storeRecipe (Typed.RecipeDefinition (Typed.recipeMethod definition) stateType) newState
       pure ((),Typed.KnowledgeBase newRoot
         [Fact key (if name == identity then changed else value) | Fact key@(FactId name) value <- states])
 
