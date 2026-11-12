@@ -110,9 +110,9 @@ loadCurrentEvidence ref owner expected = runExceptT $ do
 data CurrentEvidence = CurrentEvidence EvidenceSnapshotRef [(EvidenceId,Evidence CheckedValue)] FetchSummary deriving (Eq, Show)
 data MaterializedBaseline = MaterializedBaseline String (Maybe FetchId) (Maybe CurrentEvidence) (Maybe CheckedValue)
 
-beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem MaterializedBaseline)
-beginFixture ref owner schema _position = runExceptT $ do
+beginFixture ref owner schema = runExceptT $ do
   FetchBaseline started base capture cursor <- ExceptT (beginFetch (selectionFor ref owner) schema)
   values <- traverse (ExceptT . materialize) capture
   pure (MaterializedBaseline started base values cursor)
@@ -270,7 +270,7 @@ main = do
       Just (Evidence _ _ (Available (CheckedValue decodedIdentity (String text)))) -> decodedIdentity == contractId renamedContract && text == "payload-only-new"
       _ -> False)
     tip <- run (evidenceHead instanceA) >>= right
-    assert "refusal changed head" (tip == Just (key f2))
+    assert "failed value read changed head" (tip == Just (key f2))
     (left,rightResult) <- concurrently
       (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
       (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
@@ -291,9 +291,9 @@ main = do
     oldProducer <- run (loadCurrentEvidence instanceA producer contract) >>= right
     assert "source identity still gates reading" (captureContents oldProducer == Just (f4,[(itemA,value "refetched")]))
     replaced <- Bytes.readFile statePath
-    assert "producer replacement retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
+    assert "updated capture retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
     entries <- listDirectory storePath
-    assert "producer replacement retained extra documents" (length entries == 2 && all (`elem` entries) ["index.dhallb","payloads"])
+    assert "publication retained extra documents" (length entries == 2 && all (`elem` entries) ["index.dhallb","payloads"])
     existed <- run (clearEvidence instanceA)
     assert "clearing present evidence reported no cache" existed
     remaining <- doesDirectoryExist storePath
@@ -329,7 +329,7 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
       run = execute scope
       cursor label = CheckedValue (contractId contract) (String label)
-      begin owner = run (beginFixture instanceA owner contract (Just contract)) >>= right
+      begin owner = run (beginFixture instanceA owner contract) >>= right
       public label = FetchReport contract (cursor ("report: " <> label))
       readReport owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceA owner)))) >>= right
       publish owner base changes label = run (publishFetch (selectionFor instanceA owner) contract base Nothing changes

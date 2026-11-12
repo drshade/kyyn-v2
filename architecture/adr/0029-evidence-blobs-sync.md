@@ -243,9 +243,8 @@ The host stores checked position data inside the ignored current evidence index
 (ADR 0014), separate from payload files. Generic evidence inspection does not
 interpret it using plugin code or expose it. First acquisition supplies `Nothing`.
 Source edits retain the saved position. Before passing it to the guest, the host
-validates the value against the current position type; it does not compare saved
-and current contract identities. An actual decode/type error is reported for
-manual repair, not treated as a request to restart. A failed/cancelled/conflicting
+validates the value against the current position type. An actual decode/type
+error is reported for manual repair. A failed/cancelled/conflicting
 fetch does not advance the position. Even a no-change fetch may publish a new position.
 
 The stored position continues the previous sync; `evidence fetch --restart-sync`
@@ -291,7 +290,7 @@ A failed, cancelled or conflicting acquisition leaves all four unchanged. No
 attempt-history store, failure-report publication, checkpoint or partial report
 is added. A corrupt or contract-invalid stored report is an explicit storage
 failure, not an absent report. Generic reads reconstruct the stored checked report
-without compiling or executing plugin code, irrespective of current source identity.
+without compiling or executing plugin code.
 
 The host has no provider-specific coverage fields. Effective time windows,
 examined account scopes, skipped resources and reasons belong to the plugin's

@@ -637,15 +637,12 @@ commit or silently accept a new root. Adopt changes through the ordinary code-on
 evolution route, or ordinary Git with checking on load under ADR 0013. Git exposes
 the source diff and can recover committed earlier code. Compiler diagnostics,
 KB checks and human/agent review provide the repair workflow; typechecking alone
-does not detect every behavior change. Broken data may require explicit repair or refetch; source edits alone do not invalidate evidence.
+does not detect every behavior change.
 
-There is one implied current version. Versioning and compatibility policy are
-future requirements, not mechanisms for disposable playgrounds. No plugin version
-pins, SDK/runtime compatibility declarations, negotiation, supported-version
-matrix or backward-compatibility promise is implemented. Ordinary compilation
-and value decoding still enforce the current types. Build fingerprints select
-compiled artifacts; source fingerprints describe provenance, not permission to
-read stored evidence or reuse sync progress (ADR 0014).
+No plugin version pins, SDK/runtime compatibility declarations, negotiation,
+supported-version matrix or backward-compatibility promise is implemented.
+Ordinary compilation and value decoding enforce the current types. ADR 0014
+owns evidence reads and sync continuation across source edits.
 
 Template creation copies files and substitutions, after which the owner controls
 them. Later template improvements are explicit changes, not overwrites. Vendored

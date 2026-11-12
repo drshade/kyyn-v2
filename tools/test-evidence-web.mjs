@@ -66,7 +66,7 @@ evolution = prepare (pure ()) $ edit (Rationale "Evidence links"
  const report=await page('/evolutions/'+draft.id);assert(report.includes('/evidence/inspection-fixture/captured/record%20%2F%20one'));assert(report.includes('Not in local evidence'));
  const current=await page(connector+'?evolution='+draft.id);assert(current.includes('fixture-key'));assert(current.includes('Local capture · accepted connector configuration'));
  assert.equal(fetches,1);assert.equal(git(kb,'rev-parse','HEAD'),head);assert.deepEqual(await cli(['evidence','list','inspection-fixture','captured']),before);
- const changed=await cli(['evolution','new','producer-changed']);
+ const changed=await cli(['evolution','new','source-edit']);
  fs.appendFileSync(path.join(changed.path,'target/plugins/packages/inspection-fixture/source/src/InspectionFixture.hs'),'\n-- changed producer\n');await accept(changed);
  assert((await page(connector)).includes('Fixture coverage'));assert.equal(fetches,1);
  assert((await page('/evidence/inspection-fixture/captured/record%20%2F%20one')).includes('Captured &lt;document&gt;'));

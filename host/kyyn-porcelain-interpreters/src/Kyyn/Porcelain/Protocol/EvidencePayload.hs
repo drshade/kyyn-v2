@@ -24,7 +24,7 @@ import System.FilePath ((</>))
 storePayload :: (FileSystem :> es, DhallHandling :> es)
   => DirectoryScope -> CheckedContract -> CheckedValue -> Eff es (Either EvidenceProblem PayloadLocation)
 storePayload scope contract (CheckedValue identity value) = runExceptT $ do
-  unless (identity == contractId contract) (throwE (InvalidEvidence "Payload checked value does not belong to the supplied contract"))
+  unless (identity == contractId contract) (throwE (InvalidDelta "Payload checked value does not belong to the supplied contract"))
   source <- ExceptT (fmap (either (Left . InvalidEvidence . show) Right) (encodeValue (contractShape contract) value))
   refs <- either (throwE . InvalidEvidence) pure (blobReferences (rootType contract) value)
   let bytes = Text.encodeUtf8 source

@@ -8,10 +8,10 @@ import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.State.Static.Local (runState, get, modify)
-import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef(..))
-import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..), EvidenceSelection(EvidenceSelection))
+import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex), EvidenceSelection(EvidenceSelection))
+import qualified Kyyn.Domain.EvidenceIndex as Index
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), MethodName(..))
 import Kyyn.Domain.CompiledEntry (CompiledEntry)

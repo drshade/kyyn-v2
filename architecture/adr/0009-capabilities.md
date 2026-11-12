@@ -459,7 +459,7 @@ EvidenceStore to decode only the selected payload under [ADR 0014](0014-evidence
 The broker does not reopen a newer index for each request. Publication uses the
 captured fetch as its expected base.
 Source edits retain the captured baseline. Selected payload reads decode against
-the current plugin contract; they do not use source identity as a compatibility gate.
+the current plugin contract.
 
 GuestExecution supplies both one-shot evaluation and conversational execution
 (ADR 0002). The latter preserves the broker callback's effect row while the guest

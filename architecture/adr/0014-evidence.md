@@ -1125,26 +1125,22 @@ not establish whether the external source has changed since a citation was made.
 
 ### Current contracts and source provenance
 
-There is one implied current version. Plugin-source hashes and captured contract
-identities are provenance and integrity metadata, not compatibility gates.
-Source edits do not block evidence inspection, discard prior evidence or reset
-sync positions. Versioning and compatibility policy are deferred; no supported
-version matrix, migration negotiation or playground-format adapters are added.
+There is one implied current version. Source hashes and captured contract
+identities are recorded as provenance. Generic inspection reads using the stored
+descriptor. Plugin reads decode requested values under the current expected type;
+a real mismatch is a decode error when that value is consumed.
 
-Generic inspection reads the capture's self-describing payload and report
-contracts without preparing plugin code. A current plugin reads selected payloads
-under its current expected type; normal value decoding reports an actual mismatch
-when that value is consumed. A changed contract identity alone does not refuse a
-read. Publication retains unchanged entries and validates supplied values against
-the current contract. It does not scan or migrate untouched payloads.
+Publication keeps untouched entries as stored. After a payload type change and
+a fetch, the index descriptor is the current type while untouched payload files
+retain their previous encoding. If that encoding cannot decode under the current
+type, inspection and plugin reads of those items fail until the values are
+repaired, refetched or cleared.
 
-A fetch starts from existing evidence and its saved position regardless of source
-identity. The current position type is checked when that position is passed to
-the guest. Explicit restart ignores the position; explicit clear removes the
-capture. There is no automatic reset after a source or contract change. Broken
-playground data is repaired or cleared by its author. Failed publication changes
-neither the capture nor sync progress. Source provenance is refreshed by a
-successful fetch; recipe state remains unchanged.
+Fetch continues from existing evidence and its saved position. The position is
+checked against the current type when passed to the guest. Explicit restart
+ignores it; explicit clear removes the capture. Failed publication leaves the
+capture and sync progress unchanged. Successful publication updates the recorded
+source provenance; recipe state remains unchanged.
 
 ## Verification
 
@@ -1157,8 +1153,8 @@ isolation, empty versus unfetched captures, and continued reads after source edi
 Instrument storage reads: list opens no payload/blob files; show opens
 only the selected payload; repeated guest reads reuse the captured index. A bad
 unrelated payload must not prevent listing or reading another valid item. Verify
-missing selected files, invalid payloads, duplicate index IDs and source edits without invalidation
-remain explicit failures. Generic inspection must succeed with compiler execution
+missing selected files, invalid payloads and duplicate index IDs remain explicit
+failures. Source edits preserve readable evidence and sync progress. Generic inspection must succeed with compiler execution
 disabled, including with cold compilation caches.
 
 Measure fresh CLI processes for list and repeated individual show against the
