@@ -327,11 +327,14 @@ back to the index and related pages.
 
 | Route | Shows |
 | --- | --- |
-| `/` | Evolutions, collections and types; link to domain views |
+| `/` | Evolutions, collections, types, queries, tools and recipes; link to domain views |
 | `/evolutions/ID` | Explanation, lifecycle state, recorded step values and source changes against the base |
 | `/collections/NAME` | Collection records and their titles |
 | `/records/COLLECTION/ID` | Labelled record fields and links for declared references |
 | `/types/NAME` | Checked fields, types, descriptions and presentation roles |
+| `/queries/NAME` | Description, input/result types, captured implementation module and optional query result |
+| `/tools/NAME` | Description, input/result types, model selection and captured implementation module |
+| `/recipes/NAME` | Instructions or flow structure, and state type |
 
 URL-encode each name or ID as a path segment. For example,
 `/records/people/alex?evolution=000009-update-people` shows a draft record.
@@ -353,7 +356,14 @@ context, not a historical snapshot.
 
 Reload after a check or acceptance to see the new snapshot. GET requests do not
 run checks or evaluate evolutions. Check diagnostics remain in the command that
-ran the check. Query, tool and recipe inspection pages are not provided yet.
+ran the check. Query pages run only when the URL contains `input`, a URL-encoded Dhall
+expression checked against the query's input contract. For a unit input, use
+`/queries/NAME?input=%7B%3D%7D` (`{=}`). Without `input`, the page only describes
+the query. Input/result type links appear when the type belongs to the KB schema.
+Tool and recipe pages do not execute their actions or call models or sinks.
+Query/tool source is the whole captured implementation module; dependency source
+outside the captured KB is identified as unavailable. Draft declaration pages use
+the same saved candidate as their data, even after live source edits.
 
 ## Add a browser view
 

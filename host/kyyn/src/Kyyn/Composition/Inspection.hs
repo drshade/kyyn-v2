@@ -10,11 +10,13 @@ import Kyyn.Configuration (Host, SelectedKb(..), selectKnowledgeBase)
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.Inspection (EvolutionInspection(..))
+import Kyyn.Domain.Inspection (EvolutionInspection(..), DeclarationRequest(..))
 import Kyyn.Domain.Workspace (WorkspaceManifest(..), EvolutionState(..))
 import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Porcelain.Capability.Inspection
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
+import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.RecipeInspection (runRecipeInspection)
 import Kyyn.Porcelain.Interpreter.Inspection (runInspection)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
@@ -34,7 +36,7 @@ inspectPage host scope path parameters = case selection of
       Left response -> pure (failed selected response)
       Right (SelectedKb kb revision _) -> do
         result <- withRuntimeResult host $ \settings -> runRuntime host settings . runPluginPreparation . runToolPreparation
-          . runRootOpening . runWorkspaceStore . runEvolutionStore . runInspection $ runExceptT $ do
+          . runRootOpening . runWorkspaceStore . runEvolutionStore . runRootExecution . runRecipeInspection . runInspection $ runExceptT $ do
             details <- case route of
               EvolutionPage identity -> Just <$> ExceptT (inspectEvolutionSource (EvolutionWorkspace kb identity))
               _ -> pure Nothing
@@ -48,7 +50,12 @@ inspectPage host scope path parameters = case selection of
             summaries <- case route of
               IndexPage -> ExceptT (Store.listEvolutions kb AllEvolutions)
               _ -> pure []
-            ExceptT (pure (renderInspection shown snapshot route summaries details))
+            declaration <- case route of
+              QueryPage name input -> Just <$> (ExceptT (pure snapshot) >>= \current -> ExceptT (inspectDeclaration current (QueryRequest name input)))
+              ToolPage name -> Just <$> (ExceptT (pure snapshot) >>= \current -> ExceptT (inspectDeclaration current (ToolRequest name)))
+              RecipePage name -> Just <$> (ExceptT (pure snapshot) >>= \current -> ExceptT (inspectDeclaration current (RecipeRequest name)))
+              _ -> pure Nothing
+            ExceptT (pure (renderInspection shown snapshot route summaries details declaration))
         pure $ case result of
           Left response -> failed selected response
           Right (Left failure) -> failed selected (operationalFailure failure)
@@ -70,7 +77,16 @@ inspectPage host scope path parameters = case selection of
         ["collections",name] -> Right (CollectionPage (Text.unpack name))
         ["records",name,identity] -> Right (RecordPage (Text.unpack name) identity)
         ["types",name] -> Right (TypePage (Text.unpack name))
+        ["queries",name] -> QueryPage (Text.unpack name) <$> inputParameter
+        ["tools",name] -> Right (ToolPage (Text.unpack name))
+        ["recipes",name] -> Right (RecipePage name)
         _ -> Left [errorDiagnostic "inspection.unknown" "Unknown inspection page"]
       Right (selected,route)
+    inputParameter = case [value | ("input",value) <- parameters] of
+      [] -> Right Nothing
+      [Just raw] -> case Text.decodeUtf8' raw of
+        Left _ -> bad "Input must be UTF-8"
+        Right value -> Right (Just value)
+      _ -> bad "Supply exactly one input value"
     checkedId value = either (bad . Text.pack) Right (evolutionId (Text.unpack value))
     bad message = Left [errorDiagnostic "inspection.selector" (Text.unpack message)]
