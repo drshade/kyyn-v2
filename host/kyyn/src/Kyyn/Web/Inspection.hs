@@ -640,10 +640,10 @@ originBody (PluginOrigin repository path revision) = dl_ $ do
 
 catalogueIndex :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> CatalogueInspection -> Html ()
 catalogueIndex selected snapshot (CatalogueInspection configuration taps) = do
+  h2_ "Plugins"
   case configuration of
     Left diagnostics -> diagnosticsBody diagnostics
     Right (ConfigurationInspection plugins model) -> do
-      h2_ "Plugins"
       ul_ $ forM_ plugins $ \(plugin,_) -> li_ $
         a_ [href_ (inspectionLink selected ["plugins",Text.pack (pluginNameText plugin)])] (toHtml (pluginNameText plugin))
       h2_ "Model"

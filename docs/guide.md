@@ -348,13 +348,8 @@ The Connectors section shows this machine's current captured evidence, using
 accepted connector configuration. Connector/evidence pages ignore evolution
 selection and never fetch. Only the latest fetch is retained. Evolution evidence
 references link to current locally retained items where available.
-Plugin and output pages follow the selected accepted or checked snapshot. The
-index also shows its model provider, model and credential name. Taps are labelled
-as local discovery configuration with their cached revision; viewing them never
-updates the catalogue. Plugin contract links are scoped by connector and role,
-including captured-method input/result contracts, rather than matched by name
-against the KB schema. Output inspection describes the renderer and sink without
-running the query or publishing anything.
+Plugin and output pages follow `?evolution`. Taps are this machine's discovery
+configuration.
 
 Stored connector configuration is displayed as written: keep credentials in the
 secret store and reference them by name; inspection never reads secret values.

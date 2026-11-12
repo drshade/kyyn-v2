@@ -49,6 +49,8 @@ page (Heading title) = pure title
  const plugin=await page('/plugins/local-file');assert(plugin.includes('Pinned revision'));assert(plugin.includes('plugins/local-file'));assert(plugin.includes('Source connector'));assert(plugin.includes('Sink connector'));assert(plugin.includes('Captured methods'));assert(plugin.includes('content'));assert(plugin.includes('published/index.html'));assert(plugin.includes('/connectors/local-file/documents'));assert(!plugin.includes('/connectors/local-file/website'));
  assert((await page('/plugins/local-file/types/Folder/configuration/LocalFile.Types.FolderConfig')).includes('recursive'));
  assert((await page('/plugins/local-file/types/Folder/payload/LocalFile.Types.Document')).includes('text'));
+ assert((await page('/plugins/local-file/types/Folder/method%3Acontent%3Ainput/Data.Text.Text')).includes('<h1>Data.Text.Text</h1>'));
+ assert((await page('/plugins/local-file/types/File/input/Data.Text.Text')).includes('<h1>Data.Text.Text</h1>'));
  const output=await page('/outputs/website');assert(output.includes('Accepted output'));assert(output.includes('/queries/page'));assert(output.includes('/plugins/local-file'));assert(output.includes('website / publish'));assert(output.includes('/outputs/website/types/input/Reporting.Heading'));
  assert((await page('/outputs/website/types/input/Reporting.Heading')).includes('title'));
  await page('/plugins/missing',404);await page('/outputs/missing',404);await page('/plugins/local-file/types/File/payload/LocalFile.Types.Document',404);await page('/outputs/website/types/input/Schema.Root',404);
