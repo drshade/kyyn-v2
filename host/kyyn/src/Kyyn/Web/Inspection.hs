@@ -5,7 +5,7 @@ module Kyyn.Web.Inspection
 import qualified Data.Map.Strict as Map
 import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..), EvidenceId(..), EvidenceFingerprint(..), FetchSummary(..), FetchId(..), FetchReport(..))
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..))
-import Kyyn.Domain.Blob (BlobRef(..))
+import Kyyn.Domain.Blob (BlobRef(..), sdkBlobRefType)
 import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), ConnectorTypeName(..), BindingName(..), PackageIdentity(..))
 import Control.Monad (forM_, unless)
 import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
@@ -251,6 +251,8 @@ renderValue selected shape value = case (shape,value) of
     case (lookup (Text.unpack tag) arms,Keys.lookup "value" fields) of
       (Just (Just inner),Just payload) -> renderValue selected inner payload
       _ -> mempty
+  (Scalar (ExactScalar Contract.BlobRefScalar),_) ->
+    either (const (toHtml (scalarText value))) (\fields -> renderValue selected fields value) (shapeOf sdkBlobRefType)
   (Scalar TextScalar,String text) -> span_ [style_ "white-space:pre-wrap;overflow-wrap:anywhere"] (toHtml text)
   (Reference target,String identity) -> a_ [href_ (inspectionLink selected ["records",Text.pack target,identity])] (toHtml identity)
   _ -> toHtml (scalarText value)
