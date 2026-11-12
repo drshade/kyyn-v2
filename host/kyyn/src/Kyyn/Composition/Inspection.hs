@@ -113,7 +113,7 @@ inspectPage host scope path parameters = case selection of
         ["recipes",name] -> Right (RecipePage name)
         ["recipes",name,"types",typ] -> Right (RecipeTypePage name (Text.unpack typ))
         _ -> Left [errorDiagnostic "inspection.unknown" "Unknown inspection page"]
-      Right (selected,route)
+      Right (if localRoute route then Nothing else selected,route)
     inputParameter = case [value | ("input",value) <- parameters] of
       [] -> Right Nothing
       [Just raw] -> case Text.decodeUtf8' raw of

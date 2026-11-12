@@ -76,7 +76,7 @@ index labels that section separately from snapshot configuration. Reads use the
 existing evidence store and never fetch. Fetch summaries and reports describe
 only the latest capture. Not-fetched and changed-producer diagnostics remain
 visible. Evidence references in evolution rationales link to current local items
-where they resolve, not to an inferred historical payload. Blob pages show only
+where they resolve, not to an inferred historical payload. Blob attachments are listed as
 metadata. Inspection does not read the secret store.
 
 Query and tool pages show the captured module that contains the implementation,
