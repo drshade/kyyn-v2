@@ -26,3 +26,13 @@ These packages are ordinary host/guest dependencies where used. The table is
 license evidence, not the dependency lock: flake.lock pins external inputs and
 the selected Nix package set supplies the build plan. Review the actual resolved
 host and guest dependencies for each distribution.
+
+## Inspection browser assets
+
+`nix/web-assets.nix` fetches hash-pinned npm archives: `@mermaid-js/tiny`
+12.3.0 (Mermaid) and `prismjs` 1.30.0 (core, Haskell grammar and default theme).
+Both are MIT licensed. Their license files are embedded with the assets and
+served under `/_inspection/vendor/`. Mermaid's bundled dependency notices remain
+inside its unmodified `mermaid.js` file.
+The Nix build and contributor shell supply `KYYN_WEB_VENDOR_DIR` at compile time;
+the installed executable needs neither Node nor network access for these assets.

@@ -15,6 +15,7 @@
       project = system:
         let
           pkgs = import nixpkgs { inherit system; };
+          webVendor = import ./nix/web-assets.nix { inherit pkgs; };
           source = pkgs.lib.fileset.toSource {
             root = ./.;
             fileset = pkgs.lib.fileset.unions [
@@ -118,11 +119,12 @@
                     postUnpack = ''sourceRoot="$sourceRoot/${path}"'';
                     doCheck = false;
                   } // pkgs.lib.optionalAttrs (name == "kyyn") {
+                    preBuild = ''export KYYN_WEB_VENDOR_DIR=${webVendor}'';
                     configureFlags = [ ''--ghc-option=-DKYYN_TEMPLATE_DIRECTORY="${template}"'' ];
                   })) localPackages;
           };
         in {
-          inherit pkgs haskell localPackages;
+          inherit pkgs haskell localPackages webVendor;
         };
     in {
       packages = forAllSystems (system:
@@ -276,6 +278,7 @@
         let p = project system;
         in {
           default = p.haskell.shellFor {
+            KYYN_WEB_VENDOR_DIR = p.webVendor;
             packages = h: map (name: h.${name}) (builtins.attrNames p.localPackages);
             nativeBuildInputs = with p.pkgs; [ cabal-install nodejs_22 git gnumake pkg-config ];
           };

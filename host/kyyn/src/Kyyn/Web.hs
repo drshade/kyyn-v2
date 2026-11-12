@@ -24,6 +24,7 @@ import System.IO (hFlush, stdout)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (relativeName, relativePath)
+import Kyyn.Web.Assets (inspectionAsset)
 import Kyyn.Web.Inspection (renderInspectionError)
 import Kyyn.Domain.View (ViewDefinition(..))
 import qualified Kyyn.Surfaces.Result as Result
@@ -58,6 +59,11 @@ runServer port pages query inspect = bracket (try @IOException acquire) (either 
         if take 1 (pathInfo request) == ["kb"] then failure status500 "web.io" (displayException err)
         else inspectionError status500 [] "web.io" (displayException err)) id result
     route request
+      | "_inspection":asset <- pathInfo request = pure $
+          if requestMethod request /= methodGet then method "GET"
+          else case inspectionAsset asset of
+            Nothing -> failure status404 "web.asset" "Unknown inspection asset"
+            Just bytes -> responseLBS status200 [(hContentType,defaultMimeLookup (Text.intercalate "/" asset)),noStore] (Lazy.fromStrict bytes)
       | take 1 (pathInfo request) /= ["kb"] =
           if requestMethod request /= methodGet then pure (inspectionError status405 [(hAllow,"GET")] "web.method" "This page supports GET only") else do
             page <- inspect (pathInfo request) (queryString request)
