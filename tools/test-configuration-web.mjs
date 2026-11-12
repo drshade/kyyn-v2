@@ -39,6 +39,8 @@ page (Heading title) = pure title
  fs.writeFileSync(path.join(target,'plugins/config/local-file.dhall'),config);
  cli(['evolution','check',d.id]);cli(['evolution','ready',d.id]);cli(['evolution','accept',d.id]);
  const accepted=head();
+ const captureEntries=()=>fs.readdirSync(path.join(kb,'.kyyn/evidence'),{recursive:true}).sort();
+ const capturesBefore=captureEntries();
  server=spawn(executable,['--kb',kb,'web','serve','--port','0'],{env});
  const base=await new Promise((resolve,reject)=>{let out='';server.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});server.on('exit',()=>reject(new Error('Server exited')));});
  async function page(url,status=200){const r=await fetch(base+url);const text=await r.text();assert.equal(r.status,status,text);assert(!text.includes(secret));return text;}
@@ -57,6 +59,6 @@ page (Heading title) = pure title
  assert((await page('/outputs/website'+selector)).includes('Draft output'));assert(!(await page('/outputs/website')).includes('Draft output'));
  assert((await page('/plugins/local-file'+selector)).includes('published/draft.html'));assert(!(await page('/plugins/local-file')).includes('published/draft.html'));
  const draftIndex=await page('/'+selector);assert(draftIndex.includes('draft-model'));assert(draftIndex.includes('Local discovery configuration'));assert(draftIndex.includes('/plugins/local-file'+selector));
- assert.equal(head(),accepted);assert(!fs.existsSync(path.join(kb,'published')));assert(!fs.existsSync(path.join(kb,'.kyyn/evidence')));
+ assert.equal(head(),accepted);assert(!fs.existsSync(path.join(kb,'published')));assert.deepEqual(captureEntries(),capturesBefore);
  console.log('Configuration inspection journey passed: captured plugins/contracts, output wiring, model references, local taps, snapshot isolation and read-only GETs.');
 } finally {if(server&&server.exitCode===null){server.kill();await once(server,'exit');}fs.rmSync(temp,{recursive:true,force:true});}
