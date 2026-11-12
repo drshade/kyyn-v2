@@ -26,6 +26,9 @@ separate product permission taxonomy. Retain these explicit boundaries:
 - [ADR 0028](0028-agentic-workflows.md) defines model-turn requests in KB tools
   and explicit recipe flows, without adding them to evolution, validation,
   query or renderer contexts.
+- Recorded recipe execution additionally supplies the generated observation request
+  defined in [ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback).
+  Nested flow tool bodies use that invocation context.
 - Delivery invokes a configured plugin sink with its prepared typed input under
   ADR 0017; it does not implicitly render or accept knowledge.
 

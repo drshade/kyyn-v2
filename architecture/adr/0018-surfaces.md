@@ -674,7 +674,8 @@ without compiling or checking its Haskell/evolution. The index, page files and
 when a check fails. They require a readable view declaration and an existing,
 confined file; malformed declarations or missing files still return diagnostics.
 Edit HTML/CSS/JavaScript, refresh the browser, and see the edit without a check.
-There is no automatic browser refresh or file-watcher requirement.
+Domain-view editing has no automatic browser refresh or file-watcher requirement.
+Recipe run pages poll the local recording as specified in [ADR 0023](0023-interaction.md).
 
 Draft queries separately use the latest saved successfully checked candidate.
 Before invoking a query, compare its captured evaluation inputs with the current
@@ -703,7 +704,7 @@ including `target/views/`: after page edits, check again before accepting.
 Accepted browsing has request-level consistency, not a browser-session snapshot. A page loaded
 before acceptance may make its next query after acceptance; that request uses the
 new accepted root. Separate requests may therefore have different contexts.
-No implicit revision pin, snapshot session, live-update channel or result cache is
+For domain queries, no implicit revision pin, snapshot session, live-update channel or result cache is
 introduced. A query composing several calculations still uses one selected root
 throughout its execution, as ADR 0017 requires.
 
@@ -843,6 +844,13 @@ boundary. The [user guide](../../docs/guide.md) describes the authoring workflow
 MCP and CLI provide discovery, authoring, checking and acceptance. Web's
 inspection pages show the same state through the same operations; they are
 read-only and defined in [ADR 0023](0023-interaction.md).
+
+Recipe runs use ADR 0028's RecipeRunStore through shared CLI/MCP reads:
+`recipe run list [--recipe NAME]`, `recipe run show ID`,
+`recipe run events ID [--after N] [--limit L]` and `recipe run clear ID`.
+Starting a run retains `root recipe run NAME`; it reports the run ID and browser
+path as soon as recording starts, and reports the resulting draft on completion.
+Web routes and live/playback presentation belong to ADR 0023.
 
 Record browsing uses host-side checked structural values and snapshot
 store operations. Titles, timelines and badges consume the checked role metadata

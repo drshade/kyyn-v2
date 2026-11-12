@@ -301,14 +301,191 @@ Use the library's named opaque steps. The projection describes declared
 composition and available tools, not the behavior
 of arbitrary `arr`/`act` functions, the exact future trace, or a proof of safety.
 The ordinary evolution report identifies the producing recipe/flow and captured
-source revision alongside its changes and rationale. It need not retain model
-reasoning transcripts or a separate agent-run ledger.
+source revision alongside its changes and rationale. Local run recordings below
+retain execution progress separately.
 
 Use record/replay fixtures for individual turns and Judgement calls, plus fixed
 captured-evidence handlers, to test the complete flow deterministically. Upstream
 `agentic-io` replay only replaces model calls; tool bodies and `act` still execute.
 Replay-only tests must refuse missing recordings and must not contact providers.
 Production response caching or mandatory transcript retention is not selected.
+
+### Record recipe execution for live viewing and playback
+
+A closed recipe invocation produces a local run recording. CLI and MCP own
+execution; Web observes it. Live viewing follows the recorded prefix as it grows,
+and playback applies the same records at a chosen pace. Neither reading path
+executes guest code, calls providers or applies a proposal.
+
+A run records how the flow executed. The ordinary evolution records proposed and
+accepted changes with their rationale. The run's successful terminal event links
+to the draft evolution; the evolution has no reference to the disposable local
+run. Checking or accepting that draft does not append a new recipe execution.
+
+#### Graph and execution identity
+
+The upstream Agentic library owns one structural addressing scheme shared by
+its description and interpretation traversals. Its observable graph includes
+step nodes, named scopes and control structure, with referenced tool bodies.
+The guest captures this graph from the same immutable build it invokes. Node
+identifiers identify positions in this graph, not note text or rendered labels;
+they have no identity promise across builds. Mermaid is a rendering of that
+stored graph, not the source from which execution addresses are reconstructed.
+
+Each entry into a node has a distinct occurrence identifier and its parent
+occurrence. Iteration context distinguishes Each elements, Repeat passes and
+nested tool call IDs. Reused steps, identical labels and concurrently active
+occurrences therefore remain distinguishable. The diagram aggregates occurrences;
+the node inspector lists their individual histories. Branch events identify the
+selected graph edge; the viewer does not infer branch selection from missing events.
+
+Graph-linked enter/return events and invocation context are an upstream
+Agentic extension. Kyyn consumes that extension through its generated runtime
+adapter rather than implementing a second interpreter. Arbitrary pure functions
+remain opaque. A return event means the interpreter returned from the observed
+scope, not that every lazy value was forced or that the result was semantically
+accepted. Durations describe observed scope progress, not CPU profiling.
+
+#### Observation and recording contracts
+
+Upstream owns flow semantics. The guest runtime projects observations into a
+small closed vocabulary before transport. The host adds ordering and timing:
+
+```haskell
+-- Names below specify the boundary; opaque IDs and graph internals are omitted.
+data FlowObservation
+  = NodeEntered NodeId OccurrenceId (Maybe OccurrenceId) IterationContext
+  | NodeReturned OccurrenceId
+  | BranchSelected OccurrenceId EdgeId
+  | IterationProgress OccurrenceId Natural (Maybe Natural)
+  | TurnTaken OccurrenceId TurnAction [ToolName]
+  | ToolReturned OccurrenceId ToolName ToolOutcome
+  | Judged OccurrenceId Natural
+  | OutputRejected OccurrenceId Text
+
+-- SDK-generated request; not an authored wire/value API.
+data ObserveFlow result where
+  ObserveFlow :: FlowObservation -> ObserveFlow ()
+
+data RecipeRunHeader = RecipeRunHeader
+  { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
+  , before :: GitRevision, build :: BuildIdentity
+  , startedAt :: Instant, graph :: FlowGraph
+  }
+
+data RunEvent = RunEvent
+  { sequence :: Natural, elapsed :: Duration, body :: RunEventBody }
+
+data RunEventBody
+  = RunStarted
+  | FlowObserved FlowObservation
+  | RunCompleted EvolutionId
+  | RunFailed [Diagnostic]
+  | RunCancelled
+```
+
+`TurnAction` distinguishes final responses from tool requests; tool outcomes
+record return/failure status, not result values. Iteration progress reports
+completed count and a total only when known. These summaries exclude automatic
+copies of requests, intermediate state, evidence payloads, prompts, full model
+conversations and tool results. Diagnostic and rejection text may quote values;
+this projection is not a detector for sensitive text supplied by trusted code.
+Static graph descriptions retain authored labels and descriptions.
+
+The observation request is available only within recorded recipe execution,
+including nested flow tool bodies in that invocation. Describe, query, validation,
+rendering and evolution contexts do not receive it. It uses the ordinary
+HostRequest/HostResponse transport under [ADR 0007](0007-wire.md); a unit response
+acknowledges a successful append. Recording failure aborts the invocation through
+the existing operational-failure channel, rather than acknowledging a lost event.
+The observer does not give the guest filesystem access.
+
+The host serializes appends, assigning strictly increasing sequence numbers
+and nondecreasing elapsed time from a monotonic clock at receipt. RunStarted is
+sequence zero. Guest observations are the only account of flow/model/tool
+progress; capability brokers do not duplicate those events. The host adds the
+lifecycle events it owns. The persisted RunEvent is also the browser record;
+the guest observation is its payload, not a second competing timeline.
+Concurrent appends are ordered by receipt, not by a claimed global guest clock.
+
+#### Local lifetime and failure
+
+After preparing the captured graph/build and validating invocation inputs, create
+`.kyyn/runs/<run-id>/header.json` and `events.jsonl`, and publish the header
+atomically before dispatching flow actions. Preparation failures remain ordinary
+command diagnostics. A run holds a process-scoped exclusive writer lock for its
+lifetime; the header is immutable. Each event is appended as one complete JSON
+record followed by a newline and flushed before acknowledgement. Flushing provides
+visibility to other local processes, not a power-loss durability guarantee.
+Stored values use ADR 0007's exact wire-value conventions.
+
+```haskell
+-- Host application boundary, implemented with local files and a scoped lock.
+withRecipeRun
+  :: (RecipeRunStore :> es, Failure :> es)
+  => PreparedRecipeRun -> (RecipeRunWriter -> Eff es a) -> Eff es a
+
+appendRunEvent
+  :: (RecipeRunStore :> es, Failure :> es)
+  => RecipeRunWriter -> RunEventBody -> Eff es RunEvent
+
+listRecipeRuns
+  :: (RecipeRunStore :> es, Failure :> es)
+  => KnowledgeBase -> Maybe RecipeId -> Eff es [RecipeRunSummary]
+
+readRecipeRun
+  :: (RecipeRunStore :> es, Failure :> es)
+  => KnowledgeBase -> RecipeRunId -> Maybe Natural -> Natural
+  -> Eff es RecipeRunPage
+
+clearRecipeRun
+  :: (RecipeRunStore :> es, Failure :> es)
+  => KnowledgeBase -> RecipeRunId -> Eff es ()
+```
+
+PreparedRecipeRun contains the captured header data; the host assigns its ID and
+time. RecipeRunWriter is an operation-scoped handle. A read's optional sequence
+is an exclusive cursor; absent means the beginning. The final Natural is the
+page-size limit. RecipeRunPage contains the header, ordered complete events,
+next cursor, whether more records are available, and derived activity/outcome.
+The store owns timestamps, serialization, locking and filesystem operations;
+porcelain composes it with recipe execution and proposal authoring.
+
+The successful terminal event is appended only after the ordinary draft workspace
+has been written. Failed execution records available diagnostics; caller
+cancellation attempts RunCancelled during scoped cleanup. A killed process need
+not append anything. A terminal record determines the outcome even while cleanup
+holds the lock; without one, a held writer lock means active and a released lock
+means interrupted/incomplete. Readers never infer success from EOF or synthesize
+missing node returns. Browser disconnection has no effect on execution.
+
+Readers expose the complete event prefix while an append is in progress. A partial
+final line after writer death marks an incomplete recording; malformed complete
+records and sequence gaps are located decode errors. They are not silently skipped.
+No terminal event may be followed by another event. A recording write failure
+stops further dispatch and reports the run path. Prior external actions are not
+rolled back. If draft creation succeeded before the terminal append failed, the
+error also reports the existing draft ID; retry is not automatic.
+
+Listing reads run directories. Records remain until explicitly cleared; clearing
+requires acquiring the run's writer lock and refuses an active run. Run files are
+local and ignored by Git; deleting them changes neither evidence, checkpoints,
+facts nor evolutions. Source/build identifiers are provenance for display, not
+compatibility gates or prerequisites for reading. The current types decode the
+recording; an unreadable record produces an error naming its file. Playback uses
+the stored graph even when the source revision or build is unavailable.
+
+#### Viewing the same sequence live and later
+
+[ADR 0023](0023-interaction.md) owns run pages and their read-only endpoints.
+One browser state reducer consumes RunEvent records in sequence. Live viewing
+first loads the saved prefix and polls after its cursor; playback loads that same
+sequence and uses elapsed time for pacing. Pause, speed changes and scrubbing
+only change the browser's position in the recording. Refresh reconstructs state
+from the saved prefix. Duplicate deliveries are ignored by sequence; a missing
+sequence requires reading the missing page, not guessing the intervening state.
+The view shows unfinished occurrences honestly and links a completed run to its
+draft. Multiple active runs remain individually selectable.
 
 ## Verification
 
@@ -328,6 +505,14 @@ missing/duplicate IDs, rationale and unchanged definitions/schema/configuration.
 Two recipes with the same state type must retain separate values; a proposed state
 cannot be attributed to a different recipe during acceptance. Live-provider verification uses opt-in credentials and does not replace
 deterministic error-path tests.
+
+Verify graph/event correspondence for unnamed steps, repeated labels, both branches,
+Each/Repeat and nested concurrent tools. Live attachment, refresh and playback of
+the same event prefix must yield identical node/occurrence state. Exercise a failed
+flow, cancellation, killed writer, partial final append, malformed complete record,
+recording-write failure after draft creation, active-clear refusal and missing
+source/build provenance. A built-guest installed journey must run from the CLI
+while a separate Web process observes, then replay without providers or compilation.
 
 ## Consequences and alternatives
 

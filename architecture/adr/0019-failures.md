@@ -121,6 +121,8 @@ ban on source identities, URLs, headers, bodies, secrets and report contents.
 
 Report progress and results to the owning caller. Do not add a generic persisted
 operation registry; durability belongs to a concrete operation that needs it.
+[ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback)
+assigns local progress recording and interrupted-run inspection to recipe execution.
 A crashed pure call can rerun from captured inputs; an external write cannot
 blindly replay.
 ADR 0017 assigns persistent delivery/dispatch outcomes to Delivery. Generic

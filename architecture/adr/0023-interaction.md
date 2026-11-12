@@ -39,6 +39,9 @@ Web has two kinds of page:
 | `GET /queries/<name>` | Description, input and result types, the module that implements it and, when `input` is given, the result |
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure, state type and saved checkpoint, without executing actions |
+| `GET /runs` | Local recipe runs, optionally filtered by recipe |
+| `GET /runs/<id>` | Captured flow graph with live progress or recorded playback |
+| `GET /runs/<id>/events?after=N&limit=L` | A bounded page of recorded events after the exclusive sequence cursor |
 | `GET /recipes/<name>/types/<type>` | Types reachable from this recipe's checked state contract, with fields, descriptions and nested type links |
 | `GET /plugins/<plugin>` | Captured plugin origin/pin, connector types, contracts, methods and configured instances |
 | `GET /plugins/<plugin>/types/<connector>/<role>/<type>` | Types scoped to a plugin connector contract |
@@ -52,7 +55,7 @@ Each page is complete when opened directly from a link, and links to related
 pages and to the index. The routes are stable and listed in the guide, so a link
 can be composed from a name.
 
-Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
+Snapshot inspection pages show the accepted KB or one draft, and state which. `?evolution=ID`
 selects a draft for that page, and its links carry the parameter; without it the
 page shows the accepted KB. A draft evolution page is the exception: its record
 links and existence checks always use that evolution's last checked candidate,
@@ -102,6 +105,24 @@ view declared in a draft; its pages are served live without a check.
 Pages are server-rendered HTML produced by the host from the same typed
 operations CLI and MCP use. No client framework or separate JSON API is needed
 for them.
+
+### Recipe run observation
+
+Runs are local execution records owned by
+[ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback).
+Their pages use the stored graph and recorded context, independent of `?evolution`
+or the server's domain-view selection. Recipe pages link to matching runs; a run
+page can be opened directly even if that recipe is absent from the current root.
+
+The event endpoint serves the same typed read operation for active and completed
+runs. A small browser component polls after its last sequence, highlights node
+occurrences and provides play/pause, speed and seek controls. Counts and individual
+iterations appear in the node inspector rather than expanding a separate graph
+for each item. An empty page while active means wait; a terminal or interrupted
+run stops following. Clearing a run makes subsequent requests return not-found.
+
+Playback and following are read operations. Run, cancel, clear and acceptance
+remain CLI/MCP operations; this page introduces no mutation endpoint.
 
 ### Authoring workflow
 
