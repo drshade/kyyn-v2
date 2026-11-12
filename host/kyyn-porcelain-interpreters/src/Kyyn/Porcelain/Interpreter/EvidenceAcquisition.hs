@@ -42,11 +42,14 @@ runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(
       rendered <- traverse (ExceptT . encodeValue (contractShape options)) decoded
       pure (decoded,Text.unpack <$> rendered)
   Store.FetchBaseline startedAt base prior position <- ExceptT
-    (fmap (either (Left . problem) Right) (Store.beginFetch selection payload positionContract))
-  let context = case positionContract of
-        Nothing -> Nothing
-        Just _ -> Just (AcquisitionContext (Text.pack startedAt)
-          ((\(CheckedValue _ value) -> value) <$> case mode of ContinueSync -> position; RestartSync -> Nothing))
+    (fmap (either (Left . problem) Right) (Store.beginFetch selection payload))
+  let suppliedPosition = case mode of ContinueSync -> position; RestartSync -> Nothing
+  context <- case positionContract of
+    Nothing -> pure Nothing
+    Just contract -> do
+      let current = (\(CheckedValue _ value) -> value) <$> suppliedPosition
+      _ <- traverse (ExceptT . encodeValue (contractShape contract)) current
+      pure (Just (AcquisitionContext (Text.pack startedAt) current))
   ExceptT $ withBlobDownloads instanceRef (Store.discardFetchBlobs instanceRef base) $ runExceptT $ do
     result <- ExceptT (executeAcquisition baseDirectory instanceRef program configValue decodedOptions context prior)
     (delta,savedPosition,savedReport) <- case (positionContract,reportContract) of

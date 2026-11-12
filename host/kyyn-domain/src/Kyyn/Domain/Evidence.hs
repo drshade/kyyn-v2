@@ -52,7 +52,7 @@ data EvidenceBatch = EvidenceBatch EvidenceSnapshotRef FetchSummary
   [(EvidenceId, Evidence CheckedValue, [ResolvedBlob])] (Maybe FetchReport) deriving (Eq, Show)
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
-data EvidenceProblem = NotFetched | ProducerContractChanged
+data EvidenceProblem = NotFetched
   | BaseSnapshotConflict | InvalidDelta String | InvalidEvidence String
   deriving (Eq, Show)
 
@@ -60,8 +60,6 @@ evidenceProblemDiagnostic :: EvidenceProblem -> Diagnostic
 evidenceProblemDiagnostic problem = case problem of
   NotFetched -> errorDiagnostic "evidence.not-fetched"
     "This connector has no captured evidence. Fetch it before reading its evidence."
-  ProducerContractChanged -> errorDiagnostic "evidence.producer-changed"
-    "The plugin source or evidence schema has changed. Fetch this connector again before reading its evidence."
   BaseSnapshotConflict -> errorDiagnostic "evidence.base-conflict"
     "Another fetch advanced this connector while acquisition was running. Retry against its new head."
   InvalidDelta message -> errorDiagnostic "evidence.invalid-delta" message

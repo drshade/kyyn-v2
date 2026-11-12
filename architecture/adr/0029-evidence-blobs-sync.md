@@ -241,12 +241,11 @@ no additional fetch signature or kernel Graph deltaLink type.
 
 The host stores checked position data inside the ignored current evidence index
 (ADR 0014), separate from payload files. Generic evidence inspection does not
-interpret it using plugin code or expose it. First acquisition or changed producer supplies `Nothing`.
-Changed code/contract must never reuse an incompatible position. Replacing
-the producer clears the old position together with old evidence on successful
-publication; a failed replacement leaves the old stored capture untouched and
-incompatible for new reads. A failed/cancelled/conflicting fetch does not advance
-the position. Even a no-change fetch may publish a new position.
+interpret it using plugin code or expose it. First acquisition supplies `Nothing`.
+Source edits retain the saved position. Before passing it to the guest, the host
+validates the value against the current position type. An actual decode/type
+error is reported for manual repair. A failed/cancelled/conflicting
+fetch does not advance the position. Even a no-change fetch may publish a new position.
 
 The stored position continues the previous sync; `evidence fetch --restart-sync`
 passes `Nothing` once while retaining evidence for comparison, whereas `evidence clear`
@@ -282,7 +281,7 @@ data FetchReport = FetchReport CheckedContract CheckedValue
 Store the report and its compiler-derived contract descriptor alongside the latest
 summary in the ignored evidence index. A list-returning fetch publishes no report;
 a context/result fetch publishes exactly its newly checked report. Do not merge
-reports across runs or retain a preceding report when replacing a producer. An
+reports across runs or retain a preceding report after a successful fetch. An
 empty or no-change successful acquisition still replaces the report. Reports do
 not change evidence fingerprints or manufacture evidence changes.
 
@@ -290,8 +289,7 @@ Evidence, summary, report and position publish under one expected-fetch check.
 A failed, cancelled or conflicting acquisition leaves all four unchanged. No
 attempt-history store, failure-report publication, checkpoint or partial report
 is added. A corrupt or contract-invalid stored report is an explicit storage
-failure, not an absent report. Changed-producer inspection is refused under the
-same rules as evidence; generic reads reconstruct the stored checked report
+failure, not an absent report. Generic reads reconstruct the stored checked report
 without compiling or executing plugin code.
 
 The host has no provider-specific coverage fields. Effective time windows,
@@ -329,12 +327,12 @@ contract reconstruction without guest execution, and corruption refusal.
 
 Check that successful empty/no-change acquisitions replace reports without item
 changes. Failed/cancelled/conflicting fetches preserve the old summary, report,
-position and evidence together. Producer replacement and clearing must not expose
-an old report as current. Explicit inspection includes report data, while ordinary
+position and evidence together. Source edits retain the capture and report;
+successful publication replaces the report, and clearing removes it. Explicit inspection includes report data, while ordinary
 logs and timing events exclude it and all private position data.
 
 Check positions across empty batches, pagination failure, local base conflict,
-restart and producer changes. A cursor must never describe changes that were not
+restart and source edits that preserve progress. A cursor must never describe changes that were not
 published. Fake Graph responses prove adapter behavior; live permissions and
 provider identities require their own opt-in field proof.
 

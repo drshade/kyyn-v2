@@ -12,9 +12,11 @@ import Effectful.State.Static.Local (runState, modify)
 import GuestFixture (fixtureProgram, fixtureTool, fixtureConnector, fixtureText)
 import Kyyn.Domain.CompiledEntry (CompiledConnector(..))
 import qualified Kyyn.Types.Guest as G
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex))
+import qualified Kyyn.Domain.EvidenceIndex as Index
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
@@ -31,6 +33,8 @@ import Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram)
 toolBrokerTests :: IO ()
 toolBrokerTests = do
   let contract = either (error . show) id (checkContract fixtureText (SchemaMetadata [] [] []))
+      storedContract = either (error . show) id (checkContract
+        (D.ScalarDescription (D.TypeIdentity "text" "Previous" "Text" []) D.TextScalar "Text" []) (SchemaMetadata [] [] []))
       plugin = either error id (pluginName "files")
       instanceName = either error id (connectorName "documents")
       binding = either error id (bindingName "documents")
@@ -49,14 +53,14 @@ toolBrokerTests = do
       plugins = [PreparedPlugin (PreparedPackage plugin (PackageIdentity "package") [connector])
         [ConfiguredConnector instanceName binding connector (CheckedValue (contractId contract) (string "config"))]]
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
-        (EvidenceProducer (PackageIdentity "package") (contractId contract)) (FetchId "captured")
-      captured = EvidenceIndex snapshot (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing) contract mempty Nothing
+        (EvidenceProducer (PackageIdentity "previous-source") (contractId storedContract)) (FetchId "captured")
+      captured = EvidenceIndex snapshot (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing) storedContract mempty Nothing
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"
         ResolveCapturedBlobs {} -> error "Internal broker resolved surface paths"
         ExecuteCapturedMethod actual _ _ -> do
-          unless (actual == captured) (error "Captured evidence changed between reads")
+          unless (actual == captured { Index.payloadContract = contract }) (error "Captured evidence changed between reads")
           modify @Int (+ 1)
           pure (Right (Right (CheckedValue (contractId contract) (string "old contents"))))
       result = runPureEff . runFailure . noModel . noJudgement . noEvidence . recordReads . runConversation $

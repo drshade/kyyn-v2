@@ -22,7 +22,7 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue)
 import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(EvidenceIndex), PayloadLocation(..), payloadLocation, indexState)
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(..), PayloadLocation(..), payloadLocation, indexState)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName, relativePath)
 import Kyyn.Domain.Plugin (pluginName, packageIdentity, PackageIdentity(..), ConnectorTypeName(..), ConnectorName(..))
 import Kyyn.Domain.FileTree (fileTree)
@@ -105,17 +105,15 @@ loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidencePr
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 loadCurrentEvidence ref owner expected = runExceptT $ do
   index <- ExceptT (openCurrentEvidence (selectionFor ref owner))
-  traverse (\captured@(EvidenceIndex _ _ schema _ _) -> do
-    unless (contractId expected == contractId schema) (throwE ProducerContractChanged)
-    ExceptT (materialize captured)) index
+  traverse (ExceptT . materialize . (\captured -> captured { payloadContract = expected })) index
 
 data CurrentEvidence = CurrentEvidence EvidenceSnapshotRef [(EvidenceId,Evidence CheckedValue)] FetchSummary deriving (Eq, Show)
 data MaterializedBaseline = MaterializedBaseline String (Maybe FetchId) (Maybe CurrentEvidence) (Maybe CheckedValue)
 
-beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem MaterializedBaseline)
-beginFixture ref owner schema position = runExceptT $ do
-  FetchBaseline started base capture cursor <- ExceptT (beginFetch (selectionFor ref owner) schema position)
+beginFixture ref owner schema = runExceptT $ do
+  FetchBaseline started base capture cursor <- ExceptT (beginFetch (selectionFor ref owner) schema)
   values <- traverse (ExceptT . materialize) capture
   pure (MaterializedBaseline started base values cursor)
 
@@ -258,13 +256,21 @@ main = do
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract (D.ScalarDescription (D.TypeIdentity "base" "GHC.Types" "Bool" []) D.BoolScalar "Bool" []) (SchemaMetadata [] [] []))
     wrongContract <- run (loadCurrentEvidence instanceA producer boolContract)
-    assert "evidence decoded under wrong contract" (wrongContract == Left ProducerContractChanged)
+    assert "evidence decoded under wrong contract" (isLeft wrongContract)
     guestContract <- run (noGuestExecution (runPluginRead (loadCapturedInput (selectionFor instanceA producer) boolContract)))
-    assert "guest binding accepted incompatible stored descriptor" (case guestContract of
-      Left diagnostics -> "evidence.producer-changed" `Text.isInfixOf` Text.pack (show diagnostics)
-      Right _ -> False)
+    currentView <- right guestContract
+    invalidRead <- run (readCapturedEvidence currentView itemA)
+    assert "guest binding failed to decode against its current payload type" (isLeft invalidRead)
+    let renamedContract = either (error . show) id (checkContract
+          (D.ScalarDescription (D.TypeIdentity "text" "Renamed" "Text" []) D.TextScalar "RenamedText" []) (SchemaMetadata [] [] []))
+    assert "fixture contract identity did not change" (contractId renamedContract /= contractId contract)
+    renamedView <- run (noGuestExecution (runPluginRead (loadCapturedInput (selectionFor instanceA producer) renamedContract))) >>= right
+    renamedRead <- run (readCapturedEvidence renamedView itemA) >>= right
+    assert "a different contract identity blocked readable data" (case renamedRead of
+      Just (Evidence _ _ (Available (CheckedValue decodedIdentity (String text)))) -> decodedIdentity == contractId renamedContract && text == "payload-only-new"
+      _ -> False)
     tip <- run (evidenceHead instanceA) >>= right
-    assert "refusal changed head" (tip == Just (key f2))
+    assert "failed value read changed head" (tip == Just (key f2))
     (left,rightResult) <- concurrently
       (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
       (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
@@ -273,22 +279,21 @@ main = do
       (Left BaseSnapshotConflict,Right result) -> pure result
       _ -> fail "concurrent writers did not produce exactly one publication"
     let changedProducer = EvidenceProducer (PackageIdentity "package-contents-two") (contractId contract)
-    incompatible <- run (loadCurrentEvidence instanceA changedProducer contract)
-    assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
-    incompatibleListing <- listing instanceA changedProducer
-    assert "listing swallowed producer refusal" (incompatibleListing == Left [evidenceProblemDiagnostic ProducerContractChanged])
-    assert "batch swallowed incompatible producer" . isLeft =<< batch instanceA changedProducer Nothing
-    failedReset <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemA])
-    assert "invalid new-producer batch accepted" (isLeft failedReset)
+    changed <- run (loadCurrentEvidence instanceA changedProducer contract) >>= right
+    assert "source change blocked existing evidence" (captureContents changed == Just (f3,[(itemA,value "new")]))
+    _ <- listing instanceA changedProducer >>= right
+    _ <- batch instanceA changedProducer Nothing >>= right
+    failedUpdate <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemB])
+    assert "invalid delta accepted after source change" (isLeft failedUpdate)
     retained <- load instanceA producer
-    assert "failed producer refetch changed evidence" (captureContents retained == Just (f3,[(itemA,value "new")]))
-    _ <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [NewEvidence itemA (value "refetched")]) >>= right
-    oldProducer <- run (loadCurrentEvidence instanceA producer contract)
-    assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
+    assert "failed fetch changed evidence" (captureContents retained == Just (f3,[(itemA,value "new")]))
+    f4 <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [UpdatedEvidence itemA (value "refetched")]) >>= right
+    oldProducer <- run (loadCurrentEvidence instanceA producer contract) >>= right
+    assert "source identity still gates reading" (captureContents oldProducer == Just (f4,[(itemA,value "refetched")]))
     replaced <- Bytes.readFile statePath
-    assert "producer replacement retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
+    assert "updated capture retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
     entries <- listDirectory storePath
-    assert "producer replacement retained extra documents" (length entries == 2 && all (`elem` entries) ["index.dhallb","payloads"])
+    assert "publication retained extra documents" (length entries == 2 && all (`elem` entries) ["index.dhallb","payloads"])
     existed <- run (clearEvidence instanceA)
     assert "clearing present evidence reported no cache" existed
     remaining <- doesDirectoryExist storePath
@@ -316,7 +321,7 @@ main = do
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
-  putStrLn "Evidence store: current payloads, latest summary, Dhall, producer reset, clear and concurrent publication passed."
+  putStrLn "Evidence store: current payloads, latest summary, Dhall, source-edit continuity, clear and concurrent publication passed."
 
 positionProof :: IO ()
 positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
@@ -324,7 +329,7 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
       run = execute scope
       cursor label = CheckedValue (contractId contract) (String label)
-      begin owner = run (beginFixture instanceA owner contract (Just contract)) >>= right
+      begin owner = run (beginFixture instanceA owner contract) >>= right
       public label = FetchReport contract (cursor ("report: " <> label))
       readReport owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceA owner)))) >>= right
       publish owner base changes label = run (publishFetch (selectionFor instanceA owner) contract base Nothing changes
@@ -363,19 +368,20 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   assert "failed publication changed stored bytes" (before == after)
   let replacement = EvidenceProducer (PackageIdentity "replacement") (contractId contract)
   MaterializedBaseline _ replacementBase replacementPrior replacementPosition <- begin replacement
-  assert "new producer inherited old state" (replacementBase == secondBase && replacementPrior == Nothing && replacementPosition == Nothing)
-  failed <- publish replacement replacementBase [RemovedEvidence itemA] "replacement-position"
-  assert "invalid replacement accepted" (isLeft failed)
+  assert "source edit reset evidence or position" (replacementBase == secondBase &&
+    captureContents replacementPrior == Just (second,[(itemA,value "initial")]) && replacementPosition == Just (cursor "cursor-two"))
+  failed <- publish replacement replacementBase [RemovedEvidence itemB] "replacement-position"
+  assert "invalid delta accepted after source edit" (isLeft failed)
   retained <- Bytes.readFile path
-  assert "failed replacement altered old capture" (retained == before)
+  assert "failed fetch altered old capture" (retained == before)
   new <- publish replacement replacementBase [] "replacement-position" >>= right
   MaterializedBaseline _ newBase newCapture newPosition <- begin replacement
-  assert "replacement did not reset capture and position" (newBase == Just (key new) &&
-    captureContents newCapture == Just (new,[]) && newPosition == Just (cursor "replacement-position"))
+  assert "source edit discarded existing evidence" (newBase == Just (key new) &&
+    captureContents newCapture == Just (new,[(itemA,value "initial")]) && newPosition == Just (cursor "replacement-position"))
   EvidenceCapture _ _ _ replacedReport <- readReport replacement
-  assert "replacement retained old report" (replacedReport == Just (public "replacement-position"))
-  old <- run (loadCurrentEvidence instanceA producer contract)
-  assert "old producer read replacement capture" (old == Left ProducerContractChanged)
+  assert "new fetch retained old report" (replacedReport == Just (public "replacement-position"))
+  old <- run (loadCurrentEvidence instanceA producer contract) >>= right
+  assert "source provenance blocked current capture" (captureContents old == captureContents newCapture)
   _ <- run (clearEvidence instanceA)
   MaterializedBaseline _ clearedBase clearedCapture clearedPosition <- begin replacement
   assert "clear retained position" (clearedBase == Nothing && clearedCapture == Nothing && clearedPosition == Nothing)

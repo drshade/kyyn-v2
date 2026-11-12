@@ -670,8 +670,5 @@ capture. A successful fetch with no new artifacts still updates its report. A
 failed attempt leaves the previous successful report intact.
 
 The report is public connector data; private resume positions are not exposed.
-This index format requires clearing and refetching every existing connector
-capture after upgrading the executable, including stateless Directory and
-local-file captures. Upgrade incompatible vendored plugin source in an evolution
-before fetching again. A fresh Meetings fetch defaults to 30 days;
+A fresh Meetings fetch defaults to 30 days;
 use its explicit `since` option when rebuilding a longer historical window.

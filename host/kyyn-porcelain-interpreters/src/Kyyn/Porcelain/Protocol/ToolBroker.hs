@@ -8,10 +8,10 @@ import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.State.Static.Local (runState, get, modify)
-import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef(..))
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex), EvidenceSelection(EvidenceSelection))
+import qualified Kyyn.Domain.EvidenceIndex as Index
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), MethodName(..))
 import Kyyn.Domain.CompiledEntry (CompiledEntry)
@@ -80,8 +80,7 @@ executeToolProgramCaptured program plugins model captured arguments = runExceptT
         Just current -> pure current
         Nothing -> do
           current <- case [c | c@(EvidenceIndex (EvidenceSnapshotRef selected _ _) _ _ _ _) <- captured, selected == instanceRef] of
-            c@(EvidenceIndex _ _ actual _ _):_ | contractId actual == contractId payload -> pure c
-            _: _ -> protocolFailure "Captured payload contract differs from the prepared connector"
+            c:_ -> pure c { Index.payloadContract = payload }
             [] -> loadCapturedInput (EvidenceSelection instanceRef kind identity) payload >>= either throwError pure
           modify ((instanceRef,current):)
           pure current

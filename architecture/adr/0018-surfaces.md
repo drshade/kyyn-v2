@@ -228,7 +228,7 @@ errors refuse the whole operation rather than yielding a partial successful expo
 The operation buffers the result; it is not a bounded-memory streaming API.
 `--expect-fetch` checks the opened capture and refuses a mismatch before reading
 payloads. It is a consistency precondition, not a historical selector. An empty
-successful capture yields an empty array; unfetched and incompatible captures
+successful capture yields an empty array; unfetched and malformed captures
 remain errors. Inspection neither fetches provider data nor runs plugin code.
 Blob lifetime and non-overlapping read/refresh assumptions remain those of ADR 0029.
 Plugin-specific methods remain available for richer views.
@@ -242,7 +242,7 @@ generated adapter, enforces it for every batch and records it in opt-in timings
 under ADR 0019. Other CLI operations do not parse or depend on this override.
 
 Clearing removes only the instance's local capture, latest summary, report and position,
-not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
+not accepted facts or recipe state. Distinguish unfetched,
 publication conflict, malformed delta/storage and unavailable payload. Missing
 evidence does not claim upstream deletion. ADR 0014 owns these semantics.
 
@@ -800,7 +800,7 @@ inspects their Haskell contracts without invoking a reader. Both allow
 accepted instance, with `--input DHALL` decoded hermetically against its inspected
 input contract. A type mismatch retains the normal Dhall diagnostic. Results are
 rendered as Dhall by default and structural JSON with `--json`. Unknown methods
-and unfetched/incompatible evidence remain explicit errors (ADR 0015); the command
+and unfetched or malformed evidence remain explicit errors (ADR 0015); the command
 neither acquires evidence nor edits the root.
 
 `root tool list/show` discovers registered KB helpers, including a draft target
