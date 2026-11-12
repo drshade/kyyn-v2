@@ -39,7 +39,8 @@ page (Heading title) = pure title
  fs.writeFileSync(path.join(target,'plugins/config/local-file.dhall'),config);
  cli(['evolution','check',d.id]);cli(['evolution','ready',d.id]);cli(['evolution','accept',d.id]);
  const accepted=head();
- const captureEntries=()=>fs.readdirSync(path.join(kb,'.kyyn/evidence'),{recursive:true}).sort();
+ // Existing evidence reads create lock files even when no capture exists.
+ const captureEntries=()=>{const directory=path.join(kb,'.kyyn/evidence');return fs.existsSync(directory)?fs.readdirSync(directory,{recursive:true}).filter(name=>!name.endsWith('.lock')&&fs.statSync(path.join(directory,name)).isFile()).sort():[];};
  const capturesBefore=captureEntries();
  server=spawn(executable,['--kb',kb,'web','serve','--port','0'],{env});
  const base=await new Promise((resolve,reject)=>{let out='';server.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});server.on('exit',()=>reject(new Error('Server exited')));});
