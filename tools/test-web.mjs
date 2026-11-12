@@ -318,7 +318,12 @@ ${recipeEdits}
   assert(!(await (await request(accepted,'/kb/views/training/')).text()).includes('UNCOMMITTED'));
   fs.writeFileSync(acceptedPage,committedPage);
   const e=cli(['evolution','new','next-lesson']);
-  write(path.join(e.path,'change/Evolution.hs'),evolution.replace(recipeEdits,'  updateRecipe (RecipeId \"closed\") DemoRecipe.flow (Checkpoint.State [Checkpoint.Seen \"New checkpoint\"] (Just Checkpoint.Pending))').replace('"one"','"two"').replace('First lesson','Second lesson').replace('Schema.Todo "Second lesson" []','Schema.Todo "Second lesson" [FactId "one"]'));
+  const nextEvolution=evolution
+    .replace('import qualified Checkpoint', 'import qualified Checkpoint\nimport qualified Kyyn.Workspace.Target.RecipeTypes.Checkpoint.State as State')
+    .replace(recipeEdits, '  updateRecipe State.recipeType (RecipeId "closed") DemoRecipe.flow (const (Right (Checkpoint.State [Checkpoint.Seen "New checkpoint"] (Just Checkpoint.Pending))))')
+    .replace('"one"','"two"').replace('First lesson','Second lesson')
+    .replace('Schema.Todo "Second lesson" []','Schema.Todo "Second lesson" [FactId "one"]');
+  write(path.join(e.path,'change/Evolution.hs'),nextEvolution);
   cli(['evolution','check',e.id]);
   assert((await page('/recipes/closed?evolution='+e.id)).includes('New checkpoint'));
   assert((await page('/recipes/closed')).includes('Saved &lt;checkpoint&gt;'));
