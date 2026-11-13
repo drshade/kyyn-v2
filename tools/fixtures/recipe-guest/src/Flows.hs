@@ -1,4 +1,4 @@
-module Flows (review, recursive, invalidRecursive) where
+module Flows (review, recursive, invalidRecursive, trace) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -43,3 +43,10 @@ invalidRecursive = A.arr (const ("input" :: Text)) A.>>> nested A.>>> A.arr prop
     nested :: Flow Text Text
     nested = A.draftWith [A.recursiveTool id] "Invalid recursive definition"
     proposal _ = RecipeProposal [] (State 0)
+
+trace :: Flow (RecipeInput Root Bool State) (RecipeProposal RootEdit State)
+trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
+  A.>>> A.each ((A.repeatUntil (>= 2) (A.arr (+1))) A.||| A.arr (+2))
+  A.>>> A.arr (const ("input" :: Text))
+  A.>>> (A.draftWith [A.tool "helper" "Nested helper" (A.draft "inner" :: Flow Text Text)] "outer" :: Flow Text Text)
+  A.>>> A.arr (const (RecipeProposal [] (State 1)))

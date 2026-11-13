@@ -6,6 +6,9 @@ import qualified Data.Text as Text
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
 import Agentic.Aeson (fromAeson)
+import Kyyn.Runtime.ModelWire (valueCodec)
+import qualified Agentic.Describe as Flow
+import Agentic.Runtime (FlowError)
 import Kyyn.Contract
 import Kyyn.Recipe (RecipeInput(..), RecipeProposal)
 import Kyyn.Types.Guest
@@ -23,8 +26,8 @@ recipeEntry :: forall root input state edits calls. (Contract root, Contract inp
   => Text -> (SchemaMetadata,[Text]) -> [Text] -> Wire.Codec edits
   -> (forall a. Transport -> Integer -> calls a -> IO a)
   -> (RecipeInput root input state -> Program calls (Either FetchError (RecipeProposal edits state)))
-  -> (DescriptionFormat -> Either String Text) -> Either ProjectionError Entry
-recipeEntry reference (metadata,sources) flowSources edits dispatch selected render = do
+  -> Either FlowError Flow.Description -> Either ProjectionError Entry
+recipeEntry reference (metadata,sources) flowSources edits dispatch selected description = do
   root <- compileContract (contract @root)
   input <- compileContract (contract @input)
   state <- compileContract (contract @state)
@@ -35,8 +38,12 @@ recipeEntry reference (metadata,sources) flowSources edits dispatch selected ren
         invocation <- either fail pure (Json.parseEither Json.parseJSON value)
         case invocation of
           RenderRecipe format -> do
-            rendered <- either fail pure (render format)
-            writeReply transport (Json.String rendered)
+            described <- either (fail . show) pure description
+            let render = case format of Tree -> Flow.renderTree; Dot -> Flow.dot; Mermaid -> Flow.mermaid
+            writeReply transport (Json.String (render described))
+          CaptureRecipeGraph -> do
+            described <- either (fail . show) pure description
+            writeReply transport (Wire.encodeWith valueCodec (Flow.flowGraphValue (Flow.flowGraph described)))
           RunRecipe rootValue inputValue stateValue -> do
             decodedRoot <- decode root rootValue
             decodedInput <- decode input inputValue

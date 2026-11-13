@@ -63,16 +63,21 @@ writeToolBindings generated roots plugins = do
        (plugin,selected,True) <- configured,
        (index,(actual,connector,_,_)) <- connectors,
        actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector]))
-  write "Kyyn.Agentic" agenticModule
+  write "Kyyn.Agentic" (unlines
+    ["module Kyyn.Agentic (Step, Flow, interpret, liftTool) where",
+     "import KyynFlowRuntime (Step, Flow, interpret, liftTool)"])
+  write "KyynFlowRuntime" agenticModule
   write "KyynGuestDispatch" (unlines
     (["module KyynGuestDispatch (dispatch) where",
       "import qualified KyynToolCalls as Calls", "import Kyyn.Types.Plugin (ConnectorInstance(..))",
       "import Kyyn.Types.Guest (ConnectorIdentity(..), CapturedMethodIdentity(..))",
       "import Kyyn.Runtime.ToolEntry", "import Kyyn.Runtime.Transport (Transport)",
+      "import Kyyn.Runtime.Flow (exchangeObservation)",
       "import Kyyn.Runtime.Judgement (exchangeJudgement)", "import Kyyn.Runtime.Model (exchangeModel)",
       "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
       "dispatch transport requestId (Calls.JudgementCall request) = exchangeJudgement transport requestId request",
-      "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request"] ++
+      "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request",
+      "dispatch transport requestId (Calls.ObserveFlow summary) = exchangeObservation transport requestId summary"] ++
      concat [["dispatch transport requestId (Calls.ListEvidence_" ++ tag index ++ " (ConnectorInstance name)) =",
        "  exchangeEvidenceList transport requestId " ++ identity plugin connector ++ " name",
        "dispatch transport requestId (Calls.ReadEvidence_" ++ tag index ++ " (ConnectorInstance name) key) =",
@@ -100,9 +105,10 @@ proxyModule plugin connector = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then 
 
 agenticModule :: String
 agenticModule = unlines
-  ["module Kyyn.Agentic (Step, Flow, interpret, liftTool) where",
+  ["module KyynFlowRuntime (Step, Flow, interpret, interpretObserved, liftTool) where",
    "import qualified Agentic as A", "import qualified Agentic.Runtime as A",
    "import Agentic.Runtime (Runtime(..))",
+   "import Kyyn.Runtime.Flow (programScope)",
    "import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)",
    "import Control.Monad.Trans.Class (lift)",
    "import Kyyn.Types.Plugin (FetchError(..))", "import Kyyn.Types.Program (request)", "import qualified Data.Text as Text",
@@ -110,9 +116,13 @@ agenticModule = unlines
    "type Flow input output = A.Agentic Step input output", "type Step = ExceptT FetchError Tool",
    "interpret :: Flow input output -> input -> Tool (Either FetchError output)",
    "interpret flow input = runExceptT (A.interpret runtime flow input)",
+   "interpretObserved :: Flow input output -> input -> Tool (Either FetchError output)",
+   "interpretObserved flow input = runExceptT (A.interpret runtime",
+   "  { observe = lift . request . Calls.ObserveFlow . A.summarise } flow input)",
    "runtime :: A.Runtime Step",
    "runtime = (A.runtimeWith (throwE . FetchError . Text.pack . show))",
-   "  { systemOne = A.SystemOne $ \\question ->",
+   "  { scope = A.exceptTScope programScope",
+   "  , systemOne = A.SystemOne $ \\question ->",
    "      lift (request (Calls.JudgementCall question)) >>= either (throwE . FetchError . Text.pack) pure",
    "  , systemTwo = A.SystemTwo $ \\conversation ->",
    "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError . Text.pack) pure }",

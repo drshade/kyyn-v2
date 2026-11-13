@@ -4,7 +4,7 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   inputs.agentic = {
-    url = "github:drshade/haskell-agentic/1afcaef3767600154e26db367b306d92b85ab6f0";
+    url = "github:drshade/haskell-agentic/a1e24d3f68bcaf037a3e1fcf43fa1cb1e99258f0";
     flake = false;
   };
 
@@ -244,6 +244,12 @@
           guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
           guest-target-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/target-evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
+          guest-observed-recipe = (self.lib.mkGuest { inherit system; src = recipeSource; }).overrideAttrs (_: {
+            postBuild = ''
+              runghc -package=kyyn-guest-build ${./tools/fixtures/observed-recipe/Build.hs} \
+                ${./tools/fixtures/observed-recipe/ObservedRecipeEntry.hs} "$out/bin/observed-recipe-guest"
+            '';
+          });
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };

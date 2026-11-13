@@ -6,6 +6,9 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
+import qualified FlowObservationTests
+import Agentic.Aeson (toAeson)
+import Kyyn.Runtime.ModelWire (valueCodec)
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict', toJSON)
 import qualified Data.Aeson.KeyMap as Keys
@@ -63,6 +66,7 @@ main = do
     ["--plugin-guest"] -> pluginGuest
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
+    ["--flow-observation-guest"] -> FlowObservationTests.guest
     ["--guest"] -> guest
     ["--frozen-api-built",path] -> checkFrozenApi (path,[])
     ["--root-api-built",path] -> checkRootApi (path,[])
@@ -75,13 +79,43 @@ main = do
     ["--api-built",path] -> checkApi False (path,[])
     ["--api-bindings-built",path] -> checkApi True (path,[])
     [] -> do
+      FlowObservationTests.check
       checkModelBridge
       path <- getExecutablePath
+      checkObservationTransport (path,["--flow-observation-guest"])
       check (path,["--guest"])
       checkCaptured (path,["--captured-guest"])
       checkAcquisition (path,["--acquisition-guest"])
       checkPlugin (path,["--plugin-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
+
+decodeFlowValue :: Value -> IO Value
+decodeFlowValue value = toAeson <$> right (Wire.decodeWith valueCodec value)
+
+checkObservationTransport :: (FilePath,[String]) -> IO ()
+checkObservationTransport executable = do
+  let response identity result = object ["tag" .= String "HostResponse", "id" .= String identity,"result" .= result]
+  (status,output,errors) <- call executable (response "1" (object []))
+  unless (status == ExitSuccess) (fail (show errors))
+  (Frame.Frame metadata body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
+  requestValue <- right (eitherDecodeStrict' metadata)
+  case requestValue of
+    Object fields -> do
+      unless (Keys.lookup "capability" fields == Just (String "flow") && Keys.lookup "method" fields == Just (String "observe"))
+        (fail "Wrong observation capability")
+      case Keys.lookup "arguments" fields of
+        Just encoded -> do
+          decoded <- decodeFlowValue encoded
+          case decoded of
+            Object summary -> unless (Keys.member "occurrence" summary && Keys.member "parent" summary && not (Keys.member "payload" summary))
+              (fail "Observation is not an upstream payload-free summary")
+            _ -> fail "Invalid upstream summary"
+        _ -> fail "Missing observation summary"
+    _ -> fail "Invalid observation envelope"
+  unless (Bytes.null body && Bytes.null rest) (fail "Observation emitted unexpected bytes")
+  forM_ [response "2" (object []),response "1" (object ["discarded" .= True])] $ \bad -> do
+    (rejected,_,_) <- call executable bad
+    unless (rejected /= ExitSuccess) (fail "Observation accepted invalid acknowledgement")
 
 checkModelBridge :: IO ()
 checkModelBridge = do
@@ -332,7 +366,7 @@ checkRequests = do
     object ["operation" .= ("invoke" :: String),"entry" .= True,"argument" .= object []]] $ \value ->
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestRequest))
         (fail "Malformed shared guest request accepted")
-  forM_ [G.RunRecipe (object []) (object []) (object []),G.RenderRecipe G.Tree,G.RenderRecipe G.Dot,G.RenderRecipe G.Mermaid] $ \request -> do
+  forM_ [G.RunRecipe (object []) (object []) (object []),G.RenderRecipe G.Tree,G.RenderRecipe G.Dot,G.RenderRecipe G.Mermaid,G.CaptureRecipeGraph] $ \request -> do
     decoded <- right (eitherDecodeStrict' (Lazy.toStrict (encode request)))
     unless (decoded == request) (fail "Shared recipe invocation changed")
   forM_ [object [],object ["operation" .= String "run","root" .= object [],"input" .= object []],
@@ -505,6 +539,9 @@ checkRecipe executable@(path,args) = do
   entry <- case [name | G.RecipeEntry name "Flows.review" _ <- description.entries] of
     [name] -> pure name
     _ -> fail "Missing recipe description"
+  unless (all (\m -> m.moduleName /= "Kyyn.Agentic" ||
+      all ((/= "interpretObserved") . G.exportName) m.moduleExports) description.modules)
+    (fail "Observation selector leaked into the author API")
   unless (all (`elem` [name | G.ContractEntry name _ <- description.entries]) ["$state.()","$state.Progress.State"])
     (fail "Open recipe state contracts missing")
   forM_ [G.Tree,G.Dot,G.Mermaid] $ \format -> do
@@ -521,6 +558,15 @@ checkRecipe executable@(path,args) = do
       (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON (G.RenderRecipe format))))
     unless (status /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show errors))
       (fail ("Invalid recursive description did not report its structural error: " ++ show (status,output,errors)))
+  graph <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON G.CaptureRecipeGraph))) >>= decodeFlowValue
+  case graph of
+    Object fields -> unless (all (`Keys.member` fields) ["root","items","edges","addressItems","bodies"])
+      (fail "Captured graph lost upstream relationships")
+    _ -> fail "Graph capture did not return graph data"
+  (badGraph,_,graphErrors) <- call executable
+    (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON G.CaptureRecipeGraph)))
+  unless (badGraph /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show graphErrors))
+    (fail "Invalid graph capture did not preserve structural failure")
   let input = G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])
       invocation = toJSON (G.Invoke entry (toJSON input))
       response = object ["tag" .= String "HostResponse","id" .= String "1",

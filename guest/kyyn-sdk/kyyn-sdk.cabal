@@ -36,6 +36,7 @@ library runtime
   hs-source-dirs: ../kyyn-runtime/src
   exposed-modules: Kyyn.Runtime.Contract Kyyn.Runtime.Guest Kyyn.Runtime.Bindings
     Kyyn.Runtime.AgenticContract
+    Kyyn.Runtime.Flow
     Kyyn.Runtime.Concurrent
     Kyyn.Runtime.Evolution
     Kyyn.Runtime.Snapshot
@@ -85,11 +86,11 @@ test-suite guest-protocol
   type: exitcode-stdio-1.0
   main-is: GuestProtocolTests.hs
   hs-source-dirs: test ../../host/kyyn-plumbing/src
-  other-modules: Kyyn.Plumbing.Protocol.Frame
+  other-modules: Kyyn.Plumbing.Protocol.Frame FlowObservationTests
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: agentic ==0.2.1.0, kyyn-domain, base >=4.22 && <4.23, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+  build-depends: agentic ==0.2.1.0, agentic-aeson ==0.2.1.0, kyyn-domain, base >=4.22 && <4.23, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
     aeson >=2.2.4 && <2.3, bytestring, text, typed-process ==0.2.13.0, transformers
 
 test-suite capabilities
