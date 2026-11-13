@@ -67,7 +67,7 @@ runAppendJournalIO action = do
         header <- Bytes.readFile (path </> "header.json")
         -- Probe before reading: observing a stopped writer must include all of its
         -- flushed events. If it stops during the read, the next poll settles it.
-        acquired <- tryLockFile (path ++ ".lock") Exclusive
+        acquired <- tryLockFile (path ++ ".lock") Shared
         let readSnapshot = do
               bytes <- Bytes.readFile (path </> "events.jsonl")
               let (records,partial) = case reverse (Bytes.split 10 bytes) of
@@ -92,6 +92,8 @@ runAppendJournalIO action = do
           Just lock -> (do
             exists <- doesFileExist (path </> "header.json")
             unless exists (ioError (userError "Recording does not exist"))
+            -- Keep the lock inode: unlinking it could let a new writer bypass
+            -- a process that already opened the previous lock file.
             removeDirectoryRecursive path) `IO.finally` unlockFile lock
     ) action
 
@@ -103,7 +105,7 @@ native operation path action = liftIO (try @IOException action) >>= either (fail
 openJournal :: FilePath -> (JournalStamp -> Bytes.ByteString) -> IO (JournalStamp,Writer,FileLock)
 openJournal directory header = IO.mask $ \restore -> do
   createDirectoryIfMissing True directory
-  path <- createTempDirectory directory "run-"
+  path <- createTempDirectory directory "run"
   name <- either (ioError . userError) pure (relativePath (takeFileName path))
   lock <- lockFile (path ++ ".lock") Exclusive `IO.onException` removeDirectoryRecursive path
   (do

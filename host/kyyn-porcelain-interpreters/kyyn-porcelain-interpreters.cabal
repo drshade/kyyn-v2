@@ -148,4 +148,4 @@ test-suite recipe-run-store
   ghc-options: -Wall -Werror -threaded
   build-depends: base, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-plumbing,
     kyyn-porcelain-interpreters, kyyn-plumbing-interpreters, effectful-core,
-    aeson, bytestring, async, directory, filepath, temporary
+    aeson, bytestring, async, directory, filepath, temporary, process, unix
