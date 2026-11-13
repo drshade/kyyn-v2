@@ -142,8 +142,9 @@ preparePlugins compiler libdir generated basePackages = do
 
 buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSelection -> IO ()
 buildRoot compiler libdir generated basePackages destination selection = do
+  runtime <- if selection == RootEntries then runtimeOptions compiler else pure []
   roots <- ("src" :) <$> installedPluginRoots
-  let packages = basePackages ++ map ("-i" ++) roots
+  let packages = basePackages ++ runtime ++ map ("-i" ++) roots
   (pluginEntries,registrations) <- if selection == RootEntries
     then do
       (_,_,entries,registrations) <- preparePlugins compiler libdir generated basePackages
