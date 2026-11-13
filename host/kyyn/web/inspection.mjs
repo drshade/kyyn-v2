@@ -2,7 +2,7 @@
 // Keep its topology, but move full labels out of the diagram into step details.
 export function compactFlow(source) {
   const steps = [];
-  const diagram = source.replace(/^(\s*(?:subgraph )?)([A-Za-z_][A-Za-z_0-9]*)(\(\["|\[\/"|\[")([\s\S]*?)("\]\)|"\/\]|"\])$/gm,
+  const diagram = source.replace(/^(\s*(?:subgraph )?)([A-Za-z_][A-Za-z_0-9]*)(\(\["|\[\/"|\["|\{")([\s\S]*?)("\]\)|"\/\]|"\]|"\})$/gm,
     (_, prefix, id, opening, label, closing) => {
       const text = label.replaceAll('<br/>', '\n').replaceAll('#quot;', '"');
       const lines = text.split('\n');

@@ -3,6 +3,7 @@
 // KYYN_PLAYWRIGHT_MODULE (an installed Playwright index.mjs), not a product dependency.
 // Usage: node tools/test-run-web.mjs CLI FIXTURE_DIRECTORY [SCREENSHOT_DIRECTORY]
 import assert from 'node:assert/strict';
+import {compactFlow} from '../host/kyyn/web/inspection.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +16,10 @@ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'kyyn-run-web-')), kb=path.
 const env={...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_NAME:'Run viewer fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'Run viewer fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
 const children=[];let browser;
 const fixture=JSON.parse(fs.readFileSync(path.join(fixtureDirectory,'completed.json'),'utf8'));
+const compact = compactFlow(fixture.mermaid);
+assert(compact.steps.length > 0, 'Real guest Mermaid must expose compactable step labels');
+assert(compact.steps.every(step => step.title.length <= 100));
+assert.notEqual(compact.diagram, fixture.mermaid);
 const failure=JSON.parse(fs.readFileSync(path.join(fixtureDirectory,'failed.json'),'utf8'));
 function git(...args){const r=spawnSync('git',['-C',kb,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();}
 function write(file,contents){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,contents);}

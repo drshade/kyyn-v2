@@ -20,3 +20,9 @@ assert.equal(compact.steps[2].id, 'n_flow_seq_1_note_0');
 assert.equal(compact.steps[2].text, result.steps[2].text.replaceAll('n1', 'n_flow_seq_1_note_0'));
 assert.equal(compact.diagram, result.diagram.replaceAll('n0', 'n_flow_seq_0').replaceAll('n1', 'n_flow_seq_1_note_0').replaceAll('n2', 'n_flow_seq_2_call_0'));
 console.log('Inspection flow compaction passed.');
+
+const decision = compactFlow('flowchart TD\n  n_flow_choose_0{"' + 'Long decision '.repeat(100) + '"}\n');
+assert.equal(decision.steps.length, 1);
+assert(decision.steps[0].title.length <= 100);
+assert(decision.diagram.includes('n_flow_choose_0{'));
+assert.equal(decision.steps[0].text, 'Long decision '.repeat(100));
