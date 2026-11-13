@@ -1,3 +1,5 @@
+import {compactFlow} from './inspection.mjs';
+
 // One recording reducer for live following, seek and playback. Graph addresses
 // identify static nodes; occurrence + explicit parent identify dynamic scopes.
 export const occurrenceKey = occurrence => JSON.stringify([occurrence.address, occurrence.context]);
@@ -231,8 +233,8 @@ async function startViewer(initial) {
       script.onload = resolve; script.onerror = reject; document.head.append(script);
     });
     globalThis.mermaid.initialize({startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
-      flowchart: {htmlLabels: false, useMaxWidth: false}});
-    const {svg} = await globalThis.mermaid.render('recorded-flow', initial.header.mermaid);
+      flowchart: {htmlLabels: true, useMaxWidth: false}});
+    const {svg} = await globalThis.mermaid.render('recorded-flow', compactFlow(initial.header.mermaid).diagram);
     const viewport = el('div', undefined, 'graph-viewport'); viewport.innerHTML = svg;
     $('run-diagram').prepend(viewport); fallback.hidden = true;
     const drawing = viewport.querySelector('svg');
@@ -252,7 +254,8 @@ async function startViewer(initial) {
     $('run-fit').onclick = fit;
     $('run-zoom-in').onclick = () => { scale = Math.min(4, scale * 1.3); resize(); };
     $('run-zoom-out').onclick = () => { scale = Math.max(.05, scale / 1.3); resize(); };
-    fit(); draw();
+    scale = Math.max(.75, Math.min(1, (viewport.clientWidth - 24) / bounds.width));
+    resize(); draw();
   } catch (error) {
     $('run-diagram').prepend(el('p', 'Diagram unavailable; inspect the recorded nodes below.', 'muted'));
     fallback.hidden = false;

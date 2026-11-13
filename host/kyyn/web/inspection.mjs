@@ -1,8 +1,8 @@
-// Agentic's Mermaid renderer emits quoted n<number> nodes and subgraphs.
+// Agentic's Mermaid renderer emits quoted nodes and subgraphs with stable IDs.
 // Keep its topology, but move full labels out of the diagram into step details.
 export function compactFlow(source) {
   const steps = [];
-  const diagram = source.replace(/^(\s*(?:subgraph )?)(n\d+)(\(\["|\[\/"|\[")([\s\S]*?)("\]\)|"\/\]|"\])$/gm,
+  const diagram = source.replace(/^(\s*(?:subgraph )?)([A-Za-z_][A-Za-z_0-9]*)(\(\["|\[\/"|\["|\{")([\s\S]*?)("\]\)|"\/\]|"\]|"\})$/gm,
     (_, prefix, id, opening, label, closing) => {
       const text = label.replaceAll('<br/>', '\n').replaceAll('#quot;', '"');
       const lines = text.split('\n');
@@ -71,7 +71,8 @@ async function showFlow(source, container) {
       button.type = 'button'; button.addEventListener('click', action); toolbar.append(button);
     }
     for (const node of drawing.querySelectorAll('.node, .cluster')) {
-      const id = node.id.match(/^recipe-diagram-flowchart-(n\d+)-\d+$/)?.[1] ?? node.id.replace(/^recipe-diagram-/, '');
+      const localId = node.id.replace(/^recipe-diagram-/, '');
+      const id = node.classList.contains('cluster') ? localId : localId.replace(/^flowchart-/, '').replace(/-\d+$/, '');
       const detail = details.get(id);
       if (!detail) continue;
       node.setAttribute('tabindex', '0'); node.setAttribute('role', 'button');
