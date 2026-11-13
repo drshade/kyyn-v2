@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
-import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue, pageValue)
+import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result (Response, success)
 
@@ -23,10 +23,10 @@ dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppen
       pure (success (object ["runs" .= map summaryValue runs])
         (if null runs then ["No recipe runs recorded."] else map describe runs))
     Cli.ShowRun identity -> do
-      page <- readRecipeRun kb identity Nothing (fromIntegral (maxBound :: Int))
-      pure (success (pageValue page) ([describe page.summary,
-        "Events: " ++ show page.summary.eventCount,"View: /runs/" ++ runIdText identity] ++
-        ["Ignoring an incomplete final event; complete events are shown." | page.incompleteTail]))
+      page <- readRecipeRun kb identity Nothing 0
+      pure (success (summaryValue page.summary) ([describe page.summary,
+        "Events: " ++ show page.summary.eventCount] ++
+        ["Ignoring an incomplete final event; the complete prefix is readable." | page.incompleteTail]))
     Cli.ClearRun identity -> do
       clearRecipeRun kb identity
       pure (success (object ["cleared" .= runIdText identity]) ["Cleared run " ++ runIdText identity])

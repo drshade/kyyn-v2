@@ -122,6 +122,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Failure': ['Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.RecipeRun': ['Data.Char', 'Data.Aeson', 'Data.Text', 'Numeric.Natural', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase'],
   'Kyyn.Domain.Inspection': ['Kyyn.Domain.Output', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Domain.Blob', 'Kyyn.Types.Evidence', 'Data.Text', 'Kyyn.Domain.Model', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Recipe', 'Kyyn.Domain.Root', 'Data.Aeson', 'Data.ByteString', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace'],
   'Kyyn.Domain.SnapshotReport': ['Control.Monad', 'Data.List', 'Data.Text', 'Kyyn.Domain.StoredSnapshot', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],

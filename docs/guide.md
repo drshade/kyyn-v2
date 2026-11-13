@@ -537,7 +537,8 @@ kyyn-v2 --json run show RUN_ID
 kyyn-v2 run clear RUN_ID
 ```
 
-`run show` reads the captured graph, complete flow events and outcome without
+`run show` reads the captured header (including its graph), outcome, draft link
+and event count without
 compiling or invoking guest code. Active, completed, failed, cancelled and
 interrupted recordings are distinguished; an incomplete last line is reported.
 Clearing refuses an active run and deletes only its recording, leaving its draft

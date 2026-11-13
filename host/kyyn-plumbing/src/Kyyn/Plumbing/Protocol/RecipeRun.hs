@@ -21,13 +21,13 @@ import Kyyn.Plumbing.Protocol.Validation (parseReport)
 
 headerValue :: RecipeRunHeader -> Value
 headerValue h = let RecipeId recipe = h.recipe; FlowEntryRef flow = h.flow in object
-  ["runId" .= runIdText h.runId,"recipe" .= recipe,"flow" .= flow,"before" .= revisionName h.before,
+  ["recipe" .= recipe,"flow" .= flow,"before" .= revisionName h.before,
    "startedAt" .= h.startedAt,"graph" .= h.graph,"build" .= object
     ["sourcesDigest" .= Bytes.unpack h.build.sourcesDigest,"targetSystem" .= h.build.targetSystem,
      "derivationPath" .= h.build.derivationPath,"outputPath" .= h.build.outputPath]]
-parseHeader :: Value -> Parser RecipeRunHeader
-parseHeader = exact "run header" ["runId","recipe","flow","before","startedAt","graph","build"] $ \o ->
-  RecipeRunHeader <$> (o .: "runId" >>= checked . recipeRunId) <*> (o .: "recipe" >>= checked . recipeId)
+parseHeader :: RecipeRunId -> Value -> Parser RecipeRunHeader
+parseHeader identity = exact "run header" ["recipe","flow","before","startedAt","graph","build"] $ \o ->
+  RecipeRunHeader identity <$> (o .: "recipe" >>= checked . recipeId)
     <*> (FlowEntryRef <$> o .: "flow") <*> (o .: "before" >>= checked . gitRevision)
     <*> (o .: "build" >>= exact "run build" ["sourcesDigest","targetSystem","derivationPath","outputPath"] (\b ->
       BuildIdentity <$> (Bytes.pack <$> b .: "sourcesDigest") <*> b .: "targetSystem" <*> b .: "derivationPath" <*> b .: "outputPath"))
@@ -53,7 +53,7 @@ parseEvent = exact "run event" ["elapsedNanos","body"] $ \o ->
       "cancelled" -> exactFields body ["kind"] >> pure RunCancelled
       _ -> fail "Unknown run event kind"))
 summaryValue :: RecipeRunSummary -> Value
-summaryValue s = object ["header" .= headerValue s.header,"status" .= statusName s.status,
+summaryValue s = object ["runId" .= runIdText s.header.runId,"header" .= headerValue s.header,"status" .= statusName s.status,
   "draft" .= case s.status of Completed draft -> some (String (Text.pack (evolutionIdName draft))); _ -> none,
   "eventCount" .= show s.eventCount]
 pageValue :: RecipeRunPage -> Value

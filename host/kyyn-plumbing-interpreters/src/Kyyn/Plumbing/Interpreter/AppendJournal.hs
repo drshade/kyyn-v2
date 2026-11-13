@@ -88,7 +88,7 @@ runAppendJournalIO action = do
       native Failure.WriteFile path $ do
         acquired <- tryLockFile (path ++ ".lock") Exclusive
         case acquired of
-          Nothing -> ioError (userError "Journal is active; cannot clear it")
+          Nothing -> ioError (userError "Recording is busy (a writer or reader holds its lock); cannot clear it")
           Just lock -> (do
             exists <- doesFileExist (path </> "header.json")
             unless exists (ioError (userError "Recording does not exist"))
@@ -102,7 +102,7 @@ failAt operation path message = raiseFailure (Failure.StorageUnavailable (Failur
 native :: (IOE :> es, Failure :> es) => Failure.StorageOperation -> FilePath -> IO a -> Eff es a
 native operation path action = liftIO (try @IOException action) >>= either (failAt operation path . displayException) pure
 
-openJournal :: FilePath -> (JournalStamp -> Bytes.ByteString) -> IO (JournalStamp,Writer,FileLock)
+openJournal :: FilePath -> (JournalStamp -> Either String Bytes.ByteString) -> IO (JournalStamp,Writer,FileLock)
 openJournal directory header = IO.mask $ \restore -> do
   createDirectoryIfMissing True directory
   path <- createTempDirectory directory "run"
@@ -116,7 +116,8 @@ openJournal directory header = IO.mask $ \restore -> do
       (Posix.defaultFileFlags { Posix.append = True, Posix.creat = Just 0o600, Posix.cloexec = True })
     (do
       restore $ withTempFile path ".header-" $ \temporary output -> do
-        Bytes.hPut output (header stamp)
+        contents <- either (ioError . userError) pure (header stamp)
+        Bytes.hPut output contents
         hClose output
         renameFile temporary (path </> "header.json")
       mutex <- newMVar (WriterState handle False False)

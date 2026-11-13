@@ -144,22 +144,28 @@ evolution = prepare (pure ()) $ edit (Rationale "Teach recipes" []) (do
   assert.equal(failures.length, 3);
   for (const failure of failures) {
     assert.equal(failure.status, 'failed');
-    const recording = cli(['run', 'show', failure.header.runId]).result;
-    assert.equal(recording.events.at(-1).event.body.kind, 'failed');
-    assert(recording.events.some(e => e.event.body.summary?.event.kind === 'failed'));
+    const recording = cli(['run', 'show', failure.runId]).result;
+    assert.equal(recording.status, 'failed');
+    const events = fs.readFileSync(path.join(kb, '.kyyn/runs', failure.runId, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(events.at(-1).body.kind, 'failed');
+    assert(events.some(e => e.body.summary?.event.kind === 'failed'));
   }
   assert.equal(state('sync'), initialState);
   console.log('Running generic current evidence reads and freezing fact/state output');
   const proposal = run('sync', ['--input', '"sync"']).result;
   assert(proposal.runId);
-  assert.equal(proposal.runUrl, `/runs/${proposal.runId}`);
+  assert(!('runUrl' in proposal), 'No URL until the Web route exists');
   const recording = cli(['--nix', '/deliberately-absent-nix', 'run', 'show', proposal.runId]).result;
-  assert.equal(recording.summary.status, 'completed');
-  assert.equal(recording.summary.draft.value, proposal.id);
-  assert(recording.summary.header.graph.items.length > 0);
-  assert.equal(recording.events.at(-1).event.body.draft, proposal.id);
-  assert(recording.events.some(e => e.event.body.kind === 'flow'));
-  recording.events.forEach((e, i) => assert.equal(e.sequence, String(i)));
+  assert.equal(recording.status, 'completed');
+  assert.equal(recording.draft.value, proposal.id);
+  assert(recording.header.graph.items.length > 0);
+  assert(!('events' in recording), 'run show should return a summary');
+  const events = fs.readFileSync(path.join(kb, '.kyyn/runs', proposal.runId, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(events.at(-1).body.draft, proposal.id);
+  assert(events.some(e => e.body.kind === 'flow'));
+  assert.equal(recording.eventCount, String(events.length));
+  const header = JSON.parse(fs.readFileSync(path.join(kb, '.kyyn/runs', proposal.runId, 'header.json'), 'utf8'));
+  assert(!('runId' in header), 'Run ID is derived from directory, not duplicated');
   invoke('git', ['-C', kb, 'check-ignore', `.kyyn/runs/${proposal.runId}/header.json`]);
   cli(['run', 'clear', proposal.runId]);
   assert(fs.existsSync(proposal.path), 'Clearing a recording removed its draft');

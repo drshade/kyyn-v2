@@ -15,14 +15,14 @@ data JournalExit = JournalCancelled | JournalException String deriving (Eq, Show
 data JournalSnapshot = JournalSnapshot ByteString [ByteString] Bool Bool deriving (Eq, Show)
 
 data AppendJournal :: Effect where
-  WithJournal :: DirectoryScope -> (JournalStamp -> ByteString)
+  WithJournal :: DirectoryScope -> (JournalStamp -> Either String ByteString)
     -> (JournalStamp -> JournalExit -> m ()) -> (JournalStamp -> m a) -> AppendJournal m a
   AppendJournal :: DirectoryScope -> RelativePath -> Bool -> (Natural -> ByteString) -> AppendJournal m Natural
   ReadJournal :: DirectoryScope -> RelativePath -> AppendJournal m JournalSnapshot
   ListJournals :: DirectoryScope -> AppendJournal m [RelativePath]
   ClearJournal :: DirectoryScope -> RelativePath -> AppendJournal m ()
 type instance DispatchOf AppendJournal = Dynamic
-withJournal :: AppendJournal :> es => DirectoryScope -> (JournalStamp -> ByteString)
+withJournal :: AppendJournal :> es => DirectoryScope -> (JournalStamp -> Either String ByteString)
   -> (JournalStamp -> JournalExit -> Eff es ()) -> (JournalStamp -> Eff es a) -> Eff es a
 withJournal directory header cleanup = send . WithJournal directory header cleanup
 appendJournal :: AppendJournal :> es => DirectoryScope -> RelativePath -> Bool -> (Natural -> ByteString) -> Eff es Natural

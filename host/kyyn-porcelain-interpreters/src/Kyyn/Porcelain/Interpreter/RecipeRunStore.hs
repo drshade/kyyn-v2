@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, OverloadedStrings, ScopedTypeVariables, TypeApplications #-}
 module Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore) where
 
-import Control.Monad (forM, unless, when, void)
+import Control.Monad (forM, when, void)
 import Data.Aeson (encode, eitherDecodeStrict')
 import Data.Aeson.Types (parseEither, Parser)
 import qualified Data.Aeson as Json
@@ -31,19 +31,21 @@ runRecipeRunStore :: (AppendJournal :> es, Failure :> es)
 runRecipeRunStore announce = interpret $ \env -> \case
   WithRecipeRun prepared use -> localSeqUnlift env $ \unlift -> do
     directory <- baseDirectory prepared.knowledgeBase
-    let header (JournalStamp name started) = RecipeRunHeader
-          (either error id (recipeRunId (relativeName name))) prepared.recipe prepared.flow prepared.before prepared.build started prepared.graph
-        record stamp event = void (writeEvent directory (header stamp) event)
+    let header (JournalStamp name started) =
+          (\identity -> RecipeRunHeader identity prepared.recipe prepared.flow prepared.before prepared.build started prepared.graph)
+            <$> recipeRunId (relativeName name)
+        checkedHeader stamp = checked (scopePath directory) (header stamp)
+        record stamp event = checkedHeader stamp >>= \h -> void (writeEvent directory h event)
         cleanup stamp exit = record stamp (case exit of
           JournalCancelled -> RunCancelled
           JournalException message -> RunFailed [errorDiagnostic "run.failed" message])
-    withJournal directory (Lazy.toStrict . encode . headerValue . header) cleanup $ \stamp -> do
-      let h = header stamp
+    withJournal directory (fmap (Lazy.toStrict . encode . headerValue) . header) cleanup $ \stamp -> do
+      h <- checkedHeader stamp
       catchError @Failure.OperationalFailure
         (announce h >> unlift (use (RecipeRunWriter prepared.knowledgeBase h)))
         (\_ problem -> do
           catchError @Failure.OperationalFailure
-            (record stamp (RunFailed [errorDiagnostic "run.failed" (show problem)])) (\_ _ -> pure ())
+            (record stamp (RunFailed [Failure.operationalDiagnostic problem])) (\_ _ -> pure ())
           raiseFailure problem)
   AppendRunEvent (RecipeRunWriter kb header) event -> do
     directory <- baseDirectory kb
@@ -86,8 +88,7 @@ readRun directory identity cursor limit = do
   name <- checked (runIdText identity) (relativePath (runIdText identity))
   let path = scopePath directory </> runIdText identity
   JournalSnapshot headerBytes records active partial <- readJournal directory name
-  header <- decodeAt (path </> "header.json") parseHeader headerBytes
-  unless (header.runId == identity) (failAt path "Header run ID differs from directory")
+  header <- decodeAt (path </> "header.json") (parseHeader identity) headerBytes
   events <- forM (zip [0 :: Natural ..] records) $ \(n,line) ->
     decodeAt (path ++ "/events.jsonl line " ++ show (n+1)) parseEvent line
   state <- inspectEvents path events
@@ -100,14 +101,13 @@ readRun directory identity cursor limit = do
     (length page < length remaining) partial)
 
 inspectEvents :: Failure :> es => FilePath -> [RunEvent] -> Eff es (Maybe RunStatus)
-inspectEvents path = go (1 :: Natural) 0 Nothing
+inspectEvents path = go (1 :: Natural) Nothing
   where
-    go _ _ terminal [] = pure terminal
-    go n elapsed terminal (event:rest) = do
+    go _ terminal [] = pure terminal
+    go n terminal (event:rest) = do
       let location = path ++ "/events.jsonl line " ++ show n
       when (isJust terminal) (failAt location "Event follows terminal")
-      when (event.elapsedNanos < elapsed) (failAt location "Elapsed time decreased")
-      go (n+1) event.elapsedNanos (terminalStatus event.body) rest
+      go (n+1) (terminalStatus event.body) rest
 
 decodeAt :: Failure :> es => FilePath -> (Json.Value -> Parser a) -> Bytes.ByteString -> Eff es a
 decodeAt path parser bytes = checked path (eitherDecodeStrict' bytes >>= parseEither parser)

@@ -15,6 +15,7 @@ import Data.List (isInfixOf)
 import Effectful (Eff, IOE, runEff, liftIO)
 import Kyyn.Domain.CompiledProgram (BuildIdentity(..))
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
+import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Evolution (evolutionId)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -22,7 +23,7 @@ import Kyyn.Domain.Path (directoryScope)
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.RecipeRun
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
-import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.AppendJournal (AppendJournal)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -93,6 +94,17 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
     pure header
   failedPage <- execute (readRecipeRun kb failed.runId Nothing 10)
   check "failed diagnostic didn't decode" (failedPage.summary.status == Failed)
+  let failingDirectory = directory </> "failure"
+      failingKb = KnowledgeBase (Repository (either error id (directoryScope failingDirectory))) WholeTree
+      failure = Failure.GitUnavailable "Unable to write draft"
+  refused <- E.try @E.IOException $ execute $ withRecipeRun (prepared { knowledgeBase = failingKb }) $ \_ ->
+    raiseFailure failure
+  check "operational failure escaped its recording" (isLeft (refused :: Either E.IOException ()))
+  failures <- execute (listRecipeRuns failingKb Nothing)
+  failureHeader <- case failures of [r] -> pure r.header; _ -> fail "Missing operational failure recording"
+  failurePage <- execute (readRecipeRun failingKb failureHeader.runId Nothing 10)
+  failureEvent <- single failurePage.events
+  check "recording diagnostic differs from the CLI" (failureEvent.body == RunFailed [Failure.operationalDiagnostic failure])
   begun <- newEmptyMVar
   blocker <- newEmptyMVar
   cancelled <- async $ execute $ withRecipeRun prepared $ \(RecipeRunWriter _ header) -> do
