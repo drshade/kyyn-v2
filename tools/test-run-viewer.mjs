@@ -1,7 +1,7 @@
 // Pure viewer projection: explicit occurrence/parent/body relations, unknown
 // terminals, zero each, repeat progress, idempotent polling and seek equivalence.
 import assert from 'node:assert/strict';
-import {newRecording, reduceEvent, replay, occurrenceKey, nodeState, advance, contextText, eventText} from '../host/kyyn/web/run-viewer.mjs';
+import {newRecording, reduceEvent, replay, occurrenceKey, nodeState, advance, contextText, eventText, observedMotion} from '../host/kyyn/web/run-viewer.mjs';
 const graph = {root:'root',items:[{id:'root',kind:'box',labels:['Run'],items:[
   {id:'each',kind:'box',labels:['Each'],items:[{id:'body',kind:'node',nodeKind:'step',labels:['Body']}]},
   {id:'call',kind:'node',nodeKind:'tool',labels:['Helper " </script> <img src=x onerror=alert(1)>']},
@@ -57,3 +57,24 @@ assert.equal(contextText([['repeat','x',0],['each','y',1,2]]),'element 2 of 2 ·
 assert.equal(contextText([['call','x',1,2,'call-id']]),'tool call 3 of turn 2');
 assert.equal(eventText({kind:'turned',turn:0,action:'tools'},live.graph),'Turn 1 · tool calls');
 console.log('Run viewer: live/seek equivalence, incremental playback, body-root counts, unknown outcomes and readable occurrence fields passed.');
+
+// Motion follows recorded direct hand-offs and selections, never another
+// iteration's history, unreturned sources or a speculative multi-hop path.
+const motionGraph = {...graph, edges:[{from:'body',to:'call',style:'flow',selections:[]},
+  {from:'call',to:'junction',style:'flow',selections:['branch-left']}]};
+seq=0;
+const motionState=newRecording(motionGraph);
+const c0=[['each','each',0]], c1=[['each','each',1]];
+for (const event of [flow(occurrence('body',c0),each,'pure',{kind:'entered',total:null}),
+  flow(occurrence('body',c0),each,'pure',{kind:'returned',outcome:'completed'})]) reduceEvent(motionState,event);
+let entered=flow(occurrence('call',c0),each,'act',{kind:'entered',total:null});
+reduceEvent(motionState,entered);
+assert.deepEqual(observedMotion(motionState,entered).edges,[0]);
+entered=flow(occurrence('call',c1),each,'act',{kind:'entered',total:null});
+reduceEvent(motionState,entered);
+assert.deepEqual(observedMotion(motionState,entered).edges,[]);
+const selected=flow(occurrence('call',c1),each,'choose',{kind:'selected',edge:'branch-left'});
+reduceEvent(motionState,selected);
+assert.deepEqual(observedMotion(motionState,selected).edges,[1]);
+assert.equal(observedMotion(motionState,{event:{body:{kind:'completed'}}}),null);
+console.log('Motion: direct hand-offs, exact selected branches and iteration isolation passed.');

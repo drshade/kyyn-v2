@@ -37,3 +37,15 @@ button:focus-visible,a:focus-visible{outline:2px solid #245a94;outline-offset:3p
 .node-list [data-state=failed]{background:#fbe7e7}
 .node-list [data-state=returned]{background:#e5f5e8}
 @media(max-width:700px){.graph-viewport{height:400px}.timeline{flex-wrap:wrap}}
+/* Activity is transient; historical success remains visible without flooding
+   every node green after the first loop iteration. */
+.motion-enabled [data-state=returned]{--run-fill:#f5f7f9;--run-stroke:#9baebc}
+.motion-enabled .just-returned[data-state=returned]{--run-fill:#b6efd0;--run-stroke:#168459}
+.motion-enabled .selected-edge{stroke:#8b9aaa!important;stroke-width:2px!important}
+.flow-motion{pointer-events:none}
+.flow-particle{fill:#1687f8;stroke:white;stroke-width:2;filter:drop-shadow(0 0 4px #2588ee)}
+.motion-running .node[data-state=open] .label-container{animation:flow-pulse 1.2s ease-in-out infinite}
+.motion-control{display:flex;gap:.35rem;align-items:center}
+.run-activity{font-variant-numeric:tabular-nums;color:#245a94;font-weight:600}
+@keyframes flow-pulse{50%{stroke-width:4px;filter:drop-shadow(0 0 5px #4095ec)}}
+@media(prefers-reduced-motion:reduce){.motion-running .node[data-state=open] .label-container{animation:none}}
