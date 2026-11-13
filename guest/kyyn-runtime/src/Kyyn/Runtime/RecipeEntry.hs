@@ -23,7 +23,7 @@ recipeEntry :: forall root input state edits calls. (Contract root, Contract inp
   => Text -> (SchemaMetadata,[Text]) -> [Text] -> Wire.Codec edits
   -> (forall a. Transport -> Integer -> calls a -> IO a)
   -> (RecipeInput root input state -> Program calls (Either FetchError (RecipeProposal edits state)))
-  -> (DescriptionFormat -> Text) -> Either ProjectionError Entry
+  -> (DescriptionFormat -> Either String Text) -> Either ProjectionError Entry
 recipeEntry reference (metadata,sources) flowSources edits dispatch selected render = do
   root <- compileContract (contract @root)
   input <- compileContract (contract @input)
@@ -34,7 +34,9 @@ recipeEntry reference (metadata,sources) flowSources edits dispatch selected ren
       run transport value = do
         invocation <- either fail pure (Json.parseEither Json.parseJSON value)
         case invocation of
-          RenderRecipe format -> writeReply transport (Json.String (render format))
+          RenderRecipe format -> do
+            rendered <- either fail pure (render format)
+            writeReply transport (Json.String rendered)
           RunRecipe rootValue inputValue stateValue -> do
             decodedRoot <- decode root rootValue
             decodedInput <- decode input inputValue

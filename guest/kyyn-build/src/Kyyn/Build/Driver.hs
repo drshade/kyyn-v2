@@ -241,7 +241,7 @@ buildRecipes compiler libdir generated basePackages destination references = do
     ClosedFlow name -> do
       selected <- either (fail . (("Recipe flow " ++ Text.unpack name ++ ": ") ++)) pure (qualifiedReference False name)
       (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
-      let render format = "Agentic.Describe." ++ format ++ " (Agentic.Describe.describe " ++ Text.unpack name ++ ")"
+      let render format = "either (Left . show) (Right . Agentic.Describe." ++ format ++ ") (Agentic.Describe.describe " ++ Text.unpack name ++ ")"
       pure ([Text.unpack (referenceModule selected)],"recipeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++
         " " ++ show name ++ " (" ++ Text.unpack (referenceName manifest.schemaMetadata) ++ "," ++ show rootSources ++ ") " ++ show sources ++
         " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch (Kyyn.Agentic.interpret " ++ Text.unpack name ++ ") " ++
