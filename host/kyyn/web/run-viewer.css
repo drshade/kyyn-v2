@@ -1,0 +1,39 @@
+/* Viewer controls and recorded states; typography, palette and navigation use
+   the common inspection page shell. */
+[hidden]{display:none!important}
+.toolbar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.toolbar button,.toolbar select{font:inherit;padding:.35rem .65rem;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible{outline:2px solid #245a94;outline-offset:3px}
+#run-message,.progress-count{font-weight:600}
+.timeline{display:flex;gap:1rem;align-items:center;margin:1rem 0}
+.timeline input{flex:1}
+.timeline output{min-width:150px;text-align:right;font-variant-numeric:tabular-nums}
+.graph-viewport{height:720px;overflow:auto;border:1px solid #ddd;margin:1rem 0}
+.graph-viewport svg{max-width:none!important;display:block;margin:auto}
+.graph-viewport [role=button]{cursor:pointer}
+.graph-viewport [role=button]:focus{outline:2px solid #245a94}
+.graph-viewport [data-state=open]{--run-fill:#dcecff;--run-stroke:#2674ce}
+.graph-viewport [data-state=returned]{--run-fill:#e5f5e8;--run-stroke:#358657}
+.graph-viewport [data-state=failed]{--run-fill:#fbe7e7;--run-stroke:#c7433d}
+.graph-viewport [data-state=unknown]{--run-fill:#eeeef2;--run-stroke:#7f7e91}
+.graph-viewport [data-state=cancelled]{--run-fill:#ffefce;--run-stroke:#b67a20}
+.node[data-state]:not([data-state=unseen]) :is(rect,polygon,circle,ellipse,path.label-container),
+.cluster[data-state]:not([data-state=unseen])>rect{fill:var(--run-fill)!important;stroke:var(--run-stroke)!important}
+.node[data-state=unknown] :is(rect,polygon,circle,ellipse),.cluster[data-state=unknown]>rect{stroke-dasharray:5!important}
+.selected-node>rect,.selected-node .label-container{stroke-width:4px!important}
+.selected-edge{stroke:#245a94!important;stroke-width:4px!important}
+#run-inspector{border-top:1px solid #ddd;margin-top:1rem}
+#run-inspector small{color:#556;overflow-wrap:anywhere}
+#run-inspector .occurrence{border-top:1px solid #ddd;padding-top:.6rem}
+.occurrence li{overflow-wrap:anywhere}
+.outcome{display:inline-block;padding:.5rem .75rem;margin:.5rem .75rem .5rem 0}
+.outcome.completed{background:#e5f5e8}
+.outcome.failed,.error{color:#ad2e2a;background:#fbe7e7}
+.outcome.interrupted{background:#eeeef2}
+.muted{color:#556}
+.node-list{display:flex;flex-direction:column;gap:.5rem}
+.node-list button{overflow-wrap:anywhere;text-align:left}
+.node-list [data-state=failed]{background:#fbe7e7}
+.node-list [data-state=returned]{background:#e5f5e8}
+@media(max-width:700px){.graph-viewport{height:400px}.timeline{flex-wrap:wrap}}

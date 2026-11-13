@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot, DuplicateRecordFields #-}
 module Kyyn.Plumbing.Protocol.RecipeRun
-  ( headerValue, parseHeader, eventValue, parseEvent, summaryValue, pageValue ) where
+  ( headerValue, parseHeader, eventValue, parseEvent, summaryValue, listValue, pageValue ) where
 
 import Data.Aeson (Value(..), Object, object, (.=), (.:), withObject, withText)
 import Data.Aeson.Types (Parser)
@@ -22,16 +22,16 @@ import Kyyn.Plumbing.Protocol.Validation (parseReport)
 headerValue :: RecipeRunHeader -> Value
 headerValue h = let RecipeId recipe = h.recipe; FlowEntryRef flow = h.flow in object
   ["recipe" .= recipe,"flow" .= flow,"before" .= revisionName h.before,
-   "startedAt" .= h.startedAt,"graph" .= h.graph,"build" .= object
+   "startedAt" .= h.startedAt,"graph" .= h.graph,"mermaid" .= h.mermaid,"build" .= object
     ["sourcesDigest" .= Bytes.unpack h.build.sourcesDigest,"targetSystem" .= h.build.targetSystem,
      "derivationPath" .= h.build.derivationPath,"outputPath" .= h.build.outputPath]]
 parseHeader :: RecipeRunId -> Value -> Parser RecipeRunHeader
-parseHeader identity = exact "run header" ["recipe","flow","before","startedAt","graph","build"] $ \o ->
+parseHeader identity = exact "run header" ["recipe","flow","before","startedAt","graph","mermaid","build"] $ \o ->
   RecipeRunHeader identity <$> (o .: "recipe" >>= checked . recipeId)
     <*> (FlowEntryRef <$> o .: "flow") <*> (o .: "before" >>= checked . gitRevision)
     <*> (o .: "build" >>= exact "run build" ["sourcesDigest","targetSystem","derivationPath","outputPath"] (\b ->
       BuildIdentity <$> (Bytes.pack <$> b .: "sourcesDigest") <*> b .: "targetSystem" <*> b .: "derivationPath" <*> b .: "outputPath"))
-    <*> o .: "startedAt" <*> o .: "graph"
+    <*> o .: "startedAt" <*> o .: "graph" <*> o .: "mermaid"
 
 eventValue :: RunEvent -> Value
 eventValue (RunEvent elapsed body) = object ["elapsedNanos" .= show elapsed,"body" .= case body of
@@ -56,8 +56,13 @@ summaryValue :: RecipeRunSummary -> Value
 summaryValue s = object ["runId" .= runIdText s.header.runId,"header" .= headerValue s.header,"status" .= statusName s.status,
   "draft" .= case s.status of Completed draft -> some (String (Text.pack (evolutionIdName draft))); _ -> none,
   "eventCount" .= show s.eventCount]
+listValue :: RecipeRunSummary -> Value
+listValue s = let RecipeId recipe = s.header.recipe in object
+  ["runId" .= runIdText s.header.runId,"recipe" .= recipe,"startedAt" .= s.header.startedAt,
+   "status" .= statusName s.status,"eventCount" .= show s.eventCount,
+   "draft" .= case s.status of Completed draft -> some (String (Text.pack (evolutionIdName draft))); _ -> none]
 pageValue :: RecipeRunPage -> Value
-pageValue page = object ["summary" .= summaryValue page.summary,
+pageValue page = object ["summary" .= listValue page.summary,
   "events" .= [object ["sequence" .= show n,"event" .= eventValue e] | SequencedRunEvent n e <- page.events],
   "next" .= maybe none (some . String . Text.pack . show) page.next,"more" .= page.more,"incompleteTail" .= page.incompleteTail]
 statusName :: RunStatus -> String

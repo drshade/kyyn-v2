@@ -43,7 +43,8 @@ recipeEntry reference (metadata,sources) flowSources edits dispatch selected des
             writeReply transport (Json.String (render described))
           CaptureRecipeGraph -> do
             described <- either (fail . show) pure description
-            writeReply transport (Wire.encodeWith valueCodec (Flow.flowGraphValue (Flow.flowGraph described)))
+            writeReply transport (Json.object ["graph" Json..= Wire.encodeWith valueCodec (Flow.flowGraphValue (Flow.flowGraph described)),
+              "mermaid" Json..= Flow.mermaid described])
           RunRecipe rootValue inputValue stateValue -> do
             decodedRoot <- decode root rootValue
             decodedInput <- decode input inputValue

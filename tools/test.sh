@@ -33,6 +33,7 @@ cabal test sync-timings cli-arguments cli-adapters guest-catalogue \
   wire-contracts guest-protocol capabilities guest-scheduler \
   --test-show-details=direct
 cabal exec -- runghc -package=kyyn-guest-build tools/test-plugin-source.hs
+node tools/test-run-viewer.mjs
 node tools/test-inspection-flow.mjs
 node tools/test-framing.mjs
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"

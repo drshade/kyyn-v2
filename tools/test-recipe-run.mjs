@@ -154,7 +154,7 @@ evolution = prepare (pure ()) $ edit (Rationale "Teach recipes" []) (do
   console.log('Running generic current evidence reads and freezing fact/state output');
   const proposal = run('sync', ['--input', '"sync"']).result;
   assert(proposal.runId);
-  assert(!('runUrl' in proposal), 'No URL until the Web route exists');
+  assert.equal(proposal.runUrl, `/runs/${proposal.runId}`);
   const recording = cli(['--nix', '/deliberately-absent-nix', 'run', 'show', proposal.runId]).result;
   assert.equal(recording.status, 'completed');
   assert.equal(recording.draft.value, proposal.id);

@@ -52,7 +52,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     Right scope -> withRuntime host $ \settings -> finish $
       runRuntime host settings . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
       . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
-      . runAppendJournalIO . runRecipeRunStore (\header -> liftIO $ hPutStrLn stderr ("Run " ++ runIdText header.runId))
+      . runAppendJournalIO . runRecipeRunStore (\header -> liftIO $ hPutStrLn stderr ("Run " ++ runIdText header.runId ++ ": /runs/" ++ runIdText header.runId))
       . runPluginPreparation . runToolPreparation . runRootOpening . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
         result <- proposeFromRecipe kb revision recipe (Text.pack <$> request)
         pure $ case result of

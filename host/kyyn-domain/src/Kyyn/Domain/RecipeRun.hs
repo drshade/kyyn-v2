@@ -27,11 +27,11 @@ runIdText (RecipeRunId value) = value
 
 data PreparedRecipeRun = PreparedRecipeRun
   { knowledgeBase :: KnowledgeBase, recipe :: RecipeId, flow :: FlowEntryRef
-  , before :: GitRevision, build :: BuildIdentity, graph :: Value
+  , before :: GitRevision, build :: BuildIdentity, graph :: Value, mermaid :: Text
   } deriving (Eq, Show)
 data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
-  , before :: GitRevision, build :: BuildIdentity, startedAt :: Text, graph :: Value
+  , before :: GitRevision, build :: BuildIdentity, startedAt :: Text, graph :: Value, mermaid :: Text
   } deriving (Eq, Show)
 data RunEventBody = FlowObserved Value | RunCompleted EvolutionId | RunFailed [Diagnostic] | RunCancelled
   deriving (Eq, Show)

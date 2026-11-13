@@ -1,11 +1,16 @@
 // Real generated observer/dispatch, scripted host, no provider calls. Matches
 // Each/Repeat/choice/tool/failed occurrences to the same built guest's graph.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {newRecording, reduceEvent, replay} from '../host/kyyn/web/run-viewer.mjs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { encodeFrame, readFrames } from './lib/framing.mjs';
 
-assert.equal(process.argv.length, 3, 'Usage: node tools/test-flow-observation.mjs GUEST');
+assert(process.argv.length === 3 || process.argv.length === 4, 'Usage: node tools/test-flow-observation.mjs GUEST [FIXTURE_DIRECTORY]');
+const fixtureDirectory = process.argv[3];
+if (fixtureDirectory) fs.mkdirSync(fixtureDirectory, {recursive:true});
 const guest = process.argv[2];
 const tagged = (tag, value) => value === undefined ? {tag} : {tag,value};
 function value(x) {
@@ -52,9 +57,12 @@ async function invoke(entry, argument, handle) {
     if (child.exitCode === null) child.kill();
   }
 }
-const graph = decode(await invoke('$recipe.Flows.trace', {operation: 'graph'}, () => {
+const captured = await invoke('$recipe.Flows.trace', {operation: 'graph'}, () => {
   throw new Error('Graph capture attempted an effect');
-}));
+});
+const graph = decode(captured.graph), mermaid = captured.mermaid;
+assert(mermaid.includes('flowchart') || mermaid.includes('graph'));
+assert(mermaid.includes(graph.items[0].items.find(x => x.kind === 'box').id), 'Upstream Mermaid must retain graph IDs');
 const addresses = new Set(graph.addressItems.map(x => x.address));
 const selections = new Set(graph.edges.flatMap(x => x.selections));
 const key = occurrence => JSON.stringify(occurrence);
@@ -78,6 +86,13 @@ for (const failModel of [false, true]) {
     else action = tagged('Respond', value('private output'));
     return tagged('Right', {raw: value(null), action});
   });
+  const records = summaries.map((summary, i) => ({sequence: String(i), event: {elapsedNanos: String(BigInt(i) * 200000000n), body: {kind:'flow', summary}}}));
+  const recording = records.reduce(reduceEvent, newRecording(graph));
+  assert.deepEqual(recording, replay(graph, records, BigInt(records.at(-1).event.elapsedNanos)));
+  const each = [...recording.occurrences.values()].find(x => x.node === 'each');
+  assert.equal(each.completedBodies, 2);
+  assert.equal(each.total, 2);
+  if (fixtureDirectory) fs.writeFileSync(path.join(fixtureDirectory, failModel ? 'failed.json' : 'completed.json'), JSON.stringify({graph, mermaid, records}, null, 2));
   assert.equal(result.tag, 'Completed');
   assert.equal(result.result.tag, failModel ? 'Left' : 'Right');
   assert.equal(modelCalls, failModel ? 1 : 3);

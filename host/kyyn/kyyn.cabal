@@ -4,13 +4,13 @@ version: 0.1.0.0
 license: NONE
 copyright: All rights reserved.
 build-type: Simple
-extra-source-files: guide.md web/kyyn.js web/inspection.mjs
+extra-source-files: guide.md web/kyyn.js web/inspection.mjs web/run-viewer.mjs web/run-viewer.css
 
 executable kyyn-v2
   hs-source-dirs: app src
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
-    Kyyn.Composition.Tools Kyyn.Composition.Queries Kyyn.Composition.Outputs Kyyn.Composition.Runs Kyyn.Composition.Recipes Kyyn.Composition.Taps
+    Kyyn.Composition.Tools Kyyn.Composition.Queries Kyyn.Composition.Outputs Kyyn.Composition.RunViewing Kyyn.Web.Runs Kyyn.Composition.Runs Kyyn.Composition.Recipes Kyyn.Composition.Taps
     Kyyn.Composition.Secrets Kyyn.Composition.Timings Kyyn.Composition.SyncTimings Kyyn.Composition.Timing Kyyn.Composition.RootBrowsing
     Kyyn.Build Kyyn.Guide Kyyn.Web Kyyn.Composition.Web Kyyn.Web.Inspection Kyyn.Web.Assets Kyyn.Composition.Inspection
   default-language: GHC2021
