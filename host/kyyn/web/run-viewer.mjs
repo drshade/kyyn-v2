@@ -248,7 +248,7 @@ async function startViewer(initial) {
     edgeNodes.push(...drawing.querySelectorAll('.edgePath path, path.flowchart-link'));
     let scale = 1; const bounds = drawing.viewBox.baseVal;
     const resize = () => { drawing.style.width = bounds.width * scale + 'px'; drawing.style.height = bounds.height * scale + 'px'; };
-    const fit = () => { scale = (viewport.clientWidth - 24) / bounds.width; resize(); };
+    const fit = () => { scale = Math.min((viewport.clientWidth - 24) / bounds.width, (viewport.clientHeight - 24) / bounds.height); resize(); viewport.scrollTo(0, 0); };
     $('run-fit').onclick = fit;
     $('run-zoom-in').onclick = () => { scale = Math.min(4, scale * 1.3); resize(); };
     $('run-zoom-out').onclick = () => { scale = Math.max(.05, scale / 1.3); resize(); };

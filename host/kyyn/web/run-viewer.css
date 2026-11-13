@@ -9,7 +9,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #245a94;outline-offset:3p
 .timeline{display:flex;gap:1rem;align-items:center;margin:1rem 0}
 .timeline input{flex:1}
 .timeline output{min-width:150px;text-align:right;font-variant-numeric:tabular-nums}
-.graph-viewport{height:520px;overflow:auto;border:1px solid #ddd;margin:1rem 0}
+.graph-viewport{height:720px;overflow:auto;border:1px solid #ddd;margin:1rem 0}
 .graph-viewport svg{max-width:none!important;display:block;margin:auto}
 .graph-viewport [role=button]{cursor:pointer}
 .graph-viewport [role=button]:focus{outline:2px solid #245a94}

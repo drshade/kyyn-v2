@@ -59,8 +59,12 @@ try{
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
-   await page.locator('#run-inspector .progress-count').waitFor();}
+   await page.locator('#run-inspector .progress-count').waitFor();
+   const fits=await page.locator('.graph-viewport').evaluate(v=>{const a=v.getBoundingClientRect(),b=v.querySelector('svg').getBoundingClientRect();return b.left>=a.left&&b.right<=a.right&&b.top>=a.top&&b.bottom<=a.bottom;});
+   assert(fits,'Initial diagram must fit completely inside its viewport');}
+
   await show('active');assert((await page.locator('#run-message').innerText()).includes('Live'));
+  await page.locator('#run-zoom-in').click();await page.locator('#run-fit').click();
   await page.screenshot({path:path.join(screenshots,'live.png'),fullPage:true});
   fs.appendFileSync(path.join(activeDir,'events.jsonl'),fixture.records.slice(10,20).map(x=>JSON.stringify(x.event)+'\n').join(''));
   await page.waitForFunction(()=>document.querySelector('#run-message').textContent.includes('20 / 20'));
