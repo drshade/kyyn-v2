@@ -71,6 +71,7 @@ try{
   await show('completed');await page.locator('#run-play').click();await page.waitForTimeout(600);await page.locator('#run-play').click();
   assert((await page.locator('#run-message').innerText()).includes('Paused'));
   await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');assert((await page.locator('#run-inspector').innerText()).includes('observed occurrence'));
+  await page.locator('#run-seek').fill('1800');await page.locator('#run-inspector .progress-count').waitFor();
   await page.screenshot({path:path.join(screenshots,'playback.png'),fullPage:true});
   await page.locator('#run-speed').selectOption('5');assert.equal(await page.locator('#run-speed').inputValue(),'5');
   await page.locator('#run-seek').fill('0');assert(!(await page.locator('#run-outcome').innerText()).includes('Draft'));
