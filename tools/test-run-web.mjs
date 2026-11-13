@@ -66,6 +66,8 @@ try{
   assert((await page.locator('#run-message').innerText()).includes('Paused'));
   await page.locator('#run-diagram [role=button]').first().focus();await page.keyboard.press('Enter');assert((await page.locator('#run-inspector').innerText()).includes('observed occurrence'));
   await page.screenshot({path:path.join(screenshots,'playback.png'),fullPage:true});
+  await page.locator('#run-speed').selectOption('5');assert.equal(await page.locator('#run-speed').inputValue(),'5');
+  await page.locator('#run-seek').fill('0');assert(!(await page.locator('#run-outcome').innerText()).includes('Draft'));
   await page.locator('#run-follow').click();assert((await page.locator('#run-outcome').innerText()).includes('Draft 000001-demo'));
   await show('failed');await page.waitForFunction(()=>document.querySelector('#run-outcome').textContent.includes('unavailable'));
   await page.screenshot({path:path.join(screenshots,'failed.png'),fullPage:true});
@@ -73,7 +75,13 @@ try{
   await page.screenshot({path:path.join(screenshots,'interrupted.png'),fullPage:true});
   await show('active');lock.stdin.end();await once(lock,'exit');
   await page.waitForFunction(()=>document.querySelector('#run-outcome').textContent.includes('interrupted'));
-  await show('active');fs.rmSync(activeDir,{recursive:true});await get('/runs/active/events',404);
+  // A separate externally removed active recording exercises the browser's
+  // polling error path; ordinary CLI clear refuses an active writer.
+  const removedDir=save('removed',fixture.graph,fixture.records.slice(0,10));
+  const removedLock=spawn('flock',['-x',removedDir+'.lock','sh','-c',"printf 'locked\\n'; cat >/dev/null"],{env});children.push(removedLock);await once(removedLock.stdout,'data');
+  await show('removed');fs.rmSync(removedDir,{recursive:true});
+  await page.waitForFunction(()=>document.querySelector('#run-message').textContent.includes('cleared'));
+  assert(await page.locator('#run-play').isDisabled());
   assert.deepEqual(pageErrors,[]);
  }
  assert.equal(git('rev-parse','HEAD'),before,'Viewer changed Git');
