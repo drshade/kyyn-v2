@@ -325,50 +325,64 @@ run. Checking or accepting that draft does not append a new recipe execution.
 #### Graph and execution identity
 
 The upstream Agentic library owns one structural addressing scheme shared by
-its description and interpretation traversals. Its observable graph includes
-step nodes, named scopes and control structure, with referenced tool bodies.
-The guest captures this graph from the same immutable build it invokes. Node
-identifiers identify positions in this graph, not note text or rendered labels;
-they have no identity promise across builds. Mermaid is a rendering of that
-stored graph, not the source from which execution addresses are reconstructed.
-The graph retains authored labels, descriptions and static prompt text.
+its description and interpretation traversals. The guest captures `flowGraph`
+from the same immutable build it invokes. Store upstream's complete graph encoding,
+including items, edges, `addressItems` and `bodies`. The required upstream boundary
+is `flowGraphValue :: FlowGraph -> Value`, using the same `addressText` and
+`edgeIdText` identities as summaries, never `Show`. Kyyn does not maintain its own
+matching graph encoder. The flattened
+`descriptionValue` is not a substitute: it omits intermediate composition scopes
+needed to map observations. Mermaid is a rendering, not a source of identities.
+The graph retains authored labels, descriptions and static prompt text. Addresses
+are opaque and local to this captured graph, with no identity across builds.
 
-Each entry into a node has a distinct occurrence identifier and its parent
-occurrence. Iteration context distinguishes Each elements, Repeat passes and
-nested tool call IDs. Reused steps, identical labels and concurrently active
-occurrences therefore remain distinguishable. The diagram aggregates occurrences;
-the node inspector lists their individual histories. Branch events identify the
-selected graph edge; the viewer does not infer branch selection from missing events.
+`addressItems` maps hidden and visible scopes to displayed items. A choice maps
+to a decision diamond with two outgoing edges, each with one selection identity.
+Junctions are graph-only routing items: no event targets them. The logical run
+root exists in the data without a drawn run box. Body relations identify an
+owner, optional tool binding site and body root. A call scope lists its possible
+targets; `CallResolved` identifies the actual binding and body. Recursive groups
+have finite definitions and reference edges with explicit target addresses,
+distinct from Repeat's `Again` edges. Static edges indicate possibilities, not
+executed calls.
 
-Graph-linked enter/return/failure events and invocation context are an upstream
-Agentic extension. Kyyn consumes that extension through its generated runtime
-adapter rather than implementing a second interpreter. Arbitrary pure functions
-remain opaque. A return event means the interpreter returned from the observed
-scope, not that every lazy value was forced or that the result was semantically
-accepted. Durations describe observed scope progress, not CPU profiling.
+An occurrence is the upstream `Occurrence`: a static address and complete
+`ContextFrame` stack, innermost first. Each frames carry index and total; Repeat
+frames carry the pass; Call frames carry draft address, turn, call position and
+provider call ID. Call position distinguishes repeated provider IDs. Serialize
+with `occurrenceValue`. Every observation has an explicit authoritative parent
+occurrence; neither address prefixes nor arrival order establish parentage.
+The recorder namespaces these identities by run. Reused steps and concurrently
+active invocations remain distinct; returning one never finishes another. The
+diagram aggregates occurrences while its inspector lists individual histories.
+Selections identify logical edges, never inferred from missing child events.
+
+Kyyn consumes the upstream interpreter rather than implementing another one.
+Arbitrary pure functions remain opaque. A return means the interpreter's action
+returned, not that lazy values were forced or the result was accepted. Durations
+measure observed scope progress, not CPU time. `describe` returns
+`Either FlowError Description`; description and graph-capture failures are
+ordinary diagnostics. Failure before a graph is captured does not create a run
+recording.
 
 #### Observation and recording contracts
 
-Upstream owns flow semantics. The guest runtime projects observations into a
-small closed vocabulary before transport. The host adds ordering and timing:
+Upstream owns both execution semantics and the payload-free summary vocabulary.
+The guest uses `summaryValue . summarise` before transport. Kyyn stores that
+lossless encoding rather than defining a competing event sum. The host adds
+ordering and timing:
 
 ```haskell
--- Names below specify the boundary; opaque IDs and graph internals are omitted.
-data FlowObservation
-  = NodeEntered NodeId OccurrenceId (Maybe OccurrenceId) IterationContext
-  | NodeReturned OccurrenceId
-  | NodeFailed OccurrenceId
-  | BranchSelected OccurrenceId EdgeId
-  | TurnTaken OccurrenceId TurnAction [ToolName]
-  | ToolReturned OccurrenceId ToolName ToolOutcome
-  | Judged OccurrenceId Natural
-  | OutputRejected OccurrenceId Text
+-- Opaque wrapper around the upstream summaryValue JSON encoding.
+-- Construction in the guest discards Event.payload without evaluating it.
+newtype FlowSummary = FlowSummary Value
 
 -- SDK-generated request; not an authored wire/value API.
 data ObserveFlow result where
-  ObserveFlow :: FlowObservation -> ObserveFlow ()
+  ObserveFlow :: FlowSummary -> ObserveFlow ()
 
 -- Before/build identify provenance; reading a run does not resolve them.
+-- FlowGraph denotes the complete captured graph encoding described above.
 data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
   , before :: GitRevision, build :: BuildIdentity
@@ -382,19 +396,27 @@ data RunEvent = RunEvent
 data SequencedRunEvent = SequencedRunEvent Natural RunEvent
 
 data RunEventBody
-  = FlowObserved FlowObservation
+  = FlowObserved FlowSummary
   | RunCompleted EvolutionId
   | RunFailed [Diagnostic]
   | RunCancelled
 ```
 
-`TurnAction` distinguishes final responses from tool requests; tool outcomes
-record return/failure status, not result values. Each scope entry includes the
-known item total in IterationContext; completed counts derive from returned child
-occurrences. Repeat scopes have no predicted total. These summaries exclude automatic
-copies of requests, intermediate state, evidence payloads, prompts, full model
-conversations and tool results. Diagnostic and rejection text may quote values;
-this projection is not a detector for sensitive text supplied by trusted code.
+The summary preserves occurrence, parent, node kind, labels and the upstream
+phase: `Entered`, `Returned`, `Failed`, `Cancelled`, `Selected`, `CallResolved`,
+`Drafting`, `Turned`, `OutputRejected` or `Judged`. Each entry includes its exact
+total, including zero. Progress counts returns of element body roots identified
+by the published body relation, not arbitrary descendant returns. Repeat has no
+predicted total. Turns carry their index and action kind, not tool names; Judged
+has no answer count, and OutputRejected has no rejection text. Call return
+outcomes distinguish completed, unknown-tool and invalid-input results. A resolved
+call can reject input without entering its body.
+
+The summary excludes inputs, outputs, conversations, model results and exception
+payloads. Projection must neither retain payload closures nor evaluate discarded
+values. Authored labels and provider call IDs remain metadata; this is not a
+redaction mechanism. `RunFailed` diagnostics may quote values and are separate
+from observations.
 
 The observation request is available only within closed recipe execution,
 including nested flow tool bodies in that invocation. Describe, query, validation,
@@ -403,16 +425,40 @@ HostRequest/HostResponse transport under [ADR 0007](0007-wire.md); a unit respon
 acknowledges a successful append. Recording failure aborts the invocation through
 the existing operational-failure channel, rather than acknowledging a lost event.
 
-The host serializes appends and stamps nondecreasing elapsed time from a
-monotonic clock at receipt. The immutable header records the start. The read
-operation assigns sequence numbers from complete-record positions, so they are
-also the paging cursors. The same RunEvent is stored and served; the browser's
-SequencedRunEvent wrapper adds that position. The guest observation is its payload.
-Guest observations are the only account of flow/model/tool progress; capability
-brokers do not duplicate those events. The host adds the lifecycle events it owns.
-NodeFailed identifies an occurrence only when the interpreter can attribute the
-failure. RunFailed owns the failure diagnostics. Other unfinished scopes remain
-unresolved; OutputRejected describes a handled rejection, not a terminal failure.
+Sibling observer callbacks may overlap. The recorder serializes appends while
+preserving upstream causality: parent entry before child events, child terminals
+before the parent terminal. Host receipt assigns nondecreasing monotonic elapsed
+time; complete-record positions provide sequence numbers and paging cursors.
+The same RunEvent is stored and served, with that ordinal added in the browser's
+SequencedRunEvent wrapper. Guest summaries are the only account of scope and
+model progress; capability brokers do not duplicate them.
+
+The host owns invocation lifecycle, including proposal persistence. Scope
+`Cancelled` describes an interpreter scope; host `RunCancelled` describes the
+owning invocation being cancelled. It is not synthesized from a child cancellation.
+Likewise upstream root return does not establish `RunCompleted`: the host must
+first persist the proposed evolution. These are different facts with different
+owners.
+
+The generated runtime supplies `Scope (ExceptT FetchError Tool)`, reporting
+`Failed` when a scoped body returns `Left`, including FlowErrors raised through
+the runtime's failure function. It preserves the original error and observes
+exceptions and cancellation to the extent the underlying Tool execution can
+expose them. The required general lifting boundary belongs upstream:
+`Scope m -> Scope (ExceptT e m)`, with `Left` treated as failure and no mandatory
+error payload. Kyyn composes this helper with its Tool scope rather than
+reimplementing transformer failure observation. Observer callbacks are not
+retried or classified as body failures. Missing terminals from genuinely
+unobservable exits or interrupted notification are not reconstructed from the
+host outcome.
+
+`Failed` means a failed scope exit; ancestors can fail as an exception or
+short-circuit propagates. Playback may identify deepest observed failures but must not infer a
+causal origin. A thrown observer can interrupt delivery. An occurrence without a
+terminal remains unknown when recording ends, even beneath a terminated ancestor;
+never invent a return, failure or cancellation. During an active recording such
+an occurrence has no observed terminal, which does not prove it is still executing.
+Handled OutputRejected events are not terminal failures.
 
 #### Local lifetime and failure
 

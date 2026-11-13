@@ -1,6 +1,7 @@
-module Flows (review) where
+module Flows (review, recursive, invalidRecursive) where
 
 import GHC.Generics (Generic)
+import Data.Text (Text)
 import Agentic.Contract (Contract)
 import qualified Agentic as A
 import Control.Monad.Trans.Except (ExceptT(..))
@@ -25,3 +26,20 @@ review = A.act $ \(RecipeInput _ () (State runs)) -> do
     [ProposedStep (Rationale "One recipe step" [])
       [Edit_items (Append (Fact (FactId "recipe-item") (Item 1)))]]
     (State (runs + count + 1)))
+
+-- Description traverses finite recursive definitions without invoking a model.
+recursive :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
+recursive = A.arr (const ("input" :: Text)) A.>>> nested A.>>> A.arr proposal
+  where
+    nested :: Flow Text Text
+    nested = A.draftWith [A.recursiveTool $ \self ->
+      A.tool "again" "Recursive helper" (A.draftWith [self] "Continue" :: Flow Text Text)] "Start"
+    proposal _ = RecipeProposal [] (State 0)
+
+-- Aliasing a binder member is an upstream structural error, not a model error.
+invalidRecursive :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
+invalidRecursive = A.arr (const ("input" :: Text)) A.>>> nested A.>>> A.arr proposal
+  where
+    nested :: Flow Text Text
+    nested = A.draftWith [A.recursiveTool id] "Invalid recursive definition"
+    proposal _ = RecipeProposal [] (State 0)
