@@ -326,9 +326,11 @@ run. Checking or accepting that draft does not append a new recipe execution.
 
 The upstream Agentic library owns one structural addressing scheme shared by
 its description and interpretation traversals. The guest captures `flowGraph`
-from the same immutable build it invokes. Store the complete graph data: items,
-edges, `addressItems` and `bodies`. Encode addresses with `addressText` and
-selection identities with `edgeIdText`, never `Show`. The flattened
+from the same immutable build it invokes. Store upstream's complete graph encoding,
+including items, edges, `addressItems` and `bodies`. The required upstream boundary
+is `flowGraphValue :: FlowGraph -> Value`, using the same `addressText` and
+`edgeIdText` identities as summaries, never `Show`. Kyyn does not maintain its own
+matching graph encoder. The flattened
 `descriptionValue` is not a substitute: it omits intermediate composition scopes
 needed to map observations. Mermaid is a rendering, not a source of identities.
 The graph retains authored labels, descriptions and static prompt text. Addresses
@@ -361,7 +363,7 @@ returned, not that lazy values were forced or the result was accepted. Durations
 measure observed scope progress, not CPU time. `describe` returns
 `Either FlowError Description`; description and graph-capture failures are
 ordinary diagnostics. Failure before a graph is captured does not create a run
-recording, even though upstream can observe a preflight failure on its logical root.
+recording.
 
 #### Observation and recording contracts
 
@@ -438,12 +440,20 @@ Likewise upstream root return does not establish `RunCompleted`: the host must
 first persist the proposed evolution. These are different facts with different
 owners.
 
-Failure observation depends on the runtime scope hook: `runtimeWith` alone
-observes entry and normal return, not a short-circuiting monad's failure. Missing
-terminals are not reconstructed from the host outcome.
+The generated runtime supplies `Scope (ExceptT FetchError Tool)`, reporting
+`Failed` when a scoped body returns `Left`, including FlowErrors raised through
+the runtime's failure function. It preserves the original error and observes
+exceptions and cancellation to the extent the underlying Tool execution can
+expose them. The required general lifting boundary belongs upstream:
+`Scope m -> Scope (ExceptT e m)`, with `Left` treated as failure and no mandatory
+error payload. Kyyn composes this helper with its Tool scope rather than
+reimplementing transformer failure observation. Observer callbacks are not
+retried or classified as body failures. Missing terminals from genuinely
+unobservable exits or interrupted notification are not reconstructed from the
+host outcome.
 
-`Failed` means exceptional scope exit; ancestors can fail as an exception passes
-through. Playback may identify deepest observed failures but must not infer a
+`Failed` means a failed scope exit; ancestors can fail as an exception or
+short-circuit propagates. Playback may identify deepest observed failures but must not infer a
 causal origin. A thrown observer can interrupt delivery. An occurrence without a
 terminal remains unknown when recording ends, even beneath a terminated ancestor;
 never invent a return, failure or cancellation. During an active recording such
