@@ -511,6 +511,15 @@ checkRecipe executable@(path,args) = do
     case rendered of
       String value | not (Text.null value) -> pure ()
       _ -> fail "Flow rendering did not return text"
+  forM_ [G.Tree,G.Dot,G.Mermaid] $ \format -> do
+    rendered <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON (G.RenderRecipe format))))
+    case rendered of
+      String value | "again" `Text.isInfixOf` value -> pure ()
+      _ -> fail "Recursive flow description lost its tool definition"
+    (status,output,errors) <- call executable
+      (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON (G.RenderRecipe format))))
+    unless (status /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show errors))
+      (fail ("Invalid recursive description did not report its structural error: " ++ show (status,output,errors)))
   let input = G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])
       invocation = toJSON (G.Invoke entry (toJSON input))
       response = object ["tag" .= String "HostResponse","id" .= String "1",

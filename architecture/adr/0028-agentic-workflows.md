@@ -438,6 +438,10 @@ Likewise upstream root return does not establish `RunCompleted`: the host must
 first persist the proposed evolution. These are different facts with different
 owners.
 
+Failure observation depends on the runtime scope hook: `runtimeWith` alone
+observes entry and normal return, not a short-circuiting monad's failure. Missing
+terminals are not reconstructed from the host outcome.
+
 `Failed` means exceptional scope exit; ancestors can fail as an exception passes
 through. Playback may identify deepest observed failures but must not infer a
 causal origin. A thrown observer can interrupt delivery. An occurrence without a
