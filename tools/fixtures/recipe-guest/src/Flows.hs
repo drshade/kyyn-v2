@@ -1,4 +1,4 @@
-module Flows (review, recursive, invalidRecursive, observedReview) where
+module Flows (review, recursive, invalidRecursive, observedReview, trace, observedTrace) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -48,3 +48,13 @@ invalidRecursive = A.arr (const ("input" :: Text)) A.>>> nested A.>>> A.arr prop
 -- inner review invocation is the observed run; the wrapper itself is unobserved.
 observedReview :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
 observedReview = A.act (ExceptT . interpretObserved review)
+
+trace :: Flow (RecipeInput Root Bool State) (RecipeProposal RootEdit State)
+trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
+  A.>>> A.each ((A.repeatUntil (>= 2) (A.arr (+1))) A.||| A.arr (+2))
+  A.>>> A.arr (const ("input" :: Text))
+  A.>>> (A.draftWith [A.tool "helper" "Nested helper" (A.draft "inner" :: Flow Text Text)] "outer" :: Flow Text Text)
+  A.>>> A.arr (const (RecipeProposal [] (State 1)))
+
+observedTrace :: Flow (RecipeInput Root Bool State) (RecipeProposal RootEdit State)
+observedTrace = A.act (ExceptT . interpretObserved trace)

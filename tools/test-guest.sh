@@ -26,6 +26,7 @@ protocol captured guest-plugins
 protocol tool guest-tool
 protocol root-api guest-root-api
 protocol recipe guest-recipe
+node tools/test-flow-observation.mjs "$guest_stage/guest-recipe/bin/kyyn-guest"
 node tools/test-target-evolution.mjs "$guest_stage/guest-target-evolution/bin/kyyn-guest"
 node tools/test-recipe-evolution.mjs "$guest_stage/guest-recipe-evolution/bin/kyyn-guest"
 protocol frozen-api guest-frozen-api

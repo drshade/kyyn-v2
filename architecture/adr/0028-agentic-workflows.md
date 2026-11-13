@@ -453,8 +453,13 @@ expose them. The general lifting boundary is upstream `exceptTScope :: Monad m =
 Scope m -> Scope (ExceptT e m)`, with `Left` treated as failure and no mandatory
 error payload. Kyyn composes this helper with its Tool scope rather than
 reimplementing transformer failure observation. The Tool scope observes explicit
-Program outcomes; it cannot catch IO failures occurring later during Program
-interpretation. An IO-backed scope, when used, preserves the original failure
+Program outcomes. Model and judgement failures decoded as typed `Left` replies,
+and captured-method `FetchError`s lifted into the flow, unwind as observed `Failed`
+scopes. Protocol errors, invalid acknowledgements, transport/recording failures,
+host operational exceptions and pure exceptions during Program interpretation
+can terminate the guest without scope terminals: the host records the invocation
+failure, and unfinished scopes remain unknown. The pure Program scope cannot
+catch those later IO failures. An IO-backed scope, when used, preserves the original failure
 if cancellation interrupts its failure notification; cancellation during the
 body remains cancellation. Observer callbacks are not
 retried or classified as body failures. Missing terminals from genuinely
