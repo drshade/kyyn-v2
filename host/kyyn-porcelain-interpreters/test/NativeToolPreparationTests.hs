@@ -50,8 +50,9 @@ main = do
   package <- mapM (\name -> (,) (path name) <$> Bytes.readFile ("tools/fixtures/captured-plugin/" ++ name))
     ["kyyn-plugin.dhall","src/Fixture/Plugin.hs"] >>= right . fileTree
   configuration <- Bytes.readFile "tools/fixtures/tool-guest/plugins/config/local-file.dhall"
+  manifest <- Bytes.readFile "tools/fixtures/tool-guest/kb.dhall"
   code <- right (fileTree
-    ([(path "flake.nix","{}"),(path "flake.lock","{}"),(path "plugins/config/local-file.dhall",configuration)] ++
+    ([(path "kb.dhall",manifest),(path "flake.nix","{}"),(path "flake.lock","{}"),(path "plugins/config/local-file.dhall",configuration)] ++
      [(path ("plugins/packages/local-file/source/" ++ relativeName name),bytes) | (name,bytes) <- files package]))
   captured <- right (guestSources RootEntries (files code))
   let program = CompiledProgram
