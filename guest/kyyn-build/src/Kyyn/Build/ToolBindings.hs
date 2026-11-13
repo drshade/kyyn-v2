@@ -63,7 +63,10 @@ writeToolBindings generated roots plugins = do
        (plugin,selected,True) <- configured,
        (index,(actual,connector,_,_)) <- connectors,
        actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector]))
-  write "Kyyn.Agentic" agenticModule
+  write "Kyyn.Agentic" (unlines
+    ["module Kyyn.Agentic (Step, Flow, interpret, liftTool) where",
+     "import KyynFlowRuntime (Step, Flow, interpret, liftTool)"])
+  write "KyynFlowRuntime" agenticModule
   write "KyynGuestDispatch" (unlines
     (["module KyynGuestDispatch (dispatch) where",
       "import qualified KyynToolCalls as Calls", "import Kyyn.Types.Plugin (ConnectorInstance(..))",
@@ -102,7 +105,7 @@ proxyModule plugin connector = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then 
 
 agenticModule :: String
 agenticModule = unlines
-  ["module Kyyn.Agentic (Step, Flow, interpret, interpretObserved, liftTool) where",
+  ["module KyynFlowRuntime (Step, Flow, interpret, interpretObserved, liftTool) where",
    "import qualified Agentic as A", "import qualified Agentic.Runtime as A",
    "import Agentic.Runtime (Runtime(..))",
    "import Kyyn.Runtime.Flow (programScope)",

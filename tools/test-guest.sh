@@ -9,7 +9,7 @@ guest_stage=$(mktemp -d "${TMPDIR:-/tmp}/kyyn-guest-tests.XXXXXXXX")
 trap 'rm -rf -- "$guest_stage"' EXIT
 guest_source=$("${nix_command[@]}" flake metadata --json --no-update-lock-file | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>console.log(JSON.parse(s).path))')
 checks=(guest-frozen-api guest-model guest guest-schema guest-api guest-api-bindings guest-api-tools guest-plugins
-  guest-tool guest-root-api guest-recipe guest-output guest-target-evolution
+  guest-tool guest-root-api guest-recipe guest-observed-recipe guest-output guest-target-evolution
   guest-recipe-evolution guest-first-party)
 for check in "${checks[@]}"; do
   "${nix_command[@]}" build "path:$guest_source#checks.$guest_system.$check" --no-update-lock-file --out-link "$guest_stage/$check"
@@ -26,7 +26,7 @@ protocol captured guest-plugins
 protocol tool guest-tool
 protocol root-api guest-root-api
 protocol recipe guest-recipe
-node tools/test-flow-observation.mjs "$guest_stage/guest-recipe/bin/kyyn-guest"
+node tools/test-flow-observation.mjs "$guest_stage/guest-observed-recipe/bin/observed-recipe-guest"
 node tools/test-target-evolution.mjs "$guest_stage/guest-target-evolution/bin/kyyn-guest"
 node tools/test-recipe-evolution.mjs "$guest_stage/guest-recipe-evolution/bin/kyyn-guest"
 protocol frozen-api guest-frozen-api

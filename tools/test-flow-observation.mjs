@@ -61,7 +61,7 @@ const key = occurrence => JSON.stringify(occurrence);
 for (const failModel of [false, true]) {
   const summaries = [];
   let modelCalls = 0;
-  const result = await invoke('$recipe.Flows.observedTrace', {
+  const result = await invoke('$recipe.Flows.trace', {
     operation: 'run', root: {items: []}, input: false, state: {runs: '0'},
   }, request => {
     if (request.capability === 'flow') {

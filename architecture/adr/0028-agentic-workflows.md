@@ -458,10 +458,7 @@ and captured-method `FetchError`s lifted into the flow, unwind as observed `Fail
 scopes. Protocol errors, invalid acknowledgements, transport/recording failures,
 host operational exceptions and pure exceptions during Program interpretation
 can terminate the guest without scope terminals: the host records the invocation
-failure, and unfinished scopes remain unknown. The pure Program scope cannot
-catch those later IO failures. An IO-backed scope, when used, preserves the original failure
-if cancellation interrupts its failure notification; cancellation during the
-body remains cancellation. Observer callbacks are not
+failure, and unfinished scopes remain unknown. Observer callbacks are not
 retried or classified as body failures. Missing terminals from genuinely
 unobservable exits or interrupted notification are not reconstructed from the
 host outcome.

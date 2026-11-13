@@ -5,7 +5,7 @@
 {-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, OverloadedStrings, TypeApplications, OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Monad (unless, forM_, forM)
+import Control.Monad (unless, forM_)
 import qualified FlowObservationTests
 import Agentic.Aeson (toAeson)
 import Kyyn.Runtime.ModelWire (valueCodec)
@@ -91,14 +91,6 @@ main = do
 
 decodeFlowValue :: Value -> IO Value
 decodeFlowValue value = toAeson <$> right (Wire.decodeWith valueCodec value)
-
-readValues :: Bytes.ByteString -> IO [Value]
-readValues bytes | Bytes.null bytes = pure []
-readValues bytes = do
-  (Frame.Frame metadata body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) bytes))
-  unless (Bytes.null body) (fail "Unexpected observation body")
-  value <- right (eitherDecodeStrict' metadata)
-  (value:) <$> readValues rest
 
 checkObservationTransport :: (FilePath,[String]) -> IO ()
 checkObservationTransport executable = do
@@ -547,6 +539,9 @@ checkRecipe executable@(path,args) = do
   entry <- case [name | G.RecipeEntry name "Flows.review" _ <- description.entries] of
     [name] -> pure name
     _ -> fail "Missing recipe description"
+  unless (all (\m -> m.moduleName /= "Kyyn.Agentic" ||
+      all ((/= "interpretObserved") . G.exportName) m.moduleExports) description.modules)
+    (fail "Observation selector leaked into the author API")
   unless (all (`elem` [name | G.ContractEntry name _ <- description.entries]) ["$state.()","$state.Progress.State"])
     (fail "Open recipe state contracts missing")
   forM_ [G.Tree,G.Dot,G.Mermaid] $ \format -> do
@@ -594,34 +589,6 @@ checkRecipe executable@(path,args) = do
         "edits" .= [operation]]],"state" .= object ["runs" .= String "7"]]
   unless (Bytes.null completedBody && Bytes.null remaining && result == object ["tag" .= String "Completed",
     "result" .= object ["tag" .= String "Right","value" .= proposal]]) (fail ("Wrong recipe proposal: " ++ show result))
-  let observed = toJSON (G.Invoke "$recipe.Flows.observedReview" (toJSON input))
-      acknowledge n value = object ["tag" .= String "HostResponse","id" .= String n,"result" .= value]
-      replies = [acknowledge "1" (object []), acknowledge "2" (object []),
-        acknowledge "3" (object ["tag" .= String "Right","value" .= String "2"]),
-        acknowledge "4" (object []), acknowledge "5" (object [])]
-  (observedStatus,observedOutput,observedErrors) <- Process.readProcess (Process.setStdin (Process.byteStringInput
-    (Lazy.fromStrict (Bytes.concat (map framed (observed:replies))))) (Process.proc path args))
-  unless (observedStatus == ExitSuccess) (fail (show observedErrors))
-  frames <- readValues (Lazy.toStrict observedOutput)
-  case frames of
-    [Object first,Object second,Object connector,Object fourth,Object fifth,completedValue] -> do
-      unless (Keys.lookup "capability" connector == Just (String "plugin") && completedValue == result)
-        (fail "Observed execution changed the recipe callback or result")
-      summaries <- forM [first,second,fourth,fifth] $ \fields -> do
-        unless (Keys.lookup "capability" fields == Just (String "flow") && Keys.lookup "method" fields == Just (String "observe"))
-          (fail "Generated observer sent the wrong capability")
-        case Keys.lookup "arguments" fields of
-          Just encoded -> do
-            decoded <- decodeFlowValue encoded
-            case decoded of Object summary -> pure summary; _ -> fail "Invalid generated summary"
-          _ -> fail "Generated observer omitted summary"
-      let events = map (Keys.lookup "event") summaries
-      unless (events == [Just (object ["kind" .= String "entered","total" .= Null]),
-          Just (object ["kind" .= String "entered","total" .= Null]),
-          Just (object ["kind" .= String "returned","outcome" .= String "completed"]),
-          Just (object ["kind" .= String "returned","outcome" .= String "completed"])])
-        (fail ("Unexpected generated scope trace: " ++ show events))
-    _ -> fail ("Unexpected observed recipe frames: " ++ show frames)
   forM_ [object [],toJSON (G.RunRecipe (object []) (object []) (object ["runs" .= String "4"])),
       toJSON (G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "bad"]))] $ \malformed -> do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))
