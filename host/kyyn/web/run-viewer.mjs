@@ -1,3 +1,5 @@
+import {compactFlow} from './inspection.mjs';
+
 // One recording reducer for live following, seek and playback. Graph addresses
 // identify static nodes; occurrence + explicit parent identify dynamic scopes.
 export const occurrenceKey = occurrence => JSON.stringify([occurrence.address, occurrence.context]);
@@ -232,7 +234,7 @@ async function startViewer(initial) {
     });
     globalThis.mermaid.initialize({startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
       flowchart: {htmlLabels: false, useMaxWidth: false}});
-    const {svg} = await globalThis.mermaid.render('recorded-flow', initial.header.mermaid);
+    const {svg} = await globalThis.mermaid.render('recorded-flow', compactFlow(initial.header.mermaid).diagram);
     const viewport = el('div', undefined, 'graph-viewport'); viewport.innerHTML = svg;
     $('run-diagram').prepend(viewport); fallback.hidden = true;
     const drawing = viewport.querySelector('svg');
