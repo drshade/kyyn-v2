@@ -532,7 +532,7 @@ checkTool executable@(path,args) = do
 
 -- The fixture's state is private and its flow calls a generated connector proxy.
 checkRecipe :: (FilePath,[String]) -> IO ()
-checkRecipe executable@(path,args) = do
+checkRecipe executable = do
   described <- invoke executable (toJSON G.Describe)
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
@@ -567,33 +567,11 @@ checkRecipe executable@(path,args) = do
     (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON G.CaptureRecipeGraph)))
   unless (badGraph /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show graphErrors))
     (fail "Invalid graph capture did not preserve structural failure")
-  let input = G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])
-      invocation = toJSON (G.Invoke entry (toJSON input))
-      response = object ["tag" .= String "HostResponse","id" .= String "1",
-        "result" .= object ["tag" .= String "Right","value" .= String "2"]]
-      framed value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
-  (status,output,errors) <- Process.readProcess (Process.setStdin (Process.byteStringInput
-    (Lazy.fromStrict (framed invocation <> framed response))) (Process.proc path args))
-  unless (status == ExitSuccess) (fail (show errors))
-  (Frame.Frame request body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
-  callback <- right (eitherDecodeStrict' request)
-  unless (Bytes.null body && callback == object ["tag" .= String "HostRequest","id" .= String "1",
-      "capability" .= String "plugin","method" .= String "read","arguments" .= object
-      ["plugin" .= String "local-file","connectorType" .= String "Files","instance" .= String "reader",
-       "method" .= String "count","input" .= object []]]) (fail ("Wrong recipe callback: " ++ show callback))
-  (Frame.Frame completed completedBody,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) rest))
-  result <- right (eitherDecodeStrict' completed)
-  let operation = object ["tag" .= String "Edit_items","value" .= object ["tag" .= String "Append","value" .= object
-        ["id" .= String "recipe-item","value" .= object ["amount" .= String "1"]]]]
-      proposal = object ["steps" .= [object ["rationale" .= object ["explanation" .= String "One recipe step","evidence" .= ([] :: [Value])],
-        "edits" .= [operation]]],"state" .= object ["runs" .= String "7"]]
-  unless (Bytes.null completedBody && Bytes.null remaining && result == object ["tag" .= String "Completed",
-    "result" .= object ["tag" .= String "Right","value" .= proposal]]) (fail ("Wrong recipe proposal: " ++ show result))
   forM_ [object [],toJSON (G.RunRecipe (object []) (object []) (object ["runs" .= String "4"])),
       toJSON (G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "bad"]))] $ \malformed -> do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))
     unless (bad /= ExitSuccess) (fail "Malformed recipe invocation accepted")
-  putStrLn "Recipe guest describes private state, renders flows, exchanges connector callbacks and returns typed fact edits."
+  putStrLn "Recipe guest describes private state, renders flows and rejects malformed requests; scripted-host checks cover execution."
 
 checkRootApi :: (FilePath,[String]) -> IO ()
 checkRootApi executable = do

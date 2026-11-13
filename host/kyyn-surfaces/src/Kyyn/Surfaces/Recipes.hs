@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, recipeDescriptionResult, recipeRunResult) where
 
-import Data.Aeson (Value, object, (.=))
+import Kyyn.Domain.RecipeRun (RecipeRunId, runIdText)
+import qualified Data.Aeson.KeyMap as Keys
+import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (DescriptionFormat(..), RecipeDefinition(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
@@ -18,11 +20,15 @@ recipeDescriptionResult revision (RecipeId recipe) format (FlowEntryRef entry, r
   (lines (Text.unpack rendered))
   where label = case format of Tree -> "tree" :: String; Dot -> "dot"; Mermaid -> "mermaid"
 
-recipeRunResult :: EvolutionWorkspace -> GitRevision -> FilePath -> Response
-recipeRunResult workspace@(EvolutionWorkspace _ identity) revision path =
+recipeRunResult :: RecipeRunId -> EvolutionWorkspace -> GitRevision -> FilePath -> Response
+recipeRunResult run workspace@(EvolutionWorkspace _ identity) revision path =
   case workspaceResult workspace revision path of
-    Response outcome value rendered diagnostics -> Response outcome value
-      (rendered ++ ["Next: evolution check " ++ evolutionIdName identity ++ " (using the same --kb)"]) diagnostics
+    Response outcome value rendered diagnostics -> Response outcome (addRun value)
+      (rendered ++ ["Run: " ++ runIdText run, "Next: evolution check " ++ evolutionIdName identity ++ " (using the same --kb)"]) diagnostics
+
+  where
+    addRun (Object fields) = Object (Keys.insert "runId" (String (Text.pack (runIdText run))) fields)
+    addRun value = value
 
 recipesResult :: [Fact RecipeDefinition] -> Response
 recipesResult recipes = success (object ["recipes" .= map recipeJson recipes])

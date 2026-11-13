@@ -243,10 +243,10 @@ buildRecipes compiler libdir generated basePackages destination references = do
       (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
       pure ([Text.unpack (referenceModule selected)],"recipeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++
         " " ++ show name ++ " (" ++ Text.unpack (referenceName manifest.schemaMetadata) ++ "," ++ show rootSources ++ ") " ++ show sources ++
-        " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch (Kyyn.Agentic.interpret " ++ Text.unpack name ++ ") " ++
+        " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch (KyynFlowRuntime.interpretObserved " ++ Text.unpack name ++ ") " ++
         "(Agentic.Describe.describe " ++ Text.unpack name ++ ")")
   let modules = nub (map (Text.unpack . referenceModule) (manifest.schemaType : manifest.schemaMetadata : concatMap fst plugins)
-        ++ concatMap fst entries ++ ["KyynFactEditCodec","KyynGuestDispatch","Kyyn.Agentic","Agentic.Describe"])
+        ++ concatMap fst entries ++ ["KyynFactEditCodec","KyynGuestDispatch","KyynFlowRuntime","Agentic.Describe"])
   (_,exports) <- inspectExports libdir (roots ++ [generated]) packages modules
   let rootEntry = "describeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++ " \"root\" " ++
         Text.unpack (referenceName manifest.schemaMetadata) ++ " " ++ show rootSources

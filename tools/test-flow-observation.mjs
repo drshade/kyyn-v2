@@ -124,3 +124,27 @@ for (const failModel of [false, true]) {
   }
 }
 console.log('Built guest: graph-linked Each, Repeat, choices, nested tools and Left failure observations passed.');
+
+const reviewEvents = [];
+let reads = 0;
+const reviewed = await invoke('$recipe.Flows.review', {
+  operation: 'run', root: {items: []}, input: {}, state: {runs: '4'},
+}, request => {
+  if (request.capability === 'flow') {
+    reviewEvents.push(decode(request.arguments));
+    return {};
+  }
+  assert.equal(request.capability, 'plugin');
+  assert.equal(request.method, 'read');
+  assert.deepEqual(request.arguments, {plugin: 'local-file', connectorType: 'Files', instance: 'reader', method: 'count', input: {}});
+  reads++;
+  return tagged('Right', '2');
+});
+assert.equal(reads, 1);
+assert.deepEqual(reviewed, {tag: 'Completed', result: tagged('Right', {
+  steps: [{rationale: {explanation: 'One recipe step', evidence: []}, edits: [tagged('Edit_items', tagged('Append', {id: 'recipe-item', value: {amount: '1'}}))]}],
+  state: {runs: '7'},
+})});
+assert.equal(reviewEvents[0].event.kind, 'entered');
+assert.equal(reviewEvents.at(-1).event.kind, 'returned');
+console.log('Ordinary recipe entry records events, exchanges connector callbacks and returns typed edits/state.');

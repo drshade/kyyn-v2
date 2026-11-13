@@ -3,10 +3,11 @@ module Kyyn.Surfaces.Cli
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
-  , TapCommand(..), GuideSelection(..)
+  , RunCommand(..), TapCommand(..), GuideSelection(..)
   , SchemaCommand(..), CollectionCommand(..), FactCommand(..), QueryCommand(..), OutputCommand(..)
   ) where
 
+import Kyyn.Domain.RecipeRun (RecipeRunId, recipeRunId)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
@@ -33,7 +34,8 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = WebServe Int (Maybe EvolutionId) | Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
+data Command = WebServe Int (Maybe EvolutionId) | Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand | Run RunCommand deriving (Eq, Show)
+data RunCommand = ListRuns (Maybe RecipeId) | ShowRun RecipeRunId | ClearRun RecipeRunId deriving (Eq, Show)
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
 instance Show SecretArgument where show _ = "<secret>"
@@ -136,8 +138,16 @@ invocation = Invocation <$> selectionParser
           (ReadPluginGuide <$> argument (eitherReader guideSelection) (metavar "PLUGIN|TAP/PLUGIN") <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
     <> group "evidence" "Fetch and inspect current evidence" (Evidence <$> evidenceParser)
+    <> group "run" "Inspect and clear local recipe recordings" (Run <$> runParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
+
+runParser :: Parser RunCommand
+runParser = hsubparser
+  (group "list" "List recorded recipe runs" (ListRuns <$> optional (option (eitherReader recipeId) (long "recipe" <> metavar "NAME")))
+  <> group "show" "Show a recording and its events without running the guest" (ShowRun <$> runIdentity)
+  <> group "clear" "Delete a stopped recording; keep its draft evolution" (ClearRun <$> runIdentity))
+  where runIdentity = argument (eitherReader recipeRunId) (metavar "RUN_ID")
 
 tapParser :: Parser TapCommand
 tapParser = hsubparser

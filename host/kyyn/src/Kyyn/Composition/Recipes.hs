@@ -1,5 +1,11 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 module Kyyn.Composition.Recipes (dispatchRecipes) where
 
+import Effectful (liftIO)
+import System.IO (hPutStrLn, stderr)
+import Kyyn.Domain.RecipeRun (RecipeRunHeader(..), runIdText)
+import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
+import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Configuration (Host, SelectedKb(..))
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -46,11 +52,12 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     Right scope -> withRuntime host $ \settings -> finish $
       runRuntime host settings . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
       . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
+      . runAppendJournalIO . runRecipeRunStore (\header -> liftIO $ hPutStrLn stderr ("Run " ++ runIdText header.runId))
       . runPluginPreparation . runToolPreparation . runRootOpening . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
         result <- proposeFromRecipe kb revision recipe (Text.pack <$> request)
         pure $ case result of
           Left diagnostics -> refusal diagnostics
-          Right workspace -> case workspaceLocation workspace of
+          Right (header, workspace) -> case workspaceLocation workspace of
             Left message -> refusal [errorDiagnostic "kb.path" message]
             Right path -> let KnowledgeBase (Repository repositoryScope) _ = kb
-              in recipeRunResult workspace revision (scopedPath repositoryScope path)
+              in recipeRunResult header.runId workspace revision (scopedPath repositoryScope path)

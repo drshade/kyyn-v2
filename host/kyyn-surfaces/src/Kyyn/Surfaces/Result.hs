@@ -96,11 +96,7 @@ refusal :: [Diagnostic] -> Response
 refusal = Response Refused Null []
 
 operationalFailure :: OperationalFailure -> Response
-operationalFailure failure = Response Failed Null [] [case failure of
-  RuntimeUnavailable (ProcessDiagnostic operation message) -> errorDiagnostic "runtime.unavailable" (show operation ++ ": " ++ message)
-  StorageUnavailable (StorageDiagnostic operation path message) -> errorDiagnostic "storage.unavailable" (show operation ++ " " ++ path ++ ": " ++ message)
-  CompilerUnavailable message -> errorDiagnostic "compiler.unavailable" message
-  GitUnavailable message -> errorDiagnostic "git.unavailable" message]
+operationalFailure failure = Response Failed Null [] [operationalDiagnostic failure]
 
 interruption :: Maybe EvolutionId -> Response
 interruption identity = Response Interrupted Null [] [errorDiagnostic "execution.interrupted"

@@ -244,12 +244,6 @@
           guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
           guest-target-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/target-evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
-          guest-observed-recipe = (self.lib.mkGuest { inherit system; src = recipeSource; }).overrideAttrs (_: {
-            postBuild = ''
-              runghc -package=kyyn-guest-build ${./tools/fixtures/observed-recipe/Build.hs} \
-                ${./tools/fixtures/observed-recipe/ObservedRecipeEntry.hs} "$out/bin/observed-recipe-guest"
-            '';
-          });
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };

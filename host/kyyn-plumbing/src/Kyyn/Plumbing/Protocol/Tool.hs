@@ -1,6 +1,9 @@
-module Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame) where
+module Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame, decodeFlowValue) where
 
 import Control.Monad (unless)
+import Agentic.Aeson (toAeson)
+import qualified Kyyn.Runtime.Json as Wire
+import Kyyn.Runtime.ModelWire (valueCodec)
 import Data.Aeson (Value, withObject, (.:))
 import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.KeyMap as Keys
@@ -19,6 +22,7 @@ data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName V
   | ToolEvidenceRead PluginName ConnectorTypeName ConnectorName EvidenceId
   | ToolJudgement JudgeRequest
   | ToolModel Agentic.Conversation
+  | ToolFlowObserved Value
 
 
 decodeToolFrame :: Bytes.ByteString -> Either String (PluginFrame ToolCall)
@@ -27,7 +31,12 @@ decodeToolFrame = decodeFrameWith $ \capability operation arguments ->
   then ToolJudgement <$> Judgement.decodeRequest arguments
   else if capability == "model" && operation == "turn"
   then ToolModel <$> Model.decodeRequest arguments
+  else if capability == "flow" && operation == "observe"
+  then ToolFlowObserved <$> decodeFlowValue arguments
   else decodePlugin capability operation arguments
+
+decodeFlowValue :: Value -> Parser Value
+decodeFlowValue = either fail (pure . toAeson) . Wire.decodeWith valueCodec
 
 decodePlugin :: String -> String -> Value -> Parser ToolCall
 decodePlugin capability operation = withObject "tool call" $ \fields -> do
