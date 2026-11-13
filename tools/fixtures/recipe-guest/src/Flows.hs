@@ -1,11 +1,11 @@
-module Flows (review, recursive, invalidRecursive) where
+module Flows (review, recursive, invalidRecursive, observedReview) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Agentic.Contract (Contract)
 import qualified Agentic as A
 import Control.Monad.Trans.Except (ExceptT(..))
-import Kyyn.Agentic (Flow)
+import Kyyn.Agentic (Flow, interpretObserved)
 import Kyyn.Connectors (files)
 import qualified Kyyn.Plugins.P_local_file.Files as Files
 import Kyyn.Recipe
@@ -43,3 +43,8 @@ invalidRecursive = A.arr (const ("input" :: Text)) A.>>> nested A.>>> A.arr prop
     nested :: Flow Text Text
     nested = A.draftWith [A.recursiveTool id] "Invalid recursive definition"
     proposal _ = RecipeProposal [] (State 0)
+
+-- Test the generated observer and dispatch before production activation. The
+-- inner review invocation is the observed run; the wrapper itself is unobserved.
+observedReview :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
+observedReview = A.act (ExceptT . interpretObserved review)

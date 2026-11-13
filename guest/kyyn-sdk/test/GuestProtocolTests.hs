@@ -5,8 +5,10 @@
 {-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, OverloadedStrings, TypeApplications, OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Monad (unless, forM_)
+import Control.Monad (unless, forM_, forM)
 import qualified FlowObservationTests
+import Agentic.Aeson (toAeson)
+import Kyyn.Runtime.ModelWire (valueCodec)
 import Control.Exception (SomeException, try)
 import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict', toJSON)
 import qualified Data.Aeson.KeyMap as Keys
@@ -87,6 +89,17 @@ main = do
       checkPlugin (path,["--plugin-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
 
+decodeFlowValue :: Value -> IO Value
+decodeFlowValue value = toAeson <$> right (Wire.decodeWith valueCodec value)
+
+readValues :: Bytes.ByteString -> IO [Value]
+readValues bytes | Bytes.null bytes = pure []
+readValues bytes = do
+  (Frame.Frame metadata body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) bytes))
+  unless (Bytes.null body) (fail "Unexpected observation body")
+  value <- right (eitherDecodeStrict' metadata)
+  (value:) <$> readValues rest
+
 checkObservationTransport :: (FilePath,[String]) -> IO ()
 checkObservationTransport executable = do
   let response identity result = object ["tag" .= String "HostResponse", "id" .= String identity,"result" .= result]
@@ -99,8 +112,12 @@ checkObservationTransport executable = do
       unless (Keys.lookup "capability" fields == Just (String "flow") && Keys.lookup "method" fields == Just (String "observe"))
         (fail "Wrong observation capability")
       case Keys.lookup "arguments" fields of
-        Just (Object summary) -> unless (Keys.member "occurrence" summary && Keys.member "parent" summary && not (Keys.member "payload" summary))
-          (fail "Observation is not an upstream payload-free summary")
+        Just encoded -> do
+          decoded <- decodeFlowValue encoded
+          case decoded of
+            Object summary -> unless (Keys.member "occurrence" summary && Keys.member "parent" summary && not (Keys.member "payload" summary))
+              (fail "Observation is not an upstream payload-free summary")
+            _ -> fail "Invalid upstream summary"
         _ -> fail "Missing observation summary"
     _ -> fail "Invalid observation envelope"
   unless (Bytes.null body && Bytes.null rest) (fail "Observation emitted unexpected bytes")
@@ -546,7 +563,7 @@ checkRecipe executable@(path,args) = do
       (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON (G.RenderRecipe format))))
     unless (status /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show errors))
       (fail ("Invalid recursive description did not report its structural error: " ++ show (status,output,errors)))
-  graph <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON G.CaptureRecipeGraph)))
+  graph <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON G.CaptureRecipeGraph))) >>= decodeFlowValue
   case graph of
     Object fields -> unless (all (`Keys.member` fields) ["root","items","edges","addressItems","bodies"])
       (fail "Captured graph lost upstream relationships")
@@ -577,6 +594,34 @@ checkRecipe executable@(path,args) = do
         "edits" .= [operation]]],"state" .= object ["runs" .= String "7"]]
   unless (Bytes.null completedBody && Bytes.null remaining && result == object ["tag" .= String "Completed",
     "result" .= object ["tag" .= String "Right","value" .= proposal]]) (fail ("Wrong recipe proposal: " ++ show result))
+  let observed = toJSON (G.Invoke "$recipe.Flows.observedReview" (toJSON input))
+      acknowledge n value = object ["tag" .= String "HostResponse","id" .= String n,"result" .= value]
+      replies = [acknowledge "1" (object []), acknowledge "2" (object []),
+        acknowledge "3" (object ["tag" .= String "Right","value" .= String "2"]),
+        acknowledge "4" (object []), acknowledge "5" (object [])]
+  (observedStatus,observedOutput,observedErrors) <- Process.readProcess (Process.setStdin (Process.byteStringInput
+    (Lazy.fromStrict (Bytes.concat (map framed (observed:replies))))) (Process.proc path args))
+  unless (observedStatus == ExitSuccess) (fail (show observedErrors))
+  frames <- readValues (Lazy.toStrict observedOutput)
+  case frames of
+    [Object first,Object second,Object connector,Object fourth,Object fifth,completedValue] -> do
+      unless (Keys.lookup "capability" connector == Just (String "plugin") && completedValue == result)
+        (fail "Observed execution changed the recipe callback or result")
+      summaries <- forM [first,second,fourth,fifth] $ \fields -> do
+        unless (Keys.lookup "capability" fields == Just (String "flow") && Keys.lookup "method" fields == Just (String "observe"))
+          (fail "Generated observer sent the wrong capability")
+        case Keys.lookup "arguments" fields of
+          Just encoded -> do
+            decoded <- decodeFlowValue encoded
+            case decoded of Object summary -> pure summary; _ -> fail "Invalid generated summary"
+          _ -> fail "Generated observer omitted summary"
+      let events = map (Keys.lookup "event") summaries
+      unless (events == [Just (object ["kind" .= String "entered","total" .= Null]),
+          Just (object ["kind" .= String "entered","total" .= Null]),
+          Just (object ["kind" .= String "returned","outcome" .= String "completed"]),
+          Just (object ["kind" .= String "returned","outcome" .= String "completed"])])
+        (fail ("Unexpected generated scope trace: " ++ show events))
+    _ -> fail ("Unexpected observed recipe frames: " ++ show frames)
   forM_ [object [],toJSON (G.RunRecipe (object []) (object []) (object ["runs" .= String "4"])),
       toJSON (G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "bad"]))] $ \malformed -> do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))

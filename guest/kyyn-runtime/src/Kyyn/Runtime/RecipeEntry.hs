@@ -5,7 +5,8 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
-import Agentic.Aeson (fromAeson, toAeson)
+import Agentic.Aeson (fromAeson)
+import Kyyn.Runtime.ModelWire (valueCodec)
 import qualified Agentic.Describe as Flow
 import Agentic.Runtime (FlowError)
 import Kyyn.Contract
@@ -42,7 +43,7 @@ recipeEntry reference (metadata,sources) flowSources edits dispatch selected des
             writeReply transport (Json.String (render described))
           CaptureRecipeGraph -> do
             described <- either (fail . show) pure description
-            writeReply transport (toAeson (Flow.flowGraphValue (Flow.flowGraph described)))
+            writeReply transport (Wire.encodeWith valueCodec (Flow.flowGraphValue (Flow.flowGraph described)))
           RunRecipe rootValue inputValue stateValue -> do
             decodedRoot <- decode root rootValue
             decodedInput <- decode input inputValue

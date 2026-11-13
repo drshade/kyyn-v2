@@ -4,7 +4,6 @@
 module FlowObservationTests (check, guest) where
 
 import qualified Agentic as A
-import qualified Agentic.Runtime as A
 import Control.Monad (unless, when)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
@@ -55,7 +54,7 @@ check = do
   unless (missing == Left (FetchError "NoSystemTwo") && any ((== A.Failed) . (.happened)) missingEvents)
     (fail "Runtime FlowError was not recorded")
   let notify phase event = do
-        A.observe runtime event
+        runtime.observe event
         when (event.happened == phase) (throwE (FetchError "observer failed"))
   (original,_) <- record (runtime { A.observe = notify A.Failed }) failed
   unless (original == Left primary) (fail "Observer replaced original short circuit")

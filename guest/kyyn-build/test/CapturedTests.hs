@@ -36,6 +36,7 @@ handleFull :: (Waiting :+: FullCalls) a -> Identity a
 handleFull (InLeft (WaitSeconds _)) = pure ()
 handleFull (InRight (JudgementCall _)) = pure (Left "unavailable")
 handleFull (InRight (ModelCall _)) = pure (Left "unavailable")
+handleFull (InRight (ObserveFlow _)) = pure ()
 handleFull (InRight (ListEvidence_AllFiles _)) = pure (Right [])
 handleFull (InRight (ReadEvidence_AllFiles _ _)) = pure (Right Nothing)
 handleFull (InRight (ReadFullContent _ key)) = pure (Left (FetchError key))

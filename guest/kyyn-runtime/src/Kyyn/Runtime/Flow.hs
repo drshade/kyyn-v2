@@ -3,11 +3,11 @@
 module Kyyn.Runtime.Flow (programScope, exchangeObservation) where
 
 import qualified Agentic.Runtime as A
-import Agentic.Aeson (toAeson)
+import Kyyn.Runtime.ModelWire (valueCodec)
 import Kyyn.Types.Program (Program)
 import Kyyn.Runtime.Plugin (exchange)
 import Kyyn.Runtime.Transport (Transport)
-import Kyyn.Runtime.Json (Codec(..), fields, record)
+import Kyyn.Runtime.Json (Codec(..), fields, record, encodeWith)
 
 -- Program has no exception-catching operation. Explicit outcomes are visible
 -- here; IO failures during its later interpretation are not. ExceptT failure
@@ -25,5 +25,5 @@ programScope = A.Scope $ \enter returned exited body -> do
 
 exchangeObservation :: Transport -> Integer -> A.Summary -> IO ()
 exchangeObservation transport requestId summary = exchange transport requestId
-  "flow" "observe" (toAeson (A.summaryValue summary))
+  "flow" "observe" (encodeWith valueCodec (A.summaryValue summary))
   (Codec (const (record [])) (\value -> fields [] value >> Right ()))

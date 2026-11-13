@@ -371,7 +371,11 @@ recording.
 Upstream owns both execution semantics and the payload-free summary vocabulary.
 The guest uses `summaryValue . summarise` before transport. Kyyn stores that
 lossless encoding rather than defining a competing event sum. The host adds
-ordering and timing:
+ordering and timing. Graph and summary values cross the restricted host/guest
+wire profile through the existing tagged Agentic Value codec, also used for model
+values; the host unwraps it before recording. This preserves upstream nulls and
+numeric nodes without defining a second graph or observation vocabulary. Stored
+and browser-served values use upstream's ordinary JSON-shaped encoding.
 
 ```haskell
 -- Opaque wrapper around the upstream summaryValue JSON encoding.
