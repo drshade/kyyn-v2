@@ -4,7 +4,7 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   inputs.agentic = {
-    url = "github:drshade/haskell-agentic/1afcaef3767600154e26db367b306d92b85ab6f0";
+    url = "github:drshade/haskell-agentic/a1e24d3f68bcaf037a3e1fcf43fa1cb1e99258f0";
     flake = false;
   };
 

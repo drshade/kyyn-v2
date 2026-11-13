@@ -327,7 +327,8 @@ run. Checking or accepting that draft does not append a new recipe execution.
 The upstream Agentic library owns one structural addressing scheme shared by
 its description and interpretation traversals. The guest captures `flowGraph`
 from the same immutable build it invokes. Store upstream's complete graph encoding,
-including items, edges, `addressItems` and `bodies`. The required upstream boundary
+including the logical `root` item ID, items, edges, `addressItems` and `bodies`.
+The renderer draws the root's children, not its enclosing box. The upstream boundary
 is `flowGraphValue :: FlowGraph -> Value`, using the same `addressText` and
 `edgeIdText` identities as summaries, never `Show`. Kyyn does not maintain its own
 matching graph encoder. The flattened
@@ -444,10 +445,14 @@ The generated runtime supplies `Scope (ExceptT FetchError Tool)`, reporting
 `Failed` when a scoped body returns `Left`, including FlowErrors raised through
 the runtime's failure function. It preserves the original error and observes
 exceptions and cancellation to the extent the underlying Tool execution can
-expose them. The required general lifting boundary belongs upstream:
-`Scope m -> Scope (ExceptT e m)`, with `Left` treated as failure and no mandatory
+expose them. The general lifting boundary is upstream `exceptTScope :: Monad m =>
+Scope m -> Scope (ExceptT e m)`, with `Left` treated as failure and no mandatory
 error payload. Kyyn composes this helper with its Tool scope rather than
-reimplementing transformer failure observation. Observer callbacks are not
+reimplementing transformer failure observation. The Tool scope observes explicit
+Program outcomes; it cannot catch IO failures occurring later during Program
+interpretation. An IO-backed scope, when used, preserves the original failure
+if cancellation interrupts its failure notification; cancellation during the
+body remains cancellation. Observer callbacks are not
 retried or classified as body failures. Missing terminals from genuinely
 unobservable exits or interrupted notification are not reconstructed from the
 host outcome.

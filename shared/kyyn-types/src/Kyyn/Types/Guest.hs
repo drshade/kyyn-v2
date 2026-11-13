@@ -17,7 +17,7 @@ import Kyyn.Types.SchemaMetadata
 -- One request codec is used by the host and the executable it describes.
 data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
 data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
-data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat deriving (Eq, Show)
+data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
 instance ToJSON DescriptionFormat where
   toJSON format = String (case format of Tree -> "tree"; Dot -> "dot"; Mermaid -> "mermaid")
 instance FromJSON DescriptionFormat where
@@ -28,6 +28,7 @@ instance FromJSON DescriptionFormat where
     _ -> fail "Unknown recipe description format"
 instance ToJSON RecipeInvocation where
   toJSON (RunRecipe root input state) = object ["operation" .= String "run","root" .= root,"input" .= input,"state" .= state]
+  toJSON CaptureRecipeGraph = object ["operation" .= String "graph"]
   toJSON (RenderRecipe format) = object ["operation" .= String "render","format" .= format]
 instance FromJSON RecipeInvocation where
   parseJSON value = withObject "recipe invocation" (\fields -> do
@@ -35,6 +36,7 @@ instance FromJSON RecipeInvocation where
     case operation :: Text of
       "run" -> exactObject "recipe run" ["operation","root","input","state"]
         (\request -> RunRecipe <$> request .: "root" <*> request .: "input" <*> request .: "state") value
+      "graph" -> exactObject "recipe graph" ["operation"] (const (pure CaptureRecipeGraph)) value
       "render" -> exactObject "recipe render" ["operation","format"]
         (\request -> RenderRecipe <$> request .: "format") value
       _ -> fail "Unknown recipe operation") value

@@ -51,7 +51,8 @@ toolCalls calls connectors methods = do
         (AppT (AppT (ConT ''Either) (ConT ''String)) (AppT ListT (ConT ''Answer)))
       model = gadt (mkName "ModelCall") [] [ConT ''Agentic.Conversation]
         (AppT (AppT (ConT ''Either) (ConT ''String)) (ConT ''Agentic.Turn))
-      additional = judgement : model : concatMap fst evidence
+      observation = gadt (mkName "ObserveFlow") [] [ConT ''Agentic.Summary] (TupleT 0)
+      additional = judgement : model : observation : concatMap fst evidence
       append declaration = case declaration of
         DataD context name variables kind constructors derivingClauses | name == calls ->
           DataD context name variables kind (additional ++ constructors) derivingClauses
