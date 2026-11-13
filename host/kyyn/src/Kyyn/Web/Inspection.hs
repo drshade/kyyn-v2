@@ -136,7 +136,9 @@ renderInspection selected snapshot route summaries evolution declaration local@(
       _ -> missing "output" name
     QueryPage name _ -> declared name
     ToolPage name -> declared name
-    RecipePage name -> declared (Text.unpack name)
+    RecipePage name -> do
+      (title,content) <- declared (Text.unpack name)
+      pure (title, p_ (a_ [href_ ("/runs?recipe=" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 name)))] "Recorded runs") >> content)
   pure $ document selected snapshot title body
   where
     scopedType contract link name = case [t | t <- reachableTypes (rootType contract), haskellType t == name] of
@@ -186,6 +188,7 @@ document selected snapshot title content = doctypehtml_ $ do
     nav_ $ do
       a_ [href_ (inspectionLink selected [])] "Index"
       a_ [href_ "/kb/"] "Views"
+      a_ [href_ "/runs"] "Runs"
       case selected of Nothing -> mempty; Just _ -> a_ [href_ "/"] "Accepted KB"
     p_ [class_ "context"] $ toHtml $ case snapshot of
       Right (SnapshotInspection revision draft _ _ _) -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i) <> " · last checked candidate") draft <>

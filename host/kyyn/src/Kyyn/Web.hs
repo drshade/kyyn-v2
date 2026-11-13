@@ -24,6 +24,7 @@ import System.IO (hFlush, stdout)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (relativeName, relativePath)
+import Kyyn.Web.Runs (RunContent(..))
 import Kyyn.Web.Assets (inspectionAsset)
 import Kyyn.Web.Inspection (renderInspectionError)
 import Kyyn.Domain.View (ViewDefinition(..))
@@ -33,8 +34,9 @@ data ViewSource = ViewSource Value [ViewDefinition] FileTree
 
 runServer :: Int -> IO (Either Result.Response ViewSource)
   -> (String -> Value -> IO (Value,Result.Response))
-  -> ([Text.Text] -> Query -> IO (Either (Result.Response,Html ()) (Html ()))) -> IO Result.Response
-runServer port pages query inspect = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
+  -> ([Text.Text] -> Query -> IO (Either (Result.Response,Html ()) (Html ())))
+  -> ([Text.Text] -> Query -> IO (Either Result.Response RunContent)) -> IO Result.Response
+runServer port pages query inspect runs = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
   case opened of
     Left err -> pure (Result.refusal [errorDiagnostic "web.listen"
       ("Cannot listen on 127.0.0.1:" ++ show port ++ ": " ++ displayException err)])
@@ -64,6 +66,16 @@ runServer port pages query inspect = bracket (try @IOException acquire) (either 
           else case inspectionAsset asset of
             Nothing -> failure status404 "web.asset" "Unknown inspection asset"
             Just bytes -> responseLBS status200 [(hContentType,defaultMimeLookup (Text.intercalate "/" asset)),noStore] (Lazy.fromStrict bytes)
+      | take 1 (pathInfo request) == ["runs"] =
+          if requestMethod request /= methodGet then pure (method "GET") else do
+            page <- runs (pathInfo request) (queryString request)
+            pure $ case page of
+              Right (RunJson value) -> responseLBS status200 [(hContentType,"application/json"),noStore] (encode value)
+              Right (RunHtml html) -> responseLBS status200 [(hContentType,"text/html; charset=utf-8"),noStore] (renderBS html)
+              Left result@(Result.Response _ _ _ diagnostics)
+                | last (pathInfo request) == "events" -> jsonResponse (resultStatus result) Null result
+                | otherwise -> responseLBS (resultStatus result) [(hContentType,"text/html; charset=utf-8"),noStore]
+                    (renderBS (renderInspectionError Nothing diagnostics))
       | take 1 (pathInfo request) /= ["kb"] =
           if requestMethod request /= methodGet then pure (inspectionError status405 [(hAllow,"GET")] "web.method" "This page supports GET only") else do
             page <- inspect (pathInfo request) (queryString request)
@@ -155,7 +167,7 @@ jsonResponse status context result = responseLBS status [(hContentType,"applicat
 resultStatus :: Result.Response -> Status
 resultStatus (Result.Response outcome _ _ diagnostics)
   | outcome == Result.Succeeded = status200
-  | any (`elem` ["query.unknown","view.unknown","view.asset","inspection.unknown"]) codes = status404
+  | any (`elem` ["run.unknown","query.unknown","view.unknown","view.asset","inspection.unknown"]) codes = status404
   | any (`elem` ["evolution.no-candidate","web.accepted","inspection.accepted"]) codes = status409
   | outcome == Result.Failed = status500
   | otherwise = status400

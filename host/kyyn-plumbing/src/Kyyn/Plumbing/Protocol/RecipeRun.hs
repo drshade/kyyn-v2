@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot, DuplicateRecordFields #-}
 module Kyyn.Plumbing.Protocol.RecipeRun
-  ( headerValue, parseHeader, eventValue, parseEvent, summaryValue, pageValue ) where
+  ( headerValue, parseHeader, eventValue, parseEvent, summaryValue, listValue, pageValue ) where
 
 import Data.Aeson (Value(..), Object, object, (.=), (.:), withObject, withText)
 import Data.Aeson.Types (Parser)
@@ -56,8 +56,13 @@ summaryValue :: RecipeRunSummary -> Value
 summaryValue s = object ["runId" .= runIdText s.header.runId,"header" .= headerValue s.header,"status" .= statusName s.status,
   "draft" .= case s.status of Completed draft -> some (String (Text.pack (evolutionIdName draft))); _ -> none,
   "eventCount" .= show s.eventCount]
+listValue :: RecipeRunSummary -> Value
+listValue s = let RecipeId recipe = s.header.recipe in object
+  ["runId" .= runIdText s.header.runId,"recipe" .= recipe,"startedAt" .= s.header.startedAt,
+   "status" .= statusName s.status,"eventCount" .= show s.eventCount,
+   "draft" .= case s.status of Completed draft -> some (String (Text.pack (evolutionIdName draft))); _ -> none]
 pageValue :: RecipeRunPage -> Value
-pageValue page = object ["summary" .= summaryValue page.summary,
+pageValue page = object ["summary" .= listValue page.summary,
   "events" .= [object ["sequence" .= show n,"event" .= eventValue e] | SequencedRunEvent n e <- page.events],
   "next" .= maybe none (some . String . Text.pack . show) page.next,"more" .= page.more,"incompleteTail" .= page.incompleteTail]
 statusName :: RunStatus -> String

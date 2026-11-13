@@ -27,7 +27,8 @@ recipeRunResult run workspace@(EvolutionWorkspace _ identity) revision path =
       (rendered ++ ["Run: " ++ runIdText run, "Next: evolution check " ++ evolutionIdName identity ++ " (using the same --kb)"]) diagnostics
 
   where
-    addRun (Object fields) = Object (Keys.insert "runId" (String (Text.pack (runIdText run))) fields)
+    addRun (Object fields) = Object (Keys.insert "runId" (String (Text.pack (runIdText run)))
+      (Keys.insert "runUrl" (String (Text.pack ("/runs/" ++ runIdText run))) fields))
     addRun value = value
 
 recipesResult :: [Fact RecipeDefinition] -> Response

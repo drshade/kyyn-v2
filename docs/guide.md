@@ -545,6 +545,16 @@ Clearing refuses an active run and deletes only its recording, leaving its draft
 and all evidence intact. These files are local, excluded from Git and retained
 until explicitly cleared.
 
+With `kyyn-v2 web serve` running, open `/runs` or the `/runs/RUN_ID` path
+printed by recipe execution. Run pages use their recorded graph even when the
+current recipe has changed. They follow active runs automatically. Use Play,
+Pause, Speed and the time slider to replay recorded progress; Show latest/Follow
+live returns to the latest events. Select a node to see individual occurrences,
+iteration counts and observed exits. An unfinished occurrence stays unknown when
+a recording ends; a returned flow does not imply that its draft was persisted.
+The browser never starts or cancels a run. Recipe pages link to matching runs.
+
+
 
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can
 be exposed as a tool or composed into a closed recipe. Configure provider/model

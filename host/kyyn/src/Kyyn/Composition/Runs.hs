@@ -11,7 +11,7 @@ import qualified Data.Text as Text
 import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
-import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue)
+import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue, listValue)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result (Response, success)
 
@@ -20,7 +20,7 @@ dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppen
   case command of
     Cli.ListRuns selected -> do
       runs <- listRecipeRuns kb selected
-      pure (success (object ["runs" .= map summaryValue runs])
+      pure (success (object ["runs" .= map listValue runs])
         (if null runs then ["No recipe runs recorded."] else map describe runs))
     Cli.ShowRun identity -> do
       page <- readRecipeRun kb identity Nothing 0
