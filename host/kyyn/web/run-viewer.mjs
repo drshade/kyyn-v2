@@ -233,7 +233,7 @@ async function startViewer(initial) {
       script.onload = resolve; script.onerror = reject; document.head.append(script);
     });
     globalThis.mermaid.initialize({startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
-      flowchart: {htmlLabels: false, useMaxWidth: false}});
+      flowchart: {htmlLabels: true, useMaxWidth: false}});
     const {svg} = await globalThis.mermaid.render('recorded-flow', compactFlow(initial.header.mermaid).diagram);
     const viewport = el('div', undefined, 'graph-viewport'); viewport.innerHTML = svg;
     $('run-diagram').prepend(viewport); fallback.hidden = true;
