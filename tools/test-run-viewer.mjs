@@ -78,3 +78,24 @@ reduceEvent(motionState,selected);
 assert.deepEqual(observedMotion(motionState,selected).edges,[1]);
 assert.equal(observedMotion(motionState,{event:{body:{kind:'completed'}}}),null);
 console.log('Motion: direct hand-offs, exact selected branches and iteration isolation passed.');
+
+// A still-open source is not evidence of a hand-off.
+seq=0;
+const openSource=newRecording(motionGraph);
+reduceEvent(openSource,flow(occurrence('body',c0),each,'act',{kind:'entered',total:null}));
+const targetEntry=flow(occurrence('call',c0),each,'act',{kind:'entered',total:null});
+reduceEvent(openSource,targetEntry);
+assert.deepEqual(observedMotion(openSource,targetEntry).edges,[]);
+// A selection pulse already covers this edge; target entry must not duplicate it.
+const selectedGraph={...motionGraph,edges:[{from:'body',to:'call',style:'flow',selections:['chosen']}]};
+seq=0;
+const selectedState=newRecording(selectedGraph);
+reduceEvent(selectedState,flow(occurrence('body',c0),each,'choose',{kind:'entered',total:null}));
+const branchEvent=flow(occurrence('body',c0),each,'choose',{kind:'selected',edge:'chosen'});
+reduceEvent(selectedState,branchEvent);
+assert.deepEqual(observedMotion(selectedState,branchEvent).edges,[0]);
+reduceEvent(selectedState,flow(occurrence('body',c0),each,'choose',{kind:'returned',outcome:'completed'}));
+const branchTarget=flow(occurrence('call',c0),each,'act',{kind:'entered',total:null});
+reduceEvent(selectedState,branchTarget);
+assert.deepEqual(observedMotion(selectedState,branchTarget).edges,[]);
+console.log('Motion: open-source refusal and selection pulse deduplication passed.');

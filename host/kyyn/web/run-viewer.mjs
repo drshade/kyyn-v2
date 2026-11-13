@@ -10,7 +10,7 @@ export function indexGraph(graph) {
   return {items, addresses: new Map(graph.addressItems.map(x => [x.address, x.item])), bodies: graph.bodies, edges: graph.edges};
 }
 export function newRecording(graph) {
-  return {graph: indexGraph(graph), occurrences: new Map(), selections: new Set(), cursor: -1n, elapsed: 0n, terminal: null};
+  return {graph: indexGraph(graph), occurrences: new Map(), returnedItems: new Set(), selections: new Set(), cursor: -1n, elapsed: 0n, terminal: null};
 }
 export function reduceEvent(state, record) {
   const sequence = BigInt(record.sequence);
@@ -35,6 +35,7 @@ export function reduceEvent(state, record) {
     scope.terminal = summary.event.kind;
     scope.ended = state.elapsed;
     scope.outcome = summary.event.outcome;
+    if (summary.event.kind === 'returned') state.returnedItems.add(JSON.stringify([scope.item, scope.occurrence.context]));
     // Only the published element-body root counts, never an arbitrary descendant.
     if (summary.event.kind === 'returned' && scope.parent) {
       const parent = state.occurrences.get(occurrenceKey(scope.parent));
@@ -101,11 +102,9 @@ export function observedMotion(state, record) {
   if (event.kind === 'selected') return {item, edges: state.graph.edges.flatMap((edge, index) =>
     edge.selections.includes(event.edge) ? [index] : []), kind: event.kind, context: summary.occurrence.context};
   if (!['entered', 'returned'].includes(event.kind) || state.graph.items.get(item)?.kind !== 'node') return null;
-  const context = JSON.stringify(summary.occurrence.context);
   const edges = event.kind === 'entered' ? state.graph.edges.flatMap((edge, index) =>
-    edge.style === 'flow' && edge.to === item && [...state.occurrences.values()].some(scope =>
-      scope.item === edge.from && scope.terminal === 'returned' &&
-      JSON.stringify(scope.occurrence.context) === context) ? [index] : []) : [];
+    edge.style === 'flow' && edge.to === item && edge.selections.length === 0 &&
+      state.returnedItems.has(JSON.stringify([edge.from, summary.occurrence.context])) ? [index] : []) : [];
   return {item, edges, kind: event.kind, context: summary.occurrence.context};
 }
 
@@ -130,8 +129,7 @@ async function startViewer(initial) {
   animateLabel.append(animate, document.createTextNode(' Animate activity'));
   document.querySelector('.toolbar').append(animateLabel);
   $('run-diagram').before(activity);
-  const motionNote = el('p', 'Dots highlight observed transitions; travel time is illustrative.', 'muted motion-note');
-  $('run-diagram').after(motionNote);
+  animateLabel.title = 'Dots highlight observed transitions; travel time is illustrative.';
   let live = newRecording(graph), state = live, selected = null, summary = initial;
   let following = initial.status === 'active', playing = false, position = 0n, duration = 0n;
   let initialLoading = true, readError = null;
@@ -161,18 +159,20 @@ async function startViewer(initial) {
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       dot.setAttribute('r', '6'); dot.setAttribute('class', 'flow-particle');
       dot.dataset.edge = String(index);
+      if (particles.length >= 64) particles.shift().dot.remove();
       motionLayer.append(dot);
       particles.push({dot, path, start: motionClock, length: path.getTotalLength()});
     }
   }
   function paintMotion() {
     if (!motionLayer) return;
+    const rootInverse = particles.length ? drawing.getScreenCTM().inverse() : null;
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i], progress = (motionClock - particle.start) / 650;
       if (progress >= 1) {particle.dot.remove(); particles.splice(i, 1); continue;}
       const point = particle.path.getPointAtLength(particle.length * Math.max(0, progress));
       // Mermaid nests paths under transformed groups; overlay uses root SVG units.
-      const matrix = drawing.getScreenCTM().inverse().multiply(particle.path.getScreenCTM());
+      const matrix = rootInverse.multiply(particle.path.getScreenCTM());
       const target = new DOMPoint(point.x, point.y).matrixTransform(matrix);
       particle.dot.setAttribute('cx', target.x); particle.dot.setAttribute('cy', target.y);
     }
@@ -217,8 +217,8 @@ async function startViewer(initial) {
     }
     for (const node of fallback.children) node.dataset.state = nodeState(state, node.dataset.item, ended);
     edgeNodes.forEach((node, i) => node.classList.toggle('selected-edge', graph.edges[i]?.selections.some(edge => state.selections.has(edge))));
-    const loops = [...state.occurrences.values()].filter(scope => ['each', 'repeat'].includes(scope.node) && scope.total !== 0);
-    activity.textContent = loops.map(scope => `${scope.completedBodies}${scope.total === null ? '' : ' / ' + scope.total} iterations completed`).join(' · ');
+    const loops = [...state.occurrences.values()].filter(scope => ['each', 'repeat'].includes(scope.node) && scope.total !== 0 && scope.terminal === null);
+    activity.textContent = loops.map(scope => `${scope.node === 'each' ? 'Element bodies returned' : 'Iteration bodies returned'}: ${scope.completedBodies}${scope.total === null ? '' : ' / ' + scope.total}`).join(' · ');
     $('run-diagram').classList.toggle('motion-enabled', animate.checked);
     $('run-diagram').classList.toggle('motion-running', animate.checked && !readError && (playing || (following && !stopped)));
     seek.max = String(Math.max(0, Math.ceil(Number(duration) / 1e6)));
