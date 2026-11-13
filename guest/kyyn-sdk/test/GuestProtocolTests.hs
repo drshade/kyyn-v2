@@ -1,5 +1,6 @@
 -- A real subprocess describes and invokes the same compiled fixture through the
 -- host frame codec, including captured-read callbacks and response ID rejection.
+-- --recipe-built also checks finite recursive rendering and structural refusals.
 -- Nix derivation/source capture is tested separately.
 {-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, OverloadedStrings, TypeApplications, OverloadedRecordDot #-}
 module Main (main) where
