@@ -1,11 +1,14 @@
 {-# LANGUAGE GADTs, TypeApplications, LambdaCase #-}
-module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured) where
+module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (Value)
+import Data.Aeson (Value, object)
+import Control.Monad (void)
+import Kyyn.Porcelain.Capability.RecipeRunStore (RecipeRunStore, RecipeRunWriter, appendRunEvent)
+import Kyyn.Domain.RecipeRun (RunEventBody(FlowObserved))
 import Data.Coerce (coerce)
 import qualified Data.Text as Text
-import Effectful (Eff, (:>))
+import Effectful (Eff, (:>), raise)
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.State.Static.Local (runState, get, modify)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -39,9 +42,23 @@ executeToolProgram program plugins model captured arguments = fmap (fmap fst)
 executeToolProgramCaptured :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeToolProgramCaptured program plugins model captured arguments = runExceptT $ do
+executeToolProgramCaptured = executeProgram Nothing
+
+executeRecordedRecipeProgram :: (RecipeRunStore :> es, EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
+  => RecipeRunWriter -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration
+  -> Value -> Eff es (Either [Diagnostic] Value)
+executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap fst)
+  (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) program plugins model [] arguments)
+
+executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
+  => Maybe (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
+executeProgram observe program plugins model captured arguments = runExceptT $ do
   (result,contexts) <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
     conversation decodeToolFrame program arguments $ \case
+      ToolFlowObserved summary -> case observe of
+        Nothing -> protocolFailure "flow/observe is only available during a recorded recipe invocation"
+        Just record -> raise (raise (record summary)) >> pure (object [])
       ToolJudgement request -> Judgement.judge request >>= either protocolFailure pure . Judgement.encodeReply
       ToolModel request -> case model of
         Nothing -> pure (failure "No model configured; set the model field to Some configuration in root/kb.dhall through an evolution")

@@ -11,6 +11,7 @@ import Kyyn.Composition.Queries (dispatchQueries)
 import Kyyn.Composition.Outputs (dispatchOutputs)
 import Kyyn.Composition.RootBrowsing (dispatchSchema, dispatchCollection, dispatchFacts)
 import Kyyn.Composition.Recipes (dispatchRecipes)
+import Kyyn.Composition.Runs (dispatchRuns)
 import Kyyn.Composition.Secrets (executeSecrets)
 import Kyyn.Composition.Taps (dispatchTaps, searchAvailablePlugins, availableGuide)
 import qualified Kyyn.Porcelain.Capability.PluginDiscovery as Discovery
@@ -119,6 +120,7 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
         Cli.Plugin request -> selectKnowledgeBase host scope >>= either pure (dispatchPlugin host request)
         Cli.Tap request -> selectKnowledgeBase host scope >>= either pure (dispatchTaps host request)
+        Cli.Run request -> selectKnowledgeBase host scope >>= either pure (dispatchRuns host request)
         Cli.Evidence request -> selectKnowledgeBase host scope >>= either pure (dispatchEvidence host request)
 
 executeGuest :: Cli.Selection -> Maybe EvolutionId -> Cli.GuestCommand -> IO Response

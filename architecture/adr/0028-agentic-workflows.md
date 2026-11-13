@@ -480,7 +480,9 @@ command diagnostics. A run holds a process-scoped exclusive writer lock for its
 lifetime; the header is immutable. Each event is appended as one complete JSON
 record followed by a newline and flushed before acknowledgement. Flushing provides
 visibility to other local processes, not a power-loss durability guarantee.
-Stored values use ADR 0007's exact wire-value conventions.
+Host-owned fields use ADR 0007's exact wire-value conventions. Captured graphs
+and flow summaries preserve the upstream JSON encoding, including its numbers and
+nulls; the guest transport wraps these with the existing library-value codec.
 
 ```haskell
 -- Host application boundary, implemented with local files and a scoped lock.

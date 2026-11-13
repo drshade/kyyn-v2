@@ -26,7 +26,7 @@ node tools/checks/check-imports.mjs
 cabal build all
 cabal test sync-timings cli-arguments cli-adapters guest-catalogue \
   processes frames concurrent-execution dhall-values roots git-snapshots file-trees \
-  plugin-packages evidence-store blob-storage document-persistence file-acquisition \
+  plugin-packages recipe-run-store evidence-store blob-storage document-persistence file-acquisition \
   secret-store judgement-provider model-turn-provider contract-roles plugin-installation \
   evolution-core snapshot-preparation target-evolution stored-snapshots snapshot-reports snapshot-archives input-types recipe-state evidence-index plugin-host scalar-storage \
   description-storage guest-compilation-cache inspection captured-bindings edit-bindings source-inventory recipe-bindings \

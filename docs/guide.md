@@ -526,6 +526,25 @@ A successful closed run creates a draft with a saved proposal and
 new evidence. Inspect the proposal through the normal review path. Describing a
 closed recipe shows its flow structure without executing its actions.
 
+Executing a closed recipe automatically saves a local recording in `.kyyn/runs/`.
+The CLI prints its run ID as execution starts and returns that ID alongside the
+draft evolution on success. Preparation errors do not create recordings.
+
+```sh
+kyyn-v2 run list
+kyyn-v2 run list --recipe beeWeek
+kyyn-v2 --json run show RUN_ID
+kyyn-v2 run clear RUN_ID
+```
+
+`run show` reads the captured graph, complete flow events and outcome without
+compiling or invoking guest code. Active, completed, failed, cancelled and
+interrupted recordings are distinguished; an incomplete last line is reported.
+Clearing refuses an active run and deletes only its recording, leaving its draft
+and all evidence intact. These files are local, excluded from Git and retained
+until explicitly cleared.
+
+
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can
 be exposed as a tool or composed into a closed recipe. Configure provider/model
 and a secret name in the required `model` field of `target/kb.dhall`.

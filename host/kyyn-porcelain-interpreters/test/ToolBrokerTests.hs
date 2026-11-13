@@ -2,6 +2,7 @@
 module ToolBrokerTests (toolBrokerTests) where
 
 import Control.Monad (unless)
+import Data.List (isInfixOf)
 import Data.Aeson (Value, object, (.=), encode, toJSON)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy
@@ -68,6 +69,10 @@ toolBrokerTests = do
   case result of
     Right (Right value,2) | value == string "completed" -> pure ()
     other -> fail ("Pinned conversation failed: " ++ show other)
+  let refused = runPureEff . runFailure . noModel . noJudgement . noEvidence . recordReads . observeConversation $
+        executeToolProgram (fixtureTool program contract) plugins Nothing [captured] (string "input")
+  unless ("flow/observe is only available during a recorded recipe invocation" `isInfixOf` show refused)
+    (fail ("Observation escaped recorded recipe context: " ++ show refused))
   putStrLn "Tool broker uses supplied evidence captures for every read without loading latest."
   where string :: String -> Value
         string = toJSON
@@ -93,3 +98,13 @@ noJudgement = interpret $ \_ _ -> error "Unexpected judgement call"
 
 noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
 noEvidence = interpret $ \_ _ -> error "Captured method fixture unexpectedly read payloads"
+
+observeConversation :: Eff (GuestExecution : es) a -> Eff es a
+observeConversation = interpret $ \env operation -> case operation of
+  ExecuteCompiled {} -> error "Unexpected one-shot execution"
+  ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> do
+    _ <- unlift (respond (Wire.jsonFrame (Lazy.toStrict (encode (object
+      ["tag" .= ("HostRequest" :: String), "id" .= ("1" :: String),
+       "capability" .= ("flow" :: String), "method" .= ("observe" :: String),
+       "arguments" .= object ["tag" .= ("Null" :: String)]])))))
+    error "Unrecorded observation was acknowledged"

@@ -8,7 +8,8 @@ build-type: Simple
 library
   hs-source-dirs: src ../../guest/kyyn-runtime/src
   other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire Kyyn.Runtime.JudgementWire
-  exposed-modules:
+  exposed-modules: Kyyn.Plumbing.Capability.AppendJournal
+
     Kyyn.Plumbing.Capability.BlobStorage
     Kyyn.Plumbing.Capability.ConcurrentExecution
     Kyyn.Plumbing.Capability.ContentDigest
@@ -34,6 +35,7 @@ library
     Kyyn.Plumbing.Protocol.EvolutionSources
     Kyyn.Plumbing.Protocol.FactEdits
     Kyyn.Plumbing.Protocol.FactProposal
+    Kyyn.Plumbing.Protocol.RecipeRun
     Kyyn.Plumbing.Protocol.Recipes
 
     Kyyn.Plumbing.Protocol.SnapshotArchive
@@ -59,7 +61,7 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.22 && <4.23, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
-    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson >=2.2.4 && <2.3, agentic ==0.2.1.0
+    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson >=2.2.4 && <2.3, agentic ==0.2.1.0, agentic-aeson ==0.2.1.0
 
 test-suite frames
   type: exitcode-stdio-1.0

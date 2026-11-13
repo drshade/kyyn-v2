@@ -14,6 +14,13 @@ import System.Directory (canonicalizePath)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
+import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
+import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.CompiledEntry (entryProgram)
+import Kyyn.Porcelain.Capability.RecipeRunStore (withRecipeRun)
+import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
+import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
 import Kyyn.Domain.Contract (contractId, checkRootLayout)
 import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), EvidenceProducer(..), FetchId(..), FetchSummary(..))
@@ -42,7 +49,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore(..))
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.RootStore (readRootDefinition, materializeRoot)
-import Kyyn.Porcelain.Capability.RecipeExecution (executeRecipeFlow)
+import Kyyn.Porcelain.Capability.RecipeExecution (PreparedRecipe(..), prepareRecipeFlow, executeRecipeFlow)
 import Kyyn.Porcelain.Capability.RecipeInspection (describeRecipe)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
@@ -91,14 +98,20 @@ main = do
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
       . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
       . capturedEvidence index . runPluginRead . runPluginPreparation . runRootStore
-      . runRecipeInspection . runRecipeExecution $ do
+      . runAppendJournalIO . runRecipeRunStore (const (pure ())) . runRecipeInspection . runRecipeExecution $ do
         contracts <- inspectRecipeContracts (SourceRoot rootContract code definition [])
           [Fact (FactId "review") (R.ClosedRecipe (FlowEntryRef "Flows.review"))]
         rendered <- describeRecipe (SourceRoot rootContract code definition []) (FlowEntryRef "Flows.review") G.Tree
         stored <- materializeRoot rootContract code (R.KnowledgeBase (CheckedValue (contractId schema) (object ["items" .= ([] :: [Value])])) [])
         proposal <- case stored of
           Left errors -> pure (Left errors)
-          Right root -> executeRecipeFlow root (FlowEntryRef "Flows.review") stateValue Nothing
+          Right root -> do
+            preparation <- prepareRecipeFlow root (FlowEntryRef "Flows.review") stateValue Nothing
+            case preparation of
+              Left errors -> pure (Left errors)
+              Right ready -> withRecipeRun (PreparedRecipeRun (KnowledgeBase (Repository scope) WholeTree)
+                (R.RecipeId "review") (FlowEntryRef "Flows.review") (either error id (gitRevision (replicate 40 'a')))
+                (entryProgram ready.entry).identity ready.graph) (\writer -> executeRecipeFlow writer ready)
         pure (rendered,proposal,contracts)
     (rendered,proposal,contracts) <- right result
     states <- right contracts

@@ -1,5 +1,5 @@
 // Installed closed recipe: generic current reads across two instances, typed
-// fact/state proposals, frozen replay and acceptance. Model failures use no network.
+// fact/state proposals, frozen replay, recording and acceptance. Model failures use no network.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -132,14 +132,38 @@ evolution = prepare (pure ()) $ edit (Rationale "Teach recipes" []) (do
   assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'absent.txt'], 1)), /evidence.not-found/);
   const before = countDrafts();
   assert.match(JSON.stringify(run('open', [], 1)), /recipe.open-agent/);
+  assert.equal(cli(['run', 'list']).result.runs.length, 0, 'Preparation refusal created a recording');
+  assert.match(JSON.stringify(run('sync', ['--input', 'False'], 1)), /recipe|dhall/);
+  assert.equal(cli(['run', 'list']).result.runs.length, 0, 'Invalid input created a recording');
   for (const [mode, diagnostic] of [['failFlow', /tool.failed/], ['needsModel', /Missing model secret RECIPE_TEST_KEY/],
     ['needsJev', /Missing model secret JEV_TOKEN/]]) {
     assert.match(JSON.stringify(run('sync', ['--input', JSON.stringify(mode)], 1)), diagnostic);
     assert.equal(countDrafts(), before, 'Refused run created an evolution');
   }
+  const failures = cli(['run', 'list', '--recipe', 'sync']).result.runs;
+  assert.equal(failures.length, 3);
+  for (const failure of failures) {
+    assert.equal(failure.status, 'failed');
+    const recording = cli(['run', 'show', failure.header.runId]).result;
+    assert.equal(recording.events.at(-1).event.body.kind, 'failed');
+    assert(recording.events.some(e => e.event.body.summary?.event.kind === 'failed'));
+  }
   assert.equal(state('sync'), initialState);
   console.log('Running generic current evidence reads and freezing fact/state output');
   const proposal = run('sync', ['--input', '"sync"']).result;
+  assert(proposal.runId);
+  assert.equal(proposal.runUrl, `/runs/${proposal.runId}`);
+  const recording = cli(['--nix', '/deliberately-absent-nix', 'run', 'show', proposal.runId]).result;
+  assert.equal(recording.summary.status, 'completed');
+  assert.equal(recording.summary.draft.value, proposal.id);
+  assert(recording.summary.header.graph.items.length > 0);
+  assert.equal(recording.events.at(-1).event.body.draft, proposal.id);
+  assert(recording.events.some(e => e.event.body.kind === 'flow'));
+  recording.events.forEach((e, i) => assert.equal(e.sequence, String(i)));
+  invoke('git', ['-C', kb, 'check-ignore', `.kyyn/runs/${proposal.runId}/header.json`]);
+  cli(['run', 'clear', proposal.runId]);
+  assert(fs.existsSync(proposal.path), 'Clearing a recording removed its draft');
+  assert(!fs.existsSync(path.join(kb, '.kyyn/runs', proposal.runId)));
   const frozen = fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8');
   assert.match(fs.readFileSync(path.join(proposal.path, 'change/Evolution.hs'), 'utf8'), /^evolution = frozen$/m);
   assert.match(frozen, /Captured task/);
