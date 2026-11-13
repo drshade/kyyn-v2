@@ -65,8 +65,11 @@ try{
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
    await page.locator('#run-inspector .progress-count').waitFor();
+   const scale=await page.locator('.graph-viewport svg').evaluate(svg=>svg.getBoundingClientRect().width/svg.viewBox.baseVal.width);
+   assert(scale>=.74, 'Initial diagram must retain legible label sizing');
+   await page.locator('#run-fit').click();
    const fits=await page.locator('.graph-viewport').evaluate(v=>{const a=v.getBoundingClientRect(),b=v.querySelector('svg').getBoundingClientRect();return b.left>=a.left&&b.right<=a.right&&b.top>=a.top&&b.bottom<=a.bottom;});
-   assert(fits,'Initial diagram must fit completely inside its viewport');}
+   assert(fits,'Explicit Fit must show the complete diagram');}
 
   await show('active');assert((await page.locator('#run-message').innerText()).includes('Live'));
   await page.locator('#run-zoom-in').click();await page.locator('#run-fit').click();

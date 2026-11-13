@@ -254,7 +254,8 @@ async function startViewer(initial) {
     $('run-fit').onclick = fit;
     $('run-zoom-in').onclick = () => { scale = Math.min(4, scale * 1.3); resize(); };
     $('run-zoom-out').onclick = () => { scale = Math.max(.05, scale / 1.3); resize(); };
-    fit(); draw();
+    scale = Math.max(.75, Math.min(1, (viewport.clientWidth - 24) / bounds.width));
+    resize(); draw();
   } catch (error) {
     $('run-diagram').prepend(el('p', 'Diagram unavailable; inspect the recorded nodes below.', 'muted'));
     fallback.hidden = false;
