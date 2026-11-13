@@ -13,12 +13,15 @@ import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.RecipeRun
 import Kyyn.Domain.Evolution (evolutionIdName)
 import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue)
+import Kyyn.Web.Inspection (pageDocument)
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Domain.Git (revisionName)
+import Kyyn.Domain.CompiledProgram (BuildIdentity(..))
 
 data RunContent = RunHtml (Html ()) | RunJson Value
 
 runIndex :: Maybe RecipeId -> [RecipeRunSummary] -> Html ()
 runIndex selected runs = document "Recipe runs" $ do
-  p_ [class_ "muted"] "Local recordings · execution stays in the terminal"
   case selected of
     Nothing -> mempty
     Just (RecipeId name) -> p_ $ do
@@ -29,8 +32,7 @@ runIndex selected runs = document "Recipe runs" $ do
     tbody_ $ forM_ runs $ \run -> tr_ $ do
       let RecipeId name = run.header.recipe
       td_ $ do
-        a_ [href_ (runLink run.header.runId)] (toHtml name)
-        small_ (toHtml (runIdText run.header.runId))
+        a_ [href_ (runLink run.header.runId)] (toHtml (name <> " · " <> Text.pack (runIdText run.header.runId)))
       td_ (toHtml run.header.startedAt)
       td_ (toHtml (status run.status))
       td_ (toHtml (show run.eventCount))
@@ -64,12 +66,14 @@ runPage run = document name $ do
     div_ [id_ "run-outcome"] mempty
     div_ [class_ "run-layout"] $ do
       section_ [class_ "diagram", id_ "run-diagram", makeAttribute "aria-label" "Recorded flow graph"] mempty
-      aside_ [id_ "run-inspector"] $ do
-        h2_ "Node inspector"
-        p_ "Select a node to inspect its occurrences and observed progress."
+      aside_ [id_ "run-inspector", makeAttribute "hidden" ""] mempty
     details_ $ do
       summary_ "Recording context"
-      pre_ (toHtml (Text.decodeUtf8 (Bytes.toStrict (encode (summaryValue run)))))
+      let FlowEntryRef flow = run.header.flow
+      dl_ $ forM_ [("Recipe",name),("Flow",flow),("Before",Text.pack (revisionName run.header.before)),
+          ("Started",run.header.startedAt),("Build",Text.pack run.header.build.derivationPath),
+          ("Output",Text.pack run.header.build.outputPath)] $ \(label,value) -> do
+        dt_ (toHtml (label :: Text.Text)); dd_ (toHtml value)
   script_ [src_ "/_inspection/run-viewer.mjs", type_ "module"] ("" :: Text.Text)
   where RecipeId name = run.header.recipe
 
@@ -82,16 +86,5 @@ status (Completed _) = "Completed"
 status Failed = "Failed"
 status Cancelled = "Cancelled"
 document :: Text.Text -> Html () -> Html ()
-document title body = doctypehtml_ $ do
-  head_ $ do
-    meta_ [charset_ "utf-8"]
-    meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1"]
-    title_ (toHtml (title <> " · Kyyn"))
-    link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"]
-  body_ $ do
-    nav_ $ do
-      a_ [href_ "/"] "Knowledge base"
-      a_ [href_ "/runs"] "Runs"
-      a_ [href_ "/kb/"] "Views"
-    h1_ (toHtml title)
-    body
+document title body = pageDocument Nothing Nothing title
+  (link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"]) body

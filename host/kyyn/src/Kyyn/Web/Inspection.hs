@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 module Kyyn.Web.Inspection
-  ( InspectionRoute(..), renderInspection, renderInspectionError, inspectionLink, connectorFor, localRoute ) where
+  ( InspectionRoute(..), renderInspection, renderInspectionError, pageDocument, inspectionLink, connectorFor, localRoute ) where
 
 import qualified Data.Map.Strict as Map
 import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..), EvidenceId(..), EvidenceFingerprint(..), FetchSummary(..), FetchId(..), FetchReport(..))
@@ -175,7 +175,15 @@ inspectionLink selected segments = "/" <> Text.intercalate "/" (map escaped segm
   where escaped = Text.decodeUtf8 . urlEncode True . Text.encodeUtf8
 
 document :: Maybe EvolutionId -> Either [Diagnostic] SnapshotInspection -> Text -> Html () -> Html ()
-document selected snapshot title content = doctypehtml_ $ do
+document selected snapshot title content = pageDocument selected (Just banner) title mempty content
+  where
+    banner = p_ [class_ "context"] $ toHtml $ case snapshot of
+      Right (SnapshotInspection revision draft _ _ _) -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i) <> " · last checked candidate") draft <>
+        " · " <> Text.pack (revisionName revision)
+      Left _ -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i)) selected
+
+pageDocument :: Maybe EvolutionId -> Maybe (Html ()) -> Text -> Html () -> Html () -> Html ()
+pageDocument selected banner title extraHead content = doctypehtml_ $ do
   head_ $ do
     meta_ [charset_ "utf-8"]
     meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1"]
@@ -184,16 +192,14 @@ document selected snapshot title content = doctypehtml_ $ do
     script_ [src_ "/_inspection/vendor/prism.js", defer_ ""] ("" :: Text)
     script_ [src_ "/_inspection/inspection.mjs", type_ "module"] ("" :: Text)
     style_ ("body{font:16px/1.55 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#202832}a{color:#245a94}nav{display:flex;gap:1rem}h1{line-height:1.2}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.5rem;border-bottom:1px solid #ddd;vertical-align:top}dt{font-weight:600}dd{margin-bottom:1rem}dd,td{overflow-wrap:anywhere}.text-value{white-space:pre-wrap;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f5f7;padding:1rem}details{margin:1rem 0}summary{cursor:pointer;overflow-wrap:anywhere}pre[class],code[class]{white-space:pre-wrap;overflow-wrap:anywhere}code[class]{text-shadow:none}.flow-viewport{overflow:auto;max-height:65vh;border:1px solid #ddd;margin:1rem 0}.flow-viewport svg{max-width:none!important;display:block}.flow-toolbar{display:flex;gap:.5rem}.flow-viewport [role=button]{cursor:pointer}.flow-viewport [role=button]:focus{outline:2px solid #245a94}#flow-mermaid{max-height:60vh;overflow:auto}.context{color:#556}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:1rem;min-width:0}.comparison>div{min-width:0}pre.diff-added{background:#e5f5e8}pre.diff-removed{background:#fbe7e7}.diff-context pre{color:#667}@media(max-width:700px){.comparison{grid-template-columns:1fr}}" :: Text)
+    extraHead
   body_ $ do
     nav_ $ do
       a_ [href_ (inspectionLink selected [])] "Index"
       a_ [href_ "/kb/"] "Views"
       a_ [href_ "/runs"] "Runs"
       case selected of Nothing -> mempty; Just _ -> a_ [href_ "/"] "Accepted KB"
-    p_ [class_ "context"] $ toHtml $ case snapshot of
-      Right (SnapshotInspection revision draft _ _ _) -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i) <> " · last checked candidate") draft <>
-        " · " <> Text.pack (revisionName revision)
-      Left _ -> maybe "Accepted KB" (\i -> "Draft " <> Text.pack (evolutionIdName i)) selected
+    maybe mempty id banner
     h1_ (toHtml title)
     content
 

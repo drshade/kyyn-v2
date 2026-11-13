@@ -3,7 +3,7 @@ module Kyyn.Porcelain.Interpreter.RecipeExecution (runRecipeExecution) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad (unless)
-import Data.Aeson (object, toJSON)
+import Data.Aeson (object, toJSON, withObject, (.:))
 import Data.Aeson.Types (parseEither)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -60,8 +60,9 @@ runRecipeExecution = interpret $ \_ -> \case
     model <- ExceptT (readModelConfiguration code)
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
     output <- ExceptT (Right <$> executeEntry entry (toJSON G.CaptureRecipeGraph))
-    graph <- checked (parseWire output >>= parseEither decodeFlowValue)
-    pure (PreparedRecipe entry contract stateContract plugins model (toJSON (G.RunRecipe value input stateValue)) graph)
+    (graph,mermaid) <- checked (parseWire output >>= parseEither (withObject "captured flow" (\o ->
+      (,) <$> (o .: "graph" >>= decodeFlowValue) <*> o .: "mermaid")))
+    pure (PreparedRecipe entry contract stateContract plugins model (toJSON (G.RunRecipe value input stateValue)) graph mermaid)
   ExecuteRecipeFlow writer prepared -> runExceptT $ do
     let checked = either (throwE . pure . errorDiagnostic "recipe.execution") pure
     result <- ExceptT (executeRecordedRecipeProgram writer prepared.entry prepared.plugins prepared.model prepared.arguments)

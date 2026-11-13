@@ -18,7 +18,7 @@ const fixture=JSON.parse(fs.readFileSync(path.join(fixtureDirectory,'completed.j
 const failure=JSON.parse(fs.readFileSync(path.join(fixtureDirectory,'failed.json'),'utf8'));
 function git(...args){const r=spawnSync('git',['-C',kb,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();}
 function write(file,contents){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,contents);}
-const header=graph=>({recipe:'demoReview',flow:'Flows.trace',before:'a'.repeat(40),startedAt:'2026-11-13T10:00:00Z',graph,
+const header=graph=>({recipe:'demoReview',flow:'Flows.trace',before:'a'.repeat(40),startedAt:'2026-11-13T10:00:00Z',graph,mermaid:fixture.mermaid,
  build:{sourcesDigest:'fixture',targetSystem:'fixture',derivationPath:'fixture.drv',outputPath:'/fixture/not-present'}});
 const hostEvent=(records,body)=>({sequence:String(records.length),event:{elapsedNanos:String(BigInt(records.at(-1).event.elapsedNanos)+200000000n),body}});
 const failedTerminal={kind:'failed',diagnostics:[{severity:{tag:'Error'},code:'fixture.failure',message:'The demo model was unavailable.',location:{tag:'None'}}]};
@@ -57,14 +57,16 @@ try{
   const {chromium}=await import(pathToFileURL(process.env.KYYN_PLAYWRIGHT_MODULE));
   browser=await chromium.launch({headless:true,executablePath:process.env.KYYN_CHROMIUM});const page=await browser.newPage({viewport:{width:1440,height:1050}});
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
-  async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));}
+  async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
+   await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
+   await page.locator('#run-inspector .progress-count').waitFor();}
   await show('active');assert((await page.locator('#run-message').innerText()).includes('Live'));
   await page.screenshot({path:path.join(screenshots,'live.png'),fullPage:true});
   fs.appendFileSync(path.join(activeDir,'events.jsonl'),fixture.records.slice(10,20).map(x=>JSON.stringify(x.event)+'\n').join(''));
   await page.waitForFunction(()=>document.querySelector('#run-message').textContent.includes('20 / 20'));
   await show('completed');await page.locator('#run-play').click();await page.waitForTimeout(600);await page.locator('#run-play').click();
   assert((await page.locator('#run-message').innerText()).includes('Paused'));
-  await page.locator('#run-diagram [role=button]').first().focus();await page.keyboard.press('Enter');assert((await page.locator('#run-inspector').innerText()).includes('observed occurrence'));
+  await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');assert((await page.locator('#run-inspector').innerText()).includes('observed occurrence'));
   await page.screenshot({path:path.join(screenshots,'playback.png'),fullPage:true});
   await page.locator('#run-speed').selectOption('5');assert.equal(await page.locator('#run-speed').inputValue(),'5');
   await page.locator('#run-seek').fill('0');assert(!(await page.locator('#run-outcome').innerText()).includes('Draft'));

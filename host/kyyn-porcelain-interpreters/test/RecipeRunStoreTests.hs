@@ -55,7 +55,7 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
       kb = KnowledgeBase (Repository scope) WholeTree
       prepared = PreparedRecipeRun kb (RecipeId "review") (FlowEntryRef "Flows.review")
         (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output")
-        (object ["upstream" .= String "graph"])
+        (object ["upstream" .= String "graph"]) "flowchart TD"
       draft = either error id (evolutionId "000001-review")
       event = FlowObserved (object ["opaque" .= String "summary"])
       eventFile identity = directory </> ".kyyn/runs" </> runIdText identity </> "events.jsonl"
@@ -159,7 +159,7 @@ child :: String -> FilePath -> IO ()
 child mode directory = do
   let kb = KnowledgeBase (Repository (either error id (directoryScope directory))) WholeTree
       prepared = PreparedRecipeRun kb (RecipeId "review") (FlowEntryRef "Flows.review")
-        (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output") (object [])
+        (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output") (object []) "flowchart TD"
   case mode of
     "--die" -> execute $ withRecipeRun prepared $ \writer -> do
       _ <- appendRunEvent writer (FlowObserved (object []))

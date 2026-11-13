@@ -22,7 +22,7 @@ import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 data PreparedRecipe = PreparedRecipe
   { entry :: CompiledEntry, rootContract :: RootContract, stateContract :: CheckedContract
   , plugins :: [PreparedPlugin], model :: Maybe ModelConfiguration
-  , arguments :: Value, graph :: Value }
+  , arguments :: Value, graph :: Value, mermaid :: Text }
 
 data RecipeExecution :: Effect where
   PrepareRecipeFlow :: Root -> FlowEntryRef -> CheckedValue -> Maybe Text

@@ -22,16 +22,16 @@ import Kyyn.Plumbing.Protocol.Validation (parseReport)
 headerValue :: RecipeRunHeader -> Value
 headerValue h = let RecipeId recipe = h.recipe; FlowEntryRef flow = h.flow in object
   ["recipe" .= recipe,"flow" .= flow,"before" .= revisionName h.before,
-   "startedAt" .= h.startedAt,"graph" .= h.graph,"build" .= object
+   "startedAt" .= h.startedAt,"graph" .= h.graph,"mermaid" .= h.mermaid,"build" .= object
     ["sourcesDigest" .= Bytes.unpack h.build.sourcesDigest,"targetSystem" .= h.build.targetSystem,
      "derivationPath" .= h.build.derivationPath,"outputPath" .= h.build.outputPath]]
 parseHeader :: RecipeRunId -> Value -> Parser RecipeRunHeader
-parseHeader identity = exact "run header" ["recipe","flow","before","startedAt","graph","build"] $ \o ->
+parseHeader identity = exact "run header" ["recipe","flow","before","startedAt","graph","mermaid","build"] $ \o ->
   RecipeRunHeader identity <$> (o .: "recipe" >>= checked . recipeId)
     <*> (FlowEntryRef <$> o .: "flow") <*> (o .: "before" >>= checked . gitRevision)
     <*> (o .: "build" >>= exact "run build" ["sourcesDigest","targetSystem","derivationPath","outputPath"] (\b ->
       BuildIdentity <$> (Bytes.pack <$> b .: "sourcesDigest") <*> b .: "targetSystem" <*> b .: "derivationPath" <*> b .: "outputPath"))
-    <*> o .: "startedAt" <*> o .: "graph"
+    <*> o .: "startedAt" <*> o .: "graph" <*> o .: "mermaid"
 
 eventValue :: RunEvent -> Value
 eventValue (RunEvent elapsed body) = object ["elapsedNanos" .= show elapsed,"body" .= case body of

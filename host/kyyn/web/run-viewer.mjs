@@ -5,7 +5,7 @@ export function indexGraph(graph) {
   const items = new Map();
   function visit(nodes) { for (const node of nodes) { items.set(node.id, node); visit(node.items ?? []); } }
   visit(graph.items);
-  return {items, addresses: new Map(graph.addressItems.map(x => [x.address, x.item])), bodies: graph.bodies};
+  return {items, addresses: new Map(graph.addressItems.map(x => [x.address, x.item])), bodies: graph.bodies, edges: graph.edges};
 }
 export function newRecording(graph) {
   return {graph: indexGraph(graph), occurrences: new Map(), selections: new Set(), cursor: -1n, elapsed: 0n, terminal: null};
@@ -42,13 +42,45 @@ export function reduceEvent(state, record) {
   }
   return state;
 }
-export function replay(graph, records, through) {
-  const state = newRecording(graph);
-  for (const record of records) {
-    if (BigInt(record.event.elapsedNanos) > through) break;
-    reduceEvent(state, record);
+// Forward movement visits only newly reached records. Backward seeks rebuild.
+export function advance(state, records, through) {
+  for (let i = Number(state.cursor + 1n); i < records.length; i++) {
+    if (BigInt(records[i].event.elapsedNanos) > through) break;
+    reduceEvent(state, records[i]);
   }
   return state;
+}
+export function replay(graph, records, through) { return advance(newRecording(graph), records, through); }
+export function contextText(context) {
+  return [...context].reverse().map(([kind, , index, total]) => {
+    if (kind === 'each') return `element ${index + 1} of ${total}`;
+    if (kind === 'repeat') return `pass ${index + 1}`;
+    if (kind === 'call') return `tool call ${total + 1} of turn ${index + 1}`;
+    return kind;
+  }).join(' · ');
+}
+const words = value => value.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+function itemLabel(graph, address) {
+  const item = graph.items.get(graph.addresses.get(address));
+  return item?.labels?.join(' · ') || item?.nodeKind || address;
+}
+export function eventText(event, graph) {
+  switch (event.kind) {
+    case 'entered': return 'Entered' + (event.total === null ? '' : ` · ${event.total} elements`);
+    case 'returned': return `Returned · ${words(event.outcome)}`;
+    case 'selected': {
+      const edge = graph.edges.find(edge => edge.selections.includes(event.edge));
+      return `Branch selected · ${edge?.label || event.edge}`;
+    }
+    case 'callResolved': return `Tool resolved · ${itemLabel(graph, event.binding)} · body ${itemLabel(graph, event.body)}`;
+    case 'turned': return `Turn ${event.turn + 1} · ${event.action === 'tools' ? 'tool calls' : 'response'}`;
+    case 'outputRejected': return `Output rejected · turn ${event.turn + 1}`;
+    case 'drafting': return 'Drafting';
+    case 'judged': return 'Judged';
+    case 'failed': return 'Failed';
+    case 'cancelled': return 'Cancelled';
+    default: return words(event.kind);
+  }
 }
 export function nodeState(state, item, stopped) {
   const scopes = [...state.occurrences.values()].filter(x => x.item === item);
@@ -57,30 +89,6 @@ export function nodeState(state, item, stopped) {
   if (scopes.some(x => x.terminal === null)) return stopped ? 'unknown' : 'open';
   if (scopes.some(x => x.terminal === 'cancelled')) return 'cancelled';
   return 'returned';
-}
-export function graphMermaid(graph) {
-  // Generated IDs and encoded labels keep recorded text out of Mermaid syntax.
-  const ids = new Map(), labels = new Map(); let next = 0;
-  const text = value => [...value].map(c => /[a-zA-Z0-9 _.,:!?@/-]/.test(c) ? c : `#${c.codePointAt(0)};`).join('');
-  const lines = ['flowchart TD'];
-  function visit(items) {
-    for (const item of items) {
-      const id = `r${next++}`; ids.set(item.id, id); labels.set(id, item);
-      const label = (item.labels ?? []).join(' · ');
-      const short = label.length > 90 ? label.slice(0, 87) + '…' : label;
-      if (item.kind === 'box') { lines.push(`subgraph ${id}["${text(short || 'Flow')}"]`); visit(item.items); lines.push('end'); }
-      else lines.push(`${id}["${text(short || item.nodeKind)}"]`);
-    }
-  }
-  visit(graph.items);
-  const edges = [];
-  for (const edge of graph.edges) {
-    if (!ids.has(edge.from) || !ids.has(edge.to)) continue;
-    const arrow = edge.style === 'flow' ? '-->' : '-.->';
-    lines.push(`${ids.get(edge.from)} ${arrow}${edge.label ? `|"${text(edge.label)}"|` : ''} ${ids.get(edge.to)}`);
-    edges.push(edge);
-  }
-  return {source: lines.join('\n'), ids, labels, edges};
 }
 const seconds = nanos => (Number(nanos) / 1e9).toFixed(2) + ' s';
 function el(tag, text, css) {
@@ -92,7 +100,7 @@ function el(tag, text, css) {
 function button(text, action) { const node = el('button', text); node.type = 'button'; node.onclick = action; return node; }
 async function startViewer(initial) {
   const $ = id => document.getElementById(id);
-  const graph = initial.header.graph, rendered = graphMermaid(graph), records = [];
+  const graph = initial.header.graph, records = [];
   const nodes = new Map(), edgeNodes = [];
   let live = newRecording(graph), state = live, selected = null, summary = initial;
   let following = initial.status === 'active', playing = false, position = 0n, duration = 0n;
@@ -106,7 +114,7 @@ async function startViewer(initial) {
     node.dataset.item = id; fallback.append(node);
   }
   $('run-diagram').append(fallback);
-  function inspect(item) { selected = item; drawInspector(); }
+  function inspect(item) { selected = item; $('run-inspector').hidden = false; drawInspector(); }
   function drawInspector() {
     const pane = $('run-inspector');
     if (!selected) return;
@@ -114,21 +122,23 @@ async function startViewer(initial) {
     pane.replaceChildren(el('h2', (item.labels ?? []).slice(0, 1).join('') || 'Node'));
     const labels = el('details'); labels.append(el('summary', 'Full node label'), el('pre', (item.labels ?? []).join('\n'))); pane.append(labels);
     pane.append(el('p', `${scopes.length} observed occurrence${scopes.length === 1 ? '' : 's'}`));
-    if (!scopes.length) pane.append(el('p', 'No occurrence observed at this point. Structural graph items may have no events.', 'muted'));
+    if (!scopes.length) pane.append(el('p', 'No occurrence observed at this point.', 'muted'));
     for (const scope of scopes) {
       const detail = el('details', undefined, 'occurrence');
       const outcome = scope.terminal ?? (stopped && completePage && position >= duration ? 'unknown — no terminal observed' : 'no terminal observed');
-      detail.append(el('summary', `${scope.node} · ${outcome}`));
-      detail.append(el('p', `Address: ${scope.occurrence.address}`), el('pre', JSON.stringify(scope.occurrence.context, null, 2)));
-      detail.append(el('p', `Parent: ${scope.parent ? occurrenceKey(scope.parent) : 'none (logical root)'}`));
+      detail.open = true;
+      detail.append(el('summary', `${words(scope.node)} · ${words(outcome)}`));
+      const context = contextText(scope.occurrence.context);
+      if (context) detail.append(el('p', context));
+      detail.append(el('small', `Address: ${scope.occurrence.address}`));
+      detail.append(el('p', `Parent: ${scope.parent ? itemLabel(state.graph, scope.parent.address) : 'none (run root)'}`));
       detail.append(el('p', `Entered at ${seconds(scope.entered)}${scope.ended === undefined ? '' : ` · observed duration ${seconds(scope.ended - scope.entered)}`}`));
       if (scope.node === 'each') detail.append(el('p', `Element bodies returned: ${scope.completedBodies} / ${scope.total}`, 'progress-count'));
       if (scope.node === 'repeat') detail.append(el('p', `Iteration bodies returned: ${scope.completedBodies} · total unknown`, 'progress-count'));
       if (scope.outcome) detail.append(el('p', `Return outcome: ${scope.outcome}`));
       const events = el('ul');
       for (const event of scope.events) {
-        const {at, kind, ...metadata} = event;
-        events.append(el('li', `${seconds(at)} · ${kind}${Object.keys(metadata).length ? ' · ' + JSON.stringify(metadata) : ''}`));
+        events.append(el('li', `${seconds(event.at)} · ${eventText(event, state.graph)}`));
       }
       detail.append(events); pane.append(detail);
     }
@@ -141,12 +151,12 @@ async function startViewer(initial) {
       node.classList.toggle('selected-node', item === selected);
     }
     for (const node of fallback.children) node.dataset.state = nodeState(state, node.dataset.item, ended);
-    edgeNodes.forEach((node, i) => node.classList.toggle('selected-edge', rendered.edges[i]?.selections.some(edge => state.selections.has(edge))));
+    edgeNodes.forEach((node, i) => node.classList.toggle('selected-edge', graph.edges[i]?.selections.some(edge => state.selections.has(edge))));
     seek.max = String(Math.max(0, Math.ceil(Number(duration) / 1e6)));
     seek.value = String(Number(position) / 1e6);
     $('run-time').textContent = `${seconds(position)} / ${seconds(duration)}`;
-    play.textContent = playing ? 'Pause' : 'Play'; play.disabled = records.length === 0;
-    follow.disabled = following; follow.textContent = following ? 'Following live' : stopped ? 'Show latest' : 'Follow live';
+    play.textContent = playing ? 'Pause' : 'Play'; play.disabled = !!readError || records.length === 0;
+    follow.disabled = !!readError || following; follow.textContent = following ? 'Following live' : stopped ? 'Show latest' : 'Follow live';
     const phase = following ? (stopped ? summary.status : 'Live · following') : playing ? 'Playback' : 'Paused';
     message.textContent = readError ?? `${phase} · ${state.cursor + 1n} / ${summary.eventCount} events${!completePage ? ' · loading more…' : ''}${incomplete ? ' · incomplete final record' : ''}`;
     const outcome = $('run-outcome'); outcome.replaceChildren();
@@ -163,8 +173,9 @@ async function startViewer(initial) {
   }
   function seekTo(target) {
     following = false; playing = false; initialLoading = false;
-    position = target > duration ? duration : target;
-    state = replay(graph, records, position); draw();
+    const next = target > duration ? duration : target;
+    state = next < position || state === live ? replay(graph, records, next) : advance(state, records, next);
+    position = next; draw();
   }
   seek.oninput = () => seekTo(BigInt(seek.value) * 1000000n);
   follow.onclick = () => { following = true; playing = false; state = live; position = duration; draw(); };
@@ -178,7 +189,7 @@ async function startViewer(initial) {
       if (previous !== null) {
         position += BigInt(Math.round((now - previous) * Number($('run-speed').value) * 1e6));
         if (position >= duration) { position = duration; playing = false; }
-        state = replay(graph, records, position); draw();
+        state = advance(state, records, position); draw();
       }
       previous = now;
     } else previous = null;
@@ -221,14 +232,15 @@ async function startViewer(initial) {
     });
     globalThis.mermaid.initialize({startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
       flowchart: {htmlLabels: false, useMaxWidth: false}});
-    const {svg} = await globalThis.mermaid.render('recorded-flow', rendered.source);
+    const {svg} = await globalThis.mermaid.render('recorded-flow', initial.header.mermaid);
     const viewport = el('div', undefined, 'graph-viewport'); viewport.innerHTML = svg;
     $('run-diagram').prepend(viewport); fallback.hidden = true;
     const drawing = viewport.querySelector('svg');
     for (const node of drawing.querySelectorAll('.node, .cluster')) {
-      const id = node.id.match(/(?:flowchart-)?(r\d+)(?:-\d+)?$/)?.[1];
-      const item = rendered.labels.get(id); if (!item) continue;
-      nodes.set(item.id, node); node.setAttribute('role', 'button'); node.setAttribute('tabindex', '0');
+      const localId = node.id.replace(/^recorded-flow-/, '');
+      const id = node.classList.contains('cluster') ? localId : localId.replace(/^flowchart-/, '').replace(/-\d+$/, '');
+      const item = live.graph.items.get(id); if (!item) continue;
+      nodes.set(item.id, node); node.dataset.item = item.id; node.setAttribute('role', 'button'); node.setAttribute('tabindex', '0');
       node.setAttribute('aria-label', (item.labels ?? []).join(' · ') || 'Flow node');
       const select = event => { event.stopPropagation(); inspect(item.id); draw(); };
       node.onclick = select; node.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(event); } };
@@ -236,7 +248,7 @@ async function startViewer(initial) {
     edgeNodes.push(...drawing.querySelectorAll('.edgePath path, path.flowchart-link'));
     let scale = 1; const bounds = drawing.viewBox.baseVal;
     const resize = () => { drawing.style.width = bounds.width * scale + 'px'; drawing.style.height = bounds.height * scale + 'px'; };
-    const fit = () => { scale = Math.min(1, (viewport.clientWidth - 24) / bounds.width, 650 / bounds.height); resize(); };
+    const fit = () => { scale = (viewport.clientWidth - 24) / bounds.width; resize(); };
     $('run-fit').onclick = fit;
     $('run-zoom-in').onclick = () => { scale = Math.min(4, scale * 1.3); resize(); };
     $('run-zoom-out').onclick = () => { scale = Math.max(.05, scale / 1.3); resize(); };

@@ -558,7 +558,11 @@ checkRecipe executable = do
       (toJSON (G.Invoke "$recipe.Flows.invalidRecursive" (toJSON (G.RenderRecipe format))))
     unless (status /= ExitSuccess && "InvalidRecursion" `Text.isInfixOf` Text.pack (show errors))
       (fail ("Invalid recursive description did not report its structural error: " ++ show (status,output,errors)))
-  graph <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON G.CaptureRecipeGraph))) >>= decodeFlowValue
+  captured <- invoke executable (toJSON (G.Invoke "$recipe.Flows.recursive" (toJSON G.CaptureRecipeGraph)))
+  graph <- case captured of
+    Object fields | Just graphValue <- Keys.lookup "graph" fields,
+        Just (String mermaid) <- Keys.lookup "mermaid" fields, "again" `Text.isInfixOf` mermaid -> decodeFlowValue graphValue
+    _ -> fail "Graph capture lost upstream Mermaid rendering"
   case graph of
     Object fields -> unless (all (`Keys.member` fields) ["root","items","edges","addressItems","bodies"])
       (fail "Captured graph lost upstream relationships")

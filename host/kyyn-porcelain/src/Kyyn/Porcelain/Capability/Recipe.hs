@@ -45,7 +45,7 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
     [StoredRecipe (OpenAgent _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
     _ -> failure "recipe.unknown" ("No recipe named " ++ Text.unpack name)
   prepared <- ExceptT (prepareRecipeFlow root entry state request)
-  ExceptT $ withRecipeRun (PreparedRecipeRun kb recipe entry revision (entryProgram prepared.entry).identity prepared.graph) $ \writer@(RecipeRunWriter _ header) -> do
+  ExceptT $ withRecipeRun (PreparedRecipeRun kb recipe entry revision (entryProgram prepared.entry).identity prepared.graph prepared.mermaid) $ \writer@(RecipeRunWriter _ header) -> do
     result <- runExceptT $ do
       proposal <- ExceptT (executeRecipeFlow writer prepared)
       workspace@(EvolutionWorkspace _ draft) <- ExceptT (createFactProposal kb (EvolutionName ("run " ++ Text.unpack name)) revision recipe proposal)

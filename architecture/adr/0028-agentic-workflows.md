@@ -331,7 +331,9 @@ including the logical `root` item ID, items, edges, `addressItems` and `bodies`.
 The renderer draws the root's children, not its enclosing box. The upstream boundary
 is `flowGraphValue :: FlowGraph -> Value`, using the same `addressText` and
 `edgeIdText` identities as summaries, never `Show`. Kyyn does not maintain its own
-matching graph encoder. The flattened
+matching graph encoder or renderer. Capture upstream `mermaid :: Description -> Text`
+in the same preparation invocation and store it alongside the graph. The browser
+renders that text and maps SVG node IDs to the graph item IDs. The flattened
 `descriptionValue` is not a substitute: it omits intermediate composition scopes
 needed to map observations. Mermaid is a rendering, not a source of identities.
 The graph retains authored labels, descriptions and static prompt text. Addresses
@@ -391,7 +393,7 @@ data ObserveFlow result where
 data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
   , before :: GitRevision, build :: BuildIdentity
-  , startedAt :: Instant, graph :: FlowGraph
+  , startedAt :: Instant, graph :: FlowGraph, mermaid :: Text
   }
 
 data RunEvent = RunEvent

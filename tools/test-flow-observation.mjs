@@ -57,9 +57,12 @@ async function invoke(entry, argument, handle) {
     if (child.exitCode === null) child.kill();
   }
 }
-const graph = decode(await invoke('$recipe.Flows.trace', {operation: 'graph'}, () => {
+const captured = await invoke('$recipe.Flows.trace', {operation: 'graph'}, () => {
   throw new Error('Graph capture attempted an effect');
-}));
+});
+const graph = decode(captured.graph), mermaid = captured.mermaid;
+assert(mermaid.includes('flowchart') || mermaid.includes('graph'));
+assert(mermaid.includes(graph.items[0].items.find(x => x.kind === 'box').id), 'Upstream Mermaid must retain graph IDs');
 const addresses = new Set(graph.addressItems.map(x => x.address));
 const selections = new Set(graph.edges.flatMap(x => x.selections));
 const key = occurrence => JSON.stringify(occurrence);
@@ -89,7 +92,7 @@ for (const failModel of [false, true]) {
   const each = [...recording.occurrences.values()].find(x => x.node === 'each');
   assert.equal(each.completedBodies, 2);
   assert.equal(each.total, 2);
-  if (fixtureDirectory) fs.writeFileSync(path.join(fixtureDirectory, failModel ? 'failed.json' : 'completed.json'), JSON.stringify({graph, records}, null, 2));
+  if (fixtureDirectory) fs.writeFileSync(path.join(fixtureDirectory, failModel ? 'failed.json' : 'completed.json'), JSON.stringify({graph, mermaid, records}, null, 2));
   assert.equal(result.tag, 'Completed');
   assert.equal(result.result.tag, failModel ? 'Left' : 'Right');
   assert.equal(modelCalls, failModel ? 1 : 3);

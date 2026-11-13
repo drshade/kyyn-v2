@@ -111,7 +111,7 @@ main = do
               Left errors -> pure (Left errors)
               Right ready -> withRecipeRun (PreparedRecipeRun (KnowledgeBase (Repository scope) WholeTree)
                 (R.RecipeId "review") (FlowEntryRef "Flows.review") (either error id (gitRevision (replicate 40 'a')))
-                (entryProgram ready.entry).identity ready.graph) (\writer -> executeRecipeFlow writer ready)
+                (entryProgram ready.entry).identity ready.graph ready.mermaid) (\writer -> executeRecipeFlow writer ready)
         pure (rendered,proposal,contracts)
     (rendered,proposal,contracts) <- right result
     states <- right contracts

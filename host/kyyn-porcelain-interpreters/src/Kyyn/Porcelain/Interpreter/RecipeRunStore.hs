@@ -32,7 +32,7 @@ runRecipeRunStore announce = interpret $ \env -> \case
   WithRecipeRun prepared use -> localSeqUnlift env $ \unlift -> do
     directory <- baseDirectory prepared.knowledgeBase
     let header (JournalStamp name started) =
-          (\identity -> RecipeRunHeader identity prepared.recipe prepared.flow prepared.before prepared.build started prepared.graph)
+          (\identity -> RecipeRunHeader identity prepared.recipe prepared.flow prepared.before prepared.build started prepared.graph prepared.mermaid)
             <$> recipeRunId (relativeName name)
         checkedHeader stamp = checked (scopePath directory) (header stamp)
         record stamp event = checkedHeader stamp >>= \h -> void (writeEvent directory h event)

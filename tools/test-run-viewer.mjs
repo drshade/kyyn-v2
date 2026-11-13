@@ -1,7 +1,7 @@
 // Pure viewer projection: explicit occurrence/parent/body relations, unknown
 // terminals, zero each, repeat progress, idempotent polling and seek equivalence.
 import assert from 'node:assert/strict';
-import {newRecording, reduceEvent, replay, occurrenceKey, nodeState, graphMermaid} from '../host/kyyn/web/run-viewer.mjs';
+import {newRecording, reduceEvent, replay, occurrenceKey, nodeState, advance, contextText, eventText} from '../host/kyyn/web/run-viewer.mjs';
 const graph = {root:'root',items:[{id:'root',kind:'box',labels:['Run'],items:[
   {id:'each',kind:'box',labels:['Each'],items:[{id:'body',kind:'node',nodeKind:'step',labels:['Body']}]},
   {id:'call',kind:'node',nodeKind:'tool',labels:['Helper " </script> <img src=x onerror=alert(1)>']},
@@ -45,5 +45,15 @@ const rejected=[flow(root,null,'run',{kind:'entered',total:null}),flow(call,root
  flow(call,root,'call',{kind:'callResolved',binding:'helper',body:'body'}),flow(call,root,'call',{kind:'returned',outcome:'invalidInput'})].reduce(reduceEvent,newRecording(graph));
 assert.equal(rejected.occurrences.size,2,'A resolved call does not imply body entry');
 assert.equal(rejected.occurrences.get(occurrenceKey(call)).outcome,'invalidInput');
-const mermaid=graphMermaid(graph);assert(!mermaid.source.includes('</script>'));assert(!mermaid.source.includes('<img'));assert(mermaid.source.includes('subgraph'));
-console.log('Run viewer reducer: live/seek equivalence, body-root counts, unknown outcomes, rejected calls, paging and safe graph labels passed.');
+const incremental=newRecording(graph);
+advance(incremental,records,3500000000n);
+assert.deepEqual(incremental,middle);
+advance(incremental,records,7000000000n);
+assert.deepEqual(incremental,live);
+// A forward tick must not reread old records, even with a long elapsed timeline.
+const unreadablePast = records.map((r,i) => new Proxy(r,{get(target,key){if(i<records.length)throw Error('re-read past event');return target[key];}}));
+advance(incremental,unreadablePast,8000000000n);
+assert.equal(contextText([['repeat','x',0],['each','y',1,2]]),'element 2 of 2 · pass 1');
+assert.equal(contextText([['call','x',1,2,'call-id']]),'tool call 3 of turn 2');
+assert.equal(eventText({kind:'turned',turn:0,action:'tools'},live.graph),'Turn 1 · tool calls');
+console.log('Run viewer: live/seek equivalence, incremental playback, body-root counts, unknown outcomes and readable occurrence fields passed.');
