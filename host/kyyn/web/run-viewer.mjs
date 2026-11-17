@@ -10,7 +10,7 @@ export function indexGraph(graph) {
   return {items, addresses: new Map(graph.addressItems.map(x => [x.address, x.item])), bodies: graph.bodies, edges: graph.edges};
 }
 export function newRecording(graph) {
-  return {graph: indexGraph(graph), occurrences: new Map(), selections: new Set(), cursor: -1n, elapsed: 0n, terminal: null};
+  return {graph: indexGraph(graph), occurrences: new Map(), returnedItems: new Set(), selections: new Set(), cursor: -1n, elapsed: 0n, terminal: null};
 }
 export function reduceEvent(state, record) {
   const sequence = BigInt(record.sequence);
@@ -35,6 +35,7 @@ export function reduceEvent(state, record) {
     scope.terminal = summary.event.kind;
     scope.ended = state.elapsed;
     scope.outcome = summary.event.outcome;
+    if (summary.event.kind === 'returned') state.returnedItems.add(JSON.stringify([scope.item, scope.occurrence.context]));
     // Only the published element-body root counts, never an arbitrary descendant.
     if (summary.event.kind === 'returned' && scope.parent) {
       const parent = state.occurrences.get(occurrenceKey(scope.parent));
@@ -45,10 +46,10 @@ export function reduceEvent(state, record) {
   return state;
 }
 // Forward movement visits only newly reached records. Backward seeks rebuild.
-export function advance(state, records, through) {
+export function advance(state, records, through, observe = () => {}) {
   for (let i = Number(state.cursor + 1n); i < records.length; i++) {
     if (BigInt(records[i].event.elapsedNanos) > through) break;
-    reduceEvent(state, records[i]);
+    reduceEvent(state, records[i]); observe(state, records[i]);
   }
   return state;
 }
@@ -92,6 +93,21 @@ export function nodeState(state, item, stopped) {
   if (scopes.some(x => x.terminal === 'cancelled')) return 'cancelled';
   return 'returned';
 }
+// Animate only direct hand-offs backed by a returned occurrence in the same
+// context, or the exact branch edge reported upstream. No guessed routes.
+export function observedMotion(state, record) {
+  const summary = record.event.body.summary;
+  if (record.event.body.kind !== 'flow') return null;
+  const event = summary.event, item = state.graph.addresses.get(summary.occurrence.address);
+  if (event.kind === 'selected') return {item, edges: state.graph.edges.flatMap((edge, index) =>
+    edge.selections.includes(event.edge) ? [index] : []), kind: event.kind, context: summary.occurrence.context};
+  if (!['entered', 'returned'].includes(event.kind) || state.graph.items.get(item)?.kind !== 'node') return null;
+  const edges = event.kind === 'entered' ? state.graph.edges.flatMap((edge, index) =>
+    edge.style === 'flow' && edge.to === item && edge.selections.length === 0 &&
+      state.returnedItems.has(JSON.stringify([edge.from, summary.occurrence.context])) ? [index] : []) : [];
+  return {item, edges, kind: event.kind, context: summary.occurrence.context};
+}
+
 const seconds = nanos => (Number(nanos) / 1e9).toFixed(2) + ' s';
 function el(tag, text, css) {
   const node = document.createElement(tag);
@@ -104,6 +120,16 @@ async function startViewer(initial) {
   const $ = id => document.getElementById(id);
   const graph = initial.header.graph, records = [];
   const nodes = new Map(), edgeNodes = [];
+  let motionLayer, drawing, motionClock = 0, motionPrevious = null;
+  const particles = [], flashes = new Map();
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const activity = el('p', '', 'run-activity');
+  const animateLabel = el('label', undefined, 'motion-control');
+  const animate = el('input'); animate.type = 'checkbox'; animate.checked = !reducedMotion.matches;
+  animateLabel.append(animate, document.createTextNode(' Animate activity'));
+  document.querySelector('.toolbar').append(animateLabel);
+  $('run-diagram').before(activity);
+  animateLabel.title = 'Dots highlight observed transitions; travel time is illustrative.';
   let live = newRecording(graph), state = live, selected = null, summary = initial;
   let following = initial.status === 'active', playing = false, position = 0n, duration = 0n;
   let initialLoading = true, readError = null;
@@ -116,6 +142,43 @@ async function startViewer(initial) {
     node.dataset.item = id; fallback.append(node);
   }
   $('run-diagram').append(fallback);
+  function clearMotion() {
+    for (const particle of particles) particle.dot.remove();
+    particles.length = 0; flashes.clear();
+    motionLayer?.replaceChildren();
+    for (const node of nodes.values()) node.classList.remove('just-returned');
+  }
+  animate.onchange = () => {clearMotion(); draw();};
+  reducedMotion.addEventListener('change', () => {animate.checked = !reducedMotion.matches; clearMotion(); draw();});
+  function observeMotion(current, record) {
+    if (!animate.checked || !motionLayer) return;
+    const motion = observedMotion(current, record); if (!motion) return;
+    if (motion.kind === 'returned') flashes.set(motion.item, motionClock + 900);
+    for (const index of motion.edges) {
+      const path = edgeNodes[index]; if (!path) continue;
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '6'); dot.setAttribute('class', 'flow-particle');
+      dot.dataset.edge = String(index);
+      if (particles.length >= 64) particles.shift().dot.remove();
+      motionLayer.append(dot);
+      particles.push({dot, path, start: motionClock, length: path.getTotalLength()});
+    }
+  }
+  function paintMotion() {
+    if (!motionLayer) return;
+    const rootInverse = particles.length ? drawing.getScreenCTM().inverse() : null;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const particle = particles[i], progress = (motionClock - particle.start) / 650;
+      if (progress >= 1) {particle.dot.remove(); particles.splice(i, 1); continue;}
+      const point = particle.path.getPointAtLength(particle.length * Math.max(0, progress));
+      // Mermaid nests paths under transformed groups; overlay uses root SVG units.
+      const matrix = rootInverse.multiply(particle.path.getScreenCTM());
+      const target = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+      particle.dot.setAttribute('cx', target.x); particle.dot.setAttribute('cy', target.y);
+    }
+    for (const [item, node] of nodes) node.classList.toggle('just-returned', (flashes.get(item) ?? 0) > motionClock);
+    for (const [item, until] of flashes) if (until <= motionClock) flashes.delete(item);
+  }
   function inspect(item) { selected = item; $('run-inspector').hidden = false; drawInspector(); }
   function drawInspector() {
     const pane = $('run-inspector');
@@ -154,6 +217,10 @@ async function startViewer(initial) {
     }
     for (const node of fallback.children) node.dataset.state = nodeState(state, node.dataset.item, ended);
     edgeNodes.forEach((node, i) => node.classList.toggle('selected-edge', graph.edges[i]?.selections.some(edge => state.selections.has(edge))));
+    const loops = [...state.occurrences.values()].filter(scope => ['each', 'repeat'].includes(scope.node) && scope.total !== 0 && scope.terminal === null);
+    activity.textContent = loops.map(scope => `${scope.node === 'each' ? 'Element bodies returned' : 'Iteration bodies returned'}: ${scope.completedBodies}${scope.total === null ? '' : ' / ' + scope.total}`).join(' · ');
+    $('run-diagram').classList.toggle('motion-enabled', animate.checked);
+    $('run-diagram').classList.toggle('motion-running', animate.checked && !readError && (playing || (following && !stopped)));
     seek.max = String(Math.max(0, Math.ceil(Number(duration) / 1e6)));
     seek.value = String(Number(position) / 1e6);
     $('run-time').textContent = `${seconds(position)} / ${seconds(duration)}`;
@@ -177,24 +244,29 @@ async function startViewer(initial) {
     following = false; playing = false; initialLoading = false;
     const next = target > duration ? duration : target;
     state = next < position || state === live ? replay(graph, records, next) : advance(state, records, next);
-    position = next; draw();
+    position = next; clearMotion(); draw();
   }
   seek.oninput = () => seekTo(BigInt(seek.value) * 1000000n);
-  follow.onclick = () => { following = true; playing = false; state = live; position = duration; draw(); };
+  follow.onclick = () => { clearMotion(); following = true; playing = false; state = live; position = duration; draw(); };
   play.onclick = () => {
     following = false; initialLoading = false;
-    if (!playing && position >= duration) { position = 0n; state = replay(graph, records, position); }
+    if (!playing && position >= duration) { clearMotion(); position = 0n; state = replay(graph, records, position); }
     playing = !playing; previous = null; draw();
   };
   function tick(now) {
+    const running = !readError && (playing || (following && !stopped));
+    // Finish the last transition at the end, but freeze visuals on manual pause.
+    if (motionPrevious !== null && (running || (completePage && stopped && position >= duration))) motionClock += now - motionPrevious;
+    motionPrevious = now;
     if (playing) {
       if (previous !== null) {
         position += BigInt(Math.round((now - previous) * Number($('run-speed').value) * 1e6));
         if (position >= duration) { position = duration; playing = false; }
-        state = advance(state, records, position); draw();
+        state = advance(state, records, position, observeMotion); draw();
       }
       previous = now;
     } else previous = null;
+    paintMotion();
     frame = requestAnimationFrame(tick);
   }
   async function poll() {
@@ -211,6 +283,7 @@ async function startViewer(initial) {
       for (const event of page.events) {
         if (BigInt(event.sequence) <= live.cursor) continue;
         reduceEvent(live, event); records.push(event);
+        if (following && !initialLoading) observeMotion(live, event);
         duration = BigInt(event.event.elapsedNanos);
       }
       summary = page.summary; incomplete = page.incompleteTail; completePage = !page.more;
@@ -220,7 +293,7 @@ async function startViewer(initial) {
       draw();
       if (page.more || !stopped) pollTimer = setTimeout(poll, page.more ? 0 : 1000);
     } catch (error) {
-      playing = false; readError = error.message; message.textContent = readError;
+      playing = false; readError = error.message; clearMotion(); $('run-diagram').classList.remove('motion-running'); message.textContent = readError;
       message.classList.add('error'); follow.disabled = true; play.disabled = true;
       // Preserve the readable prefix; never turn a failed read into success.
     }
@@ -237,7 +310,7 @@ async function startViewer(initial) {
     const {svg} = await globalThis.mermaid.render('recorded-flow', compactFlow(initial.header.mermaid).diagram);
     const viewport = el('div', undefined, 'graph-viewport'); viewport.innerHTML = svg;
     $('run-diagram').prepend(viewport); fallback.hidden = true;
-    const drawing = viewport.querySelector('svg');
+    drawing = viewport.querySelector('svg');
     for (const node of drawing.querySelectorAll('.node, .cluster')) {
       const localId = node.id.replace(/^recorded-flow-/, '');
       const id = node.classList.contains('cluster') ? localId : localId.replace(/^flowchart-/, '').replace(/-\d+$/, '');
@@ -248,6 +321,9 @@ async function startViewer(initial) {
       node.onclick = select; node.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(event); } };
     }
     edgeNodes.push(...drawing.querySelectorAll('.edgePath path, path.flowchart-link'));
+    motionLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    motionLayer.setAttribute('class', 'flow-motion'); motionLayer.setAttribute('aria-hidden', 'true');
+    drawing.append(motionLayer);
     let scale = 1; const bounds = drawing.viewBox.baseVal;
     const resize = () => { drawing.style.width = bounds.width * scale + 'px'; drawing.style.height = bounds.height * scale + 'px'; };
     const fit = () => { scale = Math.min((viewport.clientWidth - 24) / bounds.width, (viewport.clientHeight - 24) / bounds.height); resize(); viewport.scrollTo(0, 0); };
