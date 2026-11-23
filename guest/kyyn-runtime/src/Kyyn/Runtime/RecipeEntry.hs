@@ -72,7 +72,7 @@ recipeEntry reference (metadata,sources) flowSources edits dispatch runtime inje
             pending <- either (fail . Text.unpack) pure (Wait.pendingWaitFromValue pendingWire)
             reply <- either fail pure (Wire.decodeWith valueCodec replyValue)
             let durable = runtime { A.journal = Just (guestJournal inject (J.JournalIdentity namespace revision)) }
-                result = fmap (either (Left . show) (const (Right ()))) (A.fulfil durable selected pending reply)
+                result = A.fulfil durable selected pending reply
             execute transport (eitherCodec fulfilCodec) (dispatch transport) (runExceptT result)
   pure (Entry (RecipeEntry ("$recipe." <> reference) reference contracts) run)
   where
@@ -94,13 +94,32 @@ progressCodec result = Wire.Codec encode decode
           maybe (Left "Empty waiting frontier") (Right . A.RunWaiting) (NonEmpty.nonEmpty waits)
         _ -> Left "Invalid interactive outcome"
 
-fulfilCodec :: Wire.Codec (Either String ())
+fulfilCodec :: Wire.Codec (Either A.ReplyRefused ())
 fulfilCodec = Wire.Codec
-  (either (\message -> Wire.tagged "refused" (Just (Wire.encodeWith Wire.stringCodec message)))
+  (either (\refusal -> Wire.tagged "refused" (Just (encodeRefusal refusal)))
           (const (Wire.tagged "accepted" Nothing)))
   (\value -> do
     (tag,payload) <- Wire.variant value
     case (tag,payload) of
       ("accepted",Nothing) -> Right (Right ())
-      ("refused",Just body) -> Left <$> Wire.decodeWith Wire.stringCodec body
+      ("refused",Just body) -> Left <$> decodeRefusal body
       _ -> Left "Invalid fulfilment outcome")
+  where
+    encodeRefusal refusal = case refusal of
+      A.ReplyInvalid message -> text "invalid" message
+      A.ReplyAlreadyAnswered -> Wire.tagged "conflict" Nothing
+      A.ReplyNonCanonical message -> text "nonCanonical" message
+      A.WaitWrongIdentity -> Wire.tagged "wrongIdentity" Nothing
+      A.WaitInvalidKey message -> text "invalidKey" message
+      A.WaitInvalidRequest message -> text "invalidRequest" message
+    text code = Wire.tagged code . Just . Wire.encodeWith Wire.textCodec
+    decodeRefusal value = do
+      (tag,payload) <- Wire.variant value
+      case (tag,payload) of
+        ("invalid",Just body) -> A.ReplyInvalid <$> Wire.decodeWith Wire.textCodec body
+        ("conflict",Nothing) -> Right A.ReplyAlreadyAnswered
+        ("nonCanonical",Just body) -> A.ReplyNonCanonical <$> Wire.decodeWith Wire.textCodec body
+        ("wrongIdentity",Nothing) -> Right A.WaitWrongIdentity
+        ("invalidKey",Just body) -> A.WaitInvalidKey <$> Wire.decodeWith Wire.textCodec body
+        ("invalidRequest",Just body) -> A.WaitInvalidRequest <$> Wire.decodeWith Wire.textCodec body
+        _ -> Left "Invalid reply refusal"

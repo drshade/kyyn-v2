@@ -156,13 +156,14 @@ main = do
       _ -> fail "Expected one waiting point"
     let fulfil reply = G.FulfilRecipe "interactive-test" "pinned-fixture" pending (encodeFlowValue reply)
     rejected <- attempt False (fulfil (String "not an integer"))
-    _ <- taggedValue "refused" rejected
+    _ <- taggedValue "refused" rejected >>= taggedValue "invalid"
     accepted <- attempt False (fulfil (Number 7))
     unless (accepted == object ["tag" .= String "accepted"]) (fail "Valid reply refused")
     duplicate <- attempt False (fulfil (Number 7))
     unless (duplicate == accepted) (fail "Identical fulfilment changed result")
     conflict <- attempt False (fulfil (Number 8))
-    _ <- taggedValue "refused" conflict
+    conflictBody <- taggedValue "refused" conflict
+    unless (conflictBody == object ["tag" .= String "conflict"]) (fail "Conflict lost its refusal code")
     finished <- attempt False resume >>= taggedValue "finished"
     case finished of
       Object fields | Keys.lookup "state" fields == Just (object ["runs" .= String "7"]) -> pure ()
