@@ -101,7 +101,7 @@ check = do
       (_,complete,_,_) <- run partialStore (A.fulfil runtime flow two (V.Integer 22))
       (finished,_,repeated,restored) <- run complete (A.resumable runtime flow [10,20])
       assert "typed replies reach final result" (finished == Right (A.RunFinished [11,22]) && repeated == 0)
-      assert "restoration observations survive wire encoding" (any ((== A.Restored) . (.happened)) restored)
+      assert "restoration observations survive wire encoding" (any (\event -> case event.happened of A.Restored _ -> True; _ -> False) restored)
       (duplicate,duplicateStore,_,_) <- run complete (A.fulfil runtime flow one (V.Integer 11))
       assert "duplicate reply is idempotent" (duplicate == Right (Right ()) && duplicateStore == complete)
       (conflict,conflictStore,_,_) <- run complete (A.fulfil runtime flow one (V.Integer 12))
