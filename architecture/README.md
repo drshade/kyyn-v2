@@ -1,8 +1,7 @@
 # Kyyn architecture
 
 Kyyn is the rebuild; **kyyn-v1** is the legacy implementation. Start with
-[principles](principles.md), [product scope](scope.md) and the
-[boundary map](boundaries.md). Use [the guide](../docs/guide.md) for
+[principles](principles.md) and [product scope](scope.md). Use [the guide](../docs/guide.md) for
 CLI workflows and [project practices](../docs/PROJECT-PRACTICES.md) for development.
 
 Each ADR owns a decided desired-state contract, whether already implemented or
