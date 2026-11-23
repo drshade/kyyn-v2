@@ -331,15 +331,21 @@ renderers, evolution functions and ordinary investigation tools do not gain them
 The library owns flow interpretation, model/tool orchestration, durable operation
 identity and generic suspension/resumption semantics. Kyyn owns persistent
 instances, their checked inputs and bindings, event routing, execution attempts
-and links to evolution workspaces. The accepted interactive declaration advertises its selected action bindings,
-visible in description before starting it. Starting the instance authorises those
-authored actions, including after an unattended resume, subject to the caller's
-existing authority. A model cannot grant itself additional bindings.
+and links to evolution workspaces. The accepted interactive declaration advertises
+its action bindings and allowed child-flow references. Description exposes the
+transitive set of child definitions and their actions before start, traversing
+recursive references once. Starting the instance authorises that captured set,
+including unattended child execution, subject to the caller's existing authority.
+Child references bind definitions/configuration from this captured execution
+revision; new revisions or dynamically named undeclared children require a new
+explicit start. A model cannot grant itself additional bindings.
 The host is an executor of authored decisions,
 not an additional model deciding goals, reminders or escalation policy.
 
 ```haskell
--- Typed guest/application facade; transport representations remain private.
+-- Typed guest flow combinators; lower-level request rows remain generated.
+type InteractiveFlow input output = Agentic InteractiveProgram input output
+
 data FlowRef input output
 newtype FlowHandle output = FlowHandle FlowInstanceId
 
@@ -347,26 +353,27 @@ data FlowStatus output
   = Runnable
   | Running
   | Waiting [WaitId]
-  | Completed output
-  | Failed [Diagnostic]
-  | Cancelled
+  | Finished (FlowOutcome output)
+
+data FlowOutcome output = Completed output | Failed [Diagnostic] | Cancelled
 
 data CancelScope = ThisFlow | FlowAndDescendants
 
-startFlow :: Interactive m => FlowRef input output -> input -> m (FlowHandle output)
-inspectFlow :: Interactive m => FlowHandle output -> m (FlowStatus output)
-awaitFlow :: Interactive m => FlowHandle output -> m (FlowStatus output)
-cancelFlow :: Interactive m => CancelScope -> FlowHandle output -> m ()
+startFlow :: FlowRef input output -> InteractiveFlow input (FlowHandle output)
+inspectFlow :: InteractiveFlow (FlowHandle output) (FlowStatus output)
+awaitFlow :: InteractiveFlow (FlowHandle output) (FlowOutcome output)
+cancelFlow :: CancelScope -> InteractiveFlow (FlowHandle output) ()
 ```
 
-`Interactive m` denotes the selected generated request row, not arbitrary IO.
+`InteractiveProgram` is the generated guest effect program with the selected
+interactive capability row and typed failures, not arbitrary IO.
 `FlowRef` resolves an accepted declaration with its checked input/result contracts.
 Starting a flow records its original input, execution revision and selected
 configuration. Each instance has a stable ID, optional parent ID, execution owner (hosted or
 external), checked request/result contracts and status.
 Runtime state lives locally under `.kyyn/flows/`, outside accepted
 facts and recipe state. Operations validate handles against the selected KB and
-stored contracts. Inspection is read-only; `awaitFlow` returns a terminal status
+stored contracts. Inspection is read-only; `awaitFlow` returns a terminal outcome
 or durably waits. Failure is observable data, not automatic sibling cancellation.
 Runtime storage/dispatch failures retain ADR 0019's operational failure boundary.
 
@@ -408,48 +415,67 @@ a renderer. Input/options remain checked and delivery uncertainty remains visibl
 
 ```haskell
 -- Method-specific generated bindings implement these typed boundaries.
-liveQuery :: LiveQuery m => LiveQueryRef input output -> input -> m output
-performAction :: LiveAction m
-              => ActionRef input output -> OperationKey -> input -> m output
+liveQuery :: LiveQueryRef input output -> InteractiveFlow input output
+performAction :: ActionRef input output -> InteractiveFlow input output
 
 data EventRef request reply
 newtype WaitHandle reply = WaitHandle WaitId
 
-openWait :: Interactive m
-         => EventRef request reply -> request -> m (WaitHandle reply)
-awaitReply :: Interactive m => WaitHandle reply -> m reply
+openWait :: EventRef request reply -> InteractiveFlow request (WaitHandle reply)
+data ReplyOrigin
+  = ProviderReply PluginInstanceRef EventIdentity
+  | ManualReply InvocationSurface
 
--- Host application operation, also available to authenticated event adapters.
+data ReceivedReply reply = ReceivedReply
+  { origin :: ReplyOrigin, value :: reply }
+
+awaitReply :: InteractiveFlow (WaitHandle reply) (ReceivedReply reply)
+
+-- Host application operation; ingress sets origin, never the submitted payload.
 fulfilWait :: (FlowStore :> es, Failure :> es)
-           => KnowledgeBase -> WaitId -> EventIdentity -> CheckedValue
+           => KnowledgeBase -> WaitId -> ReplyOrigin -> CheckedValue
            -> Eff es FulfilOutcome
 ```
 
 Refs bind a specific declared method/event and checked types; they are not an
 untyped provider RPC escape hatch. Runtime identities, codec projections and
-wire envelopes are generated. The plugin owns provider-specific reception and
+wire envelopes are generated. The durable action combinator derives its operation
+key from the library occurrence and instance namespace; the author does not choose
+it. Only the adapter receives the key. The plugin owns provider-specific reception and
 correlation; the host validates the resulting event against the registered wait
 contract before committing it. `FulfilOutcome` distinguishes accepted, duplicate,
 conflicting, invalid and closed-wait deliveries. The first valid fulfilment is
-immutable; a conflicting value never overwrites it.
+immutable; a conflicting value never overwrites it. Provider-origin identities
+come from the authenticated adapter. CLI/MCP fulfilment records ManualReply with
+the actual surface; it cannot claim provider origin. Origin is saved with the
+value, returned to the flow and retained in any supporting proposal rationale.
+It describes ingestion provenance, not proof that a remote person's assertion is true.
 
 Opening a wait persists its typed request and expected reply contract and returns
 a stable handle. An author can establish the wait before sending a question, so
 a fast reply is not lost before execution reaches `awaitReply`. Replay returns
-the same handle. Awaiting an unfulfilled wait suspends the execution through the
-library's wait semantics; it is not a failure or a sleeping guest process. The
-runtime can release the process and retains all outstanding waits, including
-concurrent branches. A received reply is durable before acknowledgement and
+the same handle. Awaiting an unfulfilled wait requires an upstream suspension
+contract distinct from completion-only replay: a typed blocked outcome, pending
+occurrence/request/result contracts, preserved concurrent waits, validated
+fulfilment and an observation distinct from failure. The execution attempt may
+then end; the next attempt replays from the beginning using fulfilled results.
+This design depends on that upstream contract, not on serialising continuations
+or treating an exception as a successful suspension. The runtime releases the
+process while retaining outstanding waits. A received reply is durable before acknowledgement and
 before making the instance runnable. Duplicate wakeups do not start concurrent
-writers for one instance. Deadlines, reminders and decisions to give up belong
-to the authored workflow; a deadline event is an input, not inferred business policy.
+writers for one instance. Time-based triggers enter through explicit external
+CLI/MCP input or a declared plugin event source. The worker does not supply a
+business timer or launch a daily scanner on its own. An author needing a deadline
+must configure a source for that event; the passage of time alone does not wake a
+wait. Reminder and escalation decisions remain authored policy.
 
 ### Replay reconstructs execution, not the external world
 
 Use the library's durable recording contract, with Kyyn supplying its store.
 [Upstream issue #12](https://github.com/drshade/haskell-agentic/issues/12) owns
-completion-only replay. Generic suspension and fulfilment belong upstream too;
-Kyyn does not implement a competing arrow interpreter to obtain them.
+completion-only replay, not suspension. The typed blocked/fulfilment contract
+specified above is a separate upstream dependency, tracked with the implementation
+work in #345. Kyyn does not implement a competing arrow interpreter to obtain it.
 
 Each instance fixes the original request, execution revision (code, codecs and
 provider configuration) and journal namespace. Resumption reuses that execution;
@@ -460,11 +486,20 @@ required people redaction before sending data to Jev.
 Keep its guest build available
 while the instance is resumable. Missing code/build or a revision/input mismatch
 is a diagnostic, not an automatic migration or a compatibility reader. Inspection
-of persisted status does not require executing the old build.
+of persisted status does not require executing the old build. Such a diagnostic
+leaves the instance blocked from execution, with cancellation still available;
+it cannot silently resume against another contract.
 
-Completed durable operations return their stored typed results. Captured reads,
-live queries and KB queries record the values consumed by the flow, rather than
-reopening changed evidence or providers during replay. A model completion is
+The interactive authoring bindings for liveQuery, performAction, selectKnowledge,
+queryKnowledge, startFlow, inspectFlow, cancelFlow, openWait, prepareProposal
+and inspectProposal are durable Agentic
+combinators with explicit persistence codecs. They record their returned values
+at the library occurrence. Their lower-level guest requests alone do not journal
+anything. Captured-evidence reads must likewise be wrapped in the library's
+explicit durable combinator when their results drive resumed execution.
+Completed operations return stored results rather than reopening changed data.
+Existing evidence reads inside `act` are unchanged and execute again; making
+a recipe interactive does not automatically make arbitrary act bodies durable. A model completion is
 replayed; an incomplete model call can be repeated under the upstream limitation. Model decisions
 and provider tool-call identities are restored through the same journal.
 An unfinished tool re-enters its body, whose completed durable sub-actions replay.
@@ -489,13 +524,12 @@ operations; it does not gain filesystem mutation of accepted facts.
 
 ```haskell
 -- Guest-facing capabilities; host handlers use existing application operations.
-selectKnowledge :: KnowledgeAccess m => m KnowledgeSnapshot
-queryKnowledge :: KnowledgeAccess m
-               => KnowledgeSnapshot -> KnowledgeQueryRef input output -> input -> m output
-prepareProposal :: ProposalAuthoring m
-                => KnowledgeSnapshot -> RecipeProposal edits state
-                -> m EvolutionId
-inspectProposal :: ProposalAuthoring m => EvolutionId -> m ProposalStatus
+selectKnowledge :: InteractiveFlow () KnowledgeSnapshot
+queryKnowledge :: KnowledgeQueryRef input output
+               -> InteractiveFlow (KnowledgeSnapshot, input) output
+prepareProposal :: InteractiveFlow
+                   (KnowledgeSnapshot, RecipeProposal edits state) EvolutionId
+inspectProposal :: InteractiveFlow EvolutionId ProposalStatus
 ```
 
 A `KnowledgeSnapshot` identifies an accepted Git revision and its checked root
@@ -509,27 +543,49 @@ contract above, with the snapshot revision as Before. The host checks edits and
 state against the selected recipe/root contracts. A long conversation need not
 create a workspace at its start; it may refresh knowledge and prepare a proposal
 when ready. It must not relabel an old proposal as based on a newer root. Multiple
-proposals are allowed, each with its own explicit base. Conflicting concurrent
-children meet the normal expected-head acceptance boundary.
+proposals are allowed, each with its own explicit base. Instance progress and
+conversation state stay in the instance store; they are not a shared recipe-state
+checkpoint that every child must overwrite. A child with no recipe-state change
+preserves the state from its selected snapshot.
+
+For a consolidated portfolio update, children return typed review results and the
+parent refreshes knowledge and prepares one proposal. Independently finishing
+children may instead propose separately. If one proposal's acceptance makes
+another stale, inspectProposal reports that outcome; the author refreshes the KB,
+reconsiders the edits and shared recipe state, then prepares a new draft with a
+new operation occurrence. It does not repeat the conversation unless its assumptions
+need clarification. Old drafts remain inspectable. Neither automatic rebasing nor
+blind replay of a full old recipe state is allowed. Expected-head checking can
+still reject a new race; there is no promise every parallel draft accepts at once.
 
 Evolution checking and acceptance remain the existing host application operations.
 There is no accepted-ref guest capability and flow success never accepts a
-proposal. An authorised external agent or explicitly configured host automation
-may check, mark Ready and accept through those operations; no per-proposal human
-prompt is inherent. The interactive flow can inspect or await their recorded
+proposal. An authorised external agent or external script may explicitly check,
+mark Ready and accept through those operations as in ADR 0025. The interactive
+worker has no automatic acceptance policy or acceptance-on-completion hook. The interactive flow can inspect or await their recorded
 outcome through the event interface. Checking a proposal never re-executes the
 conversation. Rationale explains the proposed changes; conversation references
 or summaries may support it without becoming mandatory evidence captures. Persist
-the material live observations needed to explain an edit in the frozen proposal's
-rationale/input data; a disposable journal or a remote URL alone is not that record.
-Do not fabricate an EvidenceRef for an uncaptured interaction. The ordinary
-rationale remains meaningful if local execution state is removed.
+the material live observations needed to explain an edit in the existing
+`ProposedStep`'s `Rationale.explanation :: Text`. Include the relevant assertion
+or query result summary, its provider/manual origin and available source identity;
+a remote URL alone is insufficient. This text is part of the frozen proposal and
+accepted evolution committed to Git under ADR 0010. `Rationale.evidence` contains
+only actual captured EvidenceRefs and may be empty. No new citation store is
+required. The explanation remains meaningful if local execution state is removed.
 
 ### Runtime ownership and observation
 
-An explicitly launched per-KB worker executes runnable hosted instances and
-resumes them when fulfilled waits permit progress. Only one execution attempt
-may write an instance at a time. Persisted runnable work survives worker shutdown;
+`kyyn flow worker` explicitly runs a foreground worker for the selected KB. It
+executes runnable hosted instances and resumes them when fulfilled waits permit
+progress. A process-scoped per-instance writer lock prevents two execution attempts
+writing the same instance; process exit releases the lock without inventing a
+terminal outcome. The worker also polls declared plugin event adapters for pending
+waits, persisting received events and adapter cursors before advancing those
+cursors. Duplicate provider event identities are deduplicated at fulfilment.
+This event path introduces no inbound network listener. A provider requiring
+webhooks needs a separately designed transport rather than an implicit listener.
+CLI/MCP manual fulfilment remains available independently of the worker. Persisted runnable work survives worker shutdown;
 reopening does not require a browser. While the worker is down, no hosted guest
 advances; accepted event deliveries remain queued. An offline event receiver
 cannot promise delivery: its plugin must document provider retry or catch-up
@@ -547,9 +603,12 @@ does not journal or restore the external harness's private reasoning or executio
 A pending reply in Kyyn does not automatically
 launch or reconstruct a Codex/Claude session. Externally coordinated instances
 retain status and correlation records but are not dispatched as hosted guest flows.
+The external harness explicitly reports its checked terminal result through a
+host application completion operation; it cannot replace an existing terminal
+outcome or bypass a cancellation. Disconnection alone does not mark it Completed.
 
 Durable instance state, reply values and the replay journal are distinct from
-ADR 0028's disposable viewer recordings. Each execution attempt has its own
+the disposable viewer recordings below. Each execution attempt has its own
 recording namespace; restoring work is reported using the library's replay
 observations. A waiting attempt is not a completed logical flow. An instance links
 its attempts and draft evolutions. Clearing viewer recordings does not delete
@@ -564,7 +623,7 @@ turn recording inspection into historical compatibility enforcement.
 Use deterministic provider/event fixtures to exercise query, open-wait, send,
 process stop, reply, resume and proposal creation. Prove the completed send is
 not re-executed, a reply arriving before await is retained, and malformed or
-conflicting replies cannot advance the flow. Exercise incomplete-action repeat
+conflicting replies cannot advance the flow; manual replies retain their actual origin. Exercise incomplete-action repeat
 semantics without claiming to solve an unsupported provider crash window.
 
 Exercise partial tool completion, two waits in parallel, duplicate wakeups,
@@ -574,7 +633,10 @@ and a start racing with cancellation. Verify late replies cannot resurrect a
 cancelled instance. Preserve a draft and any accepted changes after cancellation.
 
 Exercise a KB refresh before proposing, a changed schema, a stale base after a
-sibling accepts, and unchanged ordinary recipe/tool capability boundaries. The
+sibling accepts followed by refresh/reconsideration/new proposal, one parent
+proposal assembled from child results, and unchanged ordinary recipe/tool
+capability boundaries. Prove child authority stays within the captured declared
+set and that no worker path accepts an evolution. The
 external-agent journey uses the same application operations without launching a
 hosted model loop. Restart with the retained build and journal; report missing
 builds and changed input/revision honestly. Clear viewer recordings while waiting
