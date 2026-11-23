@@ -17,7 +17,7 @@ import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Guest (DescriptionFormat(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..))
 
 recipeId :: String -> Either String RecipeId
 recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId (Text.pack value)))) (bindingName value)
@@ -30,8 +30,8 @@ data RecipeSignature = RecipeSignature
 data KnowledgeBase root recipe = KnowledgeBase root [Fact recipe] deriving (Eq, Show)
 
 data RecipeDefinition
-  = OpenRecipe Text String
-  | ClosedRecipe FlowEntryRef
+  = OpenRecipe Lifetime Text String
+  | ClosedRecipe Lifetime FlowEntryRef
   deriving (Eq, Show)
 
 data ProposedRecipe = ProposedRecipe RecipeDefinition Value deriving (Eq, Show)
@@ -43,13 +43,13 @@ proposedRecipe recipe@(StoredRecipe _ _ _ (CheckedValue _ value)) =
   ProposedRecipe (recipeDefinition recipe) value
 
 recipeMethod :: RecipeDefinition -> Recipe
-recipeMethod (OpenRecipe instructions _) = OpenAgent instructions
-recipeMethod (ClosedRecipe entry) = ClosedAgent entry
+recipeMethod (OpenRecipe lifetime instructions _) = OpenAgent lifetime instructions
+recipeMethod (ClosedRecipe lifetime entry) = ClosedAgent lifetime entry
 
 recipeDefinition :: StoredRecipe -> RecipeDefinition
 recipeDefinition (StoredRecipe method name _ _) = case method of
-  OpenAgent instructions -> OpenRecipe instructions name
-  ClosedAgent entry -> ClosedRecipe entry
+  OpenAgent lifetime instructions -> OpenRecipe lifetime instructions name
+  ClosedAgent lifetime entry -> ClosedRecipe lifetime entry
 
 proposedDefinition :: ProposedRecipe -> RecipeDefinition
 proposedDefinition (ProposedRecipe definition _) = definition
@@ -61,10 +61,24 @@ checkRecipeDefinitions definitions = do
   mapM_ (\(Fact (FactId name) definition) -> do
     _ <- checked (recipeId (Text.unpack name))
     case definition of
-      OpenRecipe _ "()" -> pure ()
-      OpenRecipe _ stateType -> checked (qualifiedTypeName stateType) >> pure ()
-      ClosedRecipe (FlowEntryRef entry) -> checked (bindingModule (Text.unpack entry)) >> pure ()) definitions
+      OpenRecipe (Interactive _) _ _ -> bad "Interactive open recipes are not supported"
+      OpenRecipe _ _ "()" -> pure ()
+      OpenRecipe _ _ stateType -> checked (qualifiedTypeName stateType) >> pure ()
+      ClosedRecipe _ (FlowEntryRef entry) -> checked (bindingModule (Text.unpack entry)) >> pure ()) definitions
+  mapM_ checkChildren definitions
   pure definitions
   where
+    checkChildren (Fact (FactId parent) (ClosedRecipe (Interactive (InteractionBindings refs)) _)) = do
+      unless (length refs == length (nub refs)) (bad ("Recipe " <> Text.unpack parent <> ": duplicate child declarations"))
+      mapM_ (checkChild parent) refs
+    checkChildren _ = pure ()
+    checkChild parent (ChildReference (RecipeId child) expected) =
+      case [definition | Fact (FactId name) definition <- definitions, name == child] of
+        [ClosedRecipe (Interactive _) actual] | actual == expected -> pure ()
+        [ClosedRecipe (Interactive _) _] -> childBad "uses a different flow definition"
+        [_] -> childBad "is not a closed interactive recipe"
+        [] -> childBad "does not exist in the target recipes"
+        _ -> childBad "is duplicated"
+      where childBad reason = bad ("Recipe " <> Text.unpack parent <> ": child " <> Text.unpack child <> " " <> reason)
     checked = either bad Right
     bad message = Left [errorDiagnostic "recipe.definition-invalid" message]

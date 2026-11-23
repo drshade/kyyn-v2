@@ -252,9 +252,9 @@ snapshotStepJson (SnapshotStep origin (Rationale explanation evidence) changes) 
     recorded (Stored.RecordedValue shape value) = object
       ["shape" .= either (String . Text.pack) toJSON (Stored.storageShape shape),"value" .= value]
     recipe (Stored.RecordedRecipe definition state) = object ["definition" .= method definition,"state" .= recorded state]
-    method (Recipe.OpenRecipe instructions name) = object
-      ["kind" .= String "OpenAgent","instructions" .= instructions,"stateType" .= name]
-    method (Recipe.ClosedRecipe (FlowEntryRef name)) = object ["kind" .= String "ClosedAgent","flow" .= name]
+    method (Recipe.OpenRecipe lifetime instructions name) = object
+      ["kind" .= String "OpenAgent","lifetime" .= lifetime,"instructions" .= instructions,"stateType" .= name]
+    method (Recipe.ClosedRecipe lifetime (FlowEntryRef name)) = object ["kind" .= String "ClosedAgent","lifetime" .= lifetime,"flow" .= name]
 
 originJson :: PluginOrigin -> Value
 originJson (PluginOrigin repository path revision) = object

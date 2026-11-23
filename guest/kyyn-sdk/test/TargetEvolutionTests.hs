@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings, TypeApplications #-}
 module Main (main) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Data.Either (isLeft)
 import Data.Text (Text)
@@ -32,7 +33,7 @@ main = do
   state <- right (encodeStored False)
   stateType <- right (recipeType @Bool "Current.State")
   let metadata = SchemaMetadata [] [] [CollectionDecl "people" "people" [], CollectionDecl "additional" "additional" []]
-      recipe = StoredRecipe (OpenAgent "Review") (Just "Current.State") state
+      recipe = StoredRecipe (OpenAgent Ordinary "Review") (Just "Current.State") state
       initial = StoredSnapshot [("total",count)] [("people",[Fact (FactId "one") value])] [Fact (FactId "weekly") recipe]
       reason = Rationale "Target migration" []
   binding <- right (targetBinding @Root metadata [RecipeBinding (OpenState "Current.State") stateType])
@@ -60,11 +61,11 @@ main = do
   reject "member/envelope mismatch accepted" (StoredSnapshot [("total",count)] [("people",[Fact (FactId "wrong") value])] [])
   reject "duplicate members accepted" (StoredSnapshot [("total",count)] [("people",replicate 2 (Fact (FactId "one") value))] [])
   reject "unresolved recipe retained" (StoredSnapshot [("total",count)] []
-    [Fact (FactId "weekly") (StoredRecipe (OpenAgent "Review") (Just "Absent.State") state)])
+    [Fact (FactId "weekly") (StoredRecipe (OpenAgent Ordinary "Review") (Just "Absent.State") state)])
   reject "wrong recipe state accepted" (StoredSnapshot [("total",count)] []
-    [Fact (FactId "weekly") (StoredRecipe (OpenAgent "Review") (Just "Current.State") count)])
+    [Fact (FactId "weekly") (StoredRecipe (OpenAgent Ordinary "Review") (Just "Current.State") count)])
   let obsolete = StoredSnapshot [("total",count)] []
-        [Fact (FactId "weekly") (StoredRecipe (OpenAgent "Review") (Just "Absent.State") state)]
+        [Fact (FactId "weekly") (StoredRecipe (OpenAgent Ordinary "Review") (Just "Absent.State") state)]
   _ <- right (evaluateEvolution binding reason (prepare (retireRecipe reason (RecipeId "weekly")) mempty) obsolete)
   assert "invalid typed output accepted" (isLeft (evaluateEvolution binding reason
     (prepare (pure ()) (edit reason $ do

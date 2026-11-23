@@ -173,8 +173,8 @@ runInspection = interpret $ \_ -> \case
           _ -> unknown "recipe" (Text.unpack name)
         let method = recipeDefinition recipe
         flow <- case method of
-          OpenRecipe _ _ -> pure Nothing
-          ClosedRecipe entry -> Just <$> ExceptT (Recipe.describeRecipe (SourceRoot contract code definition []) entry Mermaid)
+          OpenRecipe _ _ _ -> pure Nothing
+          ClosedRecipe lifetime entry -> Just <$> ExceptT (Recipe.describeRecipe (SourceRoot contract code definition []) lifetime entry Mermaid)
         pure (RecipeInspection name recipe flow)
   InspectEvolutionSource workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
     live@(WorkspaceSnapshot manifest@(WorkspaceManifest _ _ _ state _) _ _ _) <- ExceptT (Store.readWorkspace workspace)

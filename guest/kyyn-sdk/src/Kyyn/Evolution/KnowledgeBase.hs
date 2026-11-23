@@ -10,7 +10,7 @@ import Kyyn.Types.StoredShape (StoredShape(..))
 import Data.Text (Text)
 import Data.Aeson (Value(..))
 import Kyyn.Recipe.Internal
-import Kyyn.Types.KnowledgeBase (Recipe(OpenAgent))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), Recipe(OpenAgent))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))
@@ -31,7 +31,7 @@ onFacts transform (KnowledgeBase value recipes) =
 
 -- | Instructions for an open agent, with an explicit recipe state type.
 openRecipe :: RecipeType state -> Text -> RecipeDefinition state
-openRecipe state instructions = RecipeDefinition (OpenAgent instructions) state
+openRecipe state instructions = RecipeDefinition (OpenAgent Ordinary instructions) state
 
 -- | The state binding for a recipe that needs no remembered state.
 unitRecipeType :: RecipeType ()

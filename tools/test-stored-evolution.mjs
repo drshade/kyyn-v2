@@ -19,6 +19,12 @@ function cli(args, expected = 0) {
   assert.equal(result.status, expected, JSON.stringify({args, ...result}));
   return JSON.parse(result.stdout).result;
 }
+function refusal(args) {
+  const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
+    {cwd: temporary, env, encoding: 'utf8', timeout: 600000});
+  assert.equal(result.status, 1, JSON.stringify(result));
+  return JSON.stringify(JSON.parse(result.stdout));
+}
 function write(name, value) {
   const file = path.join(kb, name);
   fs.mkdirSync(path.dirname(file), {recursive: true});
@@ -39,8 +45,13 @@ try {
   write('root/facts/root.dhall','{=}');
   write('root/facts/items/index.dhall','["one"]');
   write('root/facts/items/one.dhall','{ id = "one", value = { amount = +7 } }');
-  const method = '< OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } >';
-  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { flow = ${methodValue.slice(12)} }` : `OpenAgent { instructions = "Obsolete", stateType = "${stateType}" }`} }`;
+  write('root/recipes.dhall', 'let Recipe = < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > in [{ id = "weekly", value = Recipe.ClosedAgent { flow = "Flows.review" } }]');
+  git('add','root'); git('commit','-qm','Fixture with missing lifetime');
+  const missingLifetime = refusal(['root','recipe','list']);
+  assert.match(missingLifetime, /recipes\.dhall/);
+  assert.match(missingLifetime, /lifetime/);
+  const method = '< OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, flow : Text } >';
+  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, flow = ${methodValue.slice(12)} }` : `OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, instructions = "Obsolete", stateType = "${stateType}" }`} }`;
   write('root/recipes.dhall', '[' + [definition('weekly','ClosedAgent "Flows.review"',''),
     definition('obsolete','ClosedAgent "Missing.obsolete"',''),definition('notAFlow','ClosedAgent "Flows.oldFlow"',''),
     definition('noContract','OpenAgent "Obsolete"','Flows.OldState')].join(',') + ']');
@@ -66,8 +77,23 @@ try {
   assert.equal(cli(['evolution','accept',draft.id]).accepted,true);
   assert.deepEqual(cli(['evolution','show',draft.id]).report,report);
   assert.deepEqual(cli(['root','fact','show','items','one']).value,{amount:'7',note:'migrated'});
-  assert.equal(cli(['root','recipe','list']).recipes.length,1);
+  assert.equal(cli(['root','recipe','list']).recipes.length,3);
   cli(['root','check']);
+  const interactive = cli(['root','recipe','show','conversation']);
+  assert.equal(interactive.recipe.lifetime.tag, 'Interactive');
+  cli(['root','recipe','describe','conversation']);
+  cli(['root','recipe','run','conversation'], 1);
+  const removed = cli(['evolution','new','remove referenced child']);
+  fs.writeFileSync(path.join(removed.path,'change/Evolution.hs'), `module Evolution where
+import Kyyn.Workspace.Evolution
+import qualified Schema
+
+evolution :: Evolution Schema.Root
+evolution = prepare (retireRecipe (Rationale "Remove child" []) (RecipeId "conversation")) mempty
+`);
+  const dangling = refusal(['evolution','check',removed.id]);
+  assert.match(dangling, /coordinator/);
+  assert.match(dangling, /conversation/);
   const replay = cli(['root','recipe','run','weekly']);
   cli(['evolution','check',replay.id]);
   console.log('Stored migration, input scaffold, stable target names, closed state, archive, acceptance and running the migrated recipe passed.');

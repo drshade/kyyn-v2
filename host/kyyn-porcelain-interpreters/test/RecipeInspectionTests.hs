@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs, LambdaCase, OverloadedStrings #-}
 module RecipeInspectionTests (recipeInspectionTests) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless, forM_)
 import Data.Aeson (eitherDecodeStrict', toJSON)
 import qualified Data.ByteString.Char8 as Bytes
@@ -57,7 +58,7 @@ recipeInspectionTests contract = do
             unless (selectedBuild sources == RecipeEntries [ClosedFlow "Tasks.flow"])
               (error "Description selected another flow")
             pure (Right program))
-        . runRecipeInspection $ describeRecipe source (FlowEntryRef "Tasks.flow") format
+        . runRecipeInspection $ describeRecipe source Ordinary (FlowEntryRef "Tasks.flow") format
   forM_ [Tree,Dot,Mermaid] $ \format ->
     unless (perform format "\"rendered\"" (ProcessExit 0 "") == Right (Right "rendered"))
       (fail "Description did not decode the selected renderer's text")

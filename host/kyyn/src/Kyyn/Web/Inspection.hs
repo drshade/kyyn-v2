@@ -7,7 +7,7 @@ import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..), EvidenceId(..), 
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..))
 import Kyyn.Domain.Blob (BlobRef(..), sdkBlobRefType)
 import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), ConnectorTypeName(..), BindingName(..), PackageIdentity(..), PluginOrigin(..), PluginRepository(..))
-import Control.Monad (forM_, unless)
+import Control.Monad (forM_, unless, when)
 import Data.Algorithm.Diff (PolyDiff(..), getGroupedDiff)
 import Data.Aeson (Value(..), encode)
 import qualified Data.Aeson.Key as Key
@@ -38,7 +38,7 @@ import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Secret (secretNameText)
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), FlowEntryRef(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Domain.Path (relativeName, scopePath)
 import Kyyn.Domain.SnapshotReport
@@ -229,14 +229,16 @@ indexBody selected snapshot summaries = do
       h2_ "Recipes"
       ul_ $ forM_ recipes $ \(Fact (FactId name) recipe@(StoredRecipe _ _ contract _)) -> li_ $ do
         a_ [href_ (inspectionLink selected ["recipes",name])] (toHtml name)
-        toHtml (case recipeDefinition recipe of OpenRecipe _ _ -> " · Instructions" :: Text; ClosedRecipe _ -> " · Flow")
-        toHtml (" · State: " :: Text)
-        let typ = rootType contract
-            fullName = haskellType typ
-            label = case typ of
-              Algebraic typeName [] _ -> Text.takeWhileEnd (/= '.') (Text.pack typeName)
-              _ -> Text.pack fullName
-        a_ [href_ (recipeTypeLink selected name fullName), title_ (Text.pack fullName)] (toHtml label)
+        toHtml (case recipeDefinition recipe of OpenRecipe lifetime _ _ -> Text.pack (" · " ++ lifetimePrefix lifetime ++ "instructions"); ClosedRecipe lifetime _ -> Text.pack (" · " ++ lifetimePrefix lifetime ++ "flow"))
+        let ordinary = case recipeDefinition recipe of OpenRecipe lifetime _ _ -> lifetime == Ordinary; ClosedRecipe lifetime _ -> lifetime == Ordinary
+        when ordinary $ do
+          toHtml (" · State: " :: Text)
+          let typ = rootType contract
+              fullName = haskellType typ
+              label = case typ of
+                Algebraic typeName [] _ -> Text.takeWhileEnd (/= '.') (Text.pack typeName)
+                _ -> Text.pack fullName
+          a_ [href_ (recipeTypeLink selected name fullName), title_ (Text.pack fullName)] (toHtml label)
 
 diagnosticsBody :: [Diagnostic] -> Html ()
 diagnosticsBody diagnostics = forM_ diagnostics $ \(Diagnostic _ _ message _) -> p_ (toHtml message)
@@ -390,10 +392,11 @@ evidenceBody resolved ref@(EvidenceRef producer instanceName source references) 
 recipeBody :: Maybe EvolutionId -> RecordedRecipe -> Html ()
 recipeBody selected (RecordedRecipe definition (RecordedValue shape value)) = do
   case definition of
-    OpenRecipe instructions stateType -> do
+    OpenRecipe lifetime instructions stateType -> do
+      case lifetime of Ordinary -> pure (); Interactive _ -> p_ "Interactive"
       expandableText instructions
       p_ (toHtml ("State type: " <> Text.pack stateType))
-    ClosedRecipe (FlowEntryRef flow) -> p_ (toHtml ("Flow: " <> flow))
+    ClosedRecipe lifetime (FlowEntryRef flow) -> p_ (toHtml (Text.pack (lifetimePrefix lifetime) <> "flow: " <> flow))
   h5_ "State"
   renderValue selected shape value
 
@@ -472,8 +475,8 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     implementationBody implementation source
   RecipeInspection name recipe@(StoredRecipe _ stateType contract (CheckedValue _ state)) flow -> do
     case recipeDefinition recipe of
-      OpenRecipe instructions _ -> h2_ "Instructions" >> expandableText instructions
-      ClosedRecipe (FlowEntryRef entry) -> do
+      OpenRecipe _ instructions _ -> h2_ "Instructions" >> expandableText instructions
+      ClosedRecipe _ (FlowEntryRef entry) -> do
         h2_ "Flow"
         p_ (toHtml entry)
         forM_ flow $ \diagram -> do
@@ -481,13 +484,17 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
           details_ [id_ "flow-source", open_ ""] $ do
             summary_ "Mermaid source"
             pre_ [id_ "flow-mermaid"] (toHtml diagram)
-    h2_ "State type"
-    a_ [href_ (recipeTypeLink selected name (haskellType (rootType contract)))] (toHtml stateType)
-    h2_ "Current saved state"
-    if contractShape contract == Record [] then p_ "No state fields." else
-      details_ $ do
-        summary_ "State"
-        renderValue selected (contractShape contract) state
+    case recipeDefinition recipe of
+      ClosedRecipe (Interactive _) _ -> p_ "Progress belongs to each interactive instance."
+      OpenRecipe (Interactive _) _ _ -> p_ "Progress belongs to each interactive instance."
+      _ -> do
+        h2_ "State type"
+        a_ [href_ (recipeTypeLink selected name (haskellType (rootType contract)))] (toHtml stateType)
+        h2_ "Current saved state"
+        if contractShape contract == Record [] then p_ "No state fields." else
+          details_ $ do
+            summary_ "State"
+            renderValue selected (contractShape contract) state
   where
     names = [haskellType typ | typ@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema root))]
     typeLink :: String -> Html ()
@@ -661,3 +668,7 @@ catalogueIndex selected snapshot (CatalogueInspection configuration) = do
         a_ [href_ (inspectionLink selected ["outputs",Text.pack name])] (toHtml name)
         toHtml (" · " ++ description)
     Left _ -> mempty
+
+lifetimePrefix :: Lifetime -> String
+lifetimePrefix Ordinary = ""
+lifetimePrefix (Interactive _) = "Interactive "

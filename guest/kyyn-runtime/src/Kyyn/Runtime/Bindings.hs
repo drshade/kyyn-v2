@@ -1,16 +1,17 @@
-{-# LANGUAGE ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
 -- Constructors used by compiler-generated modules, separate from the author SDK.
-module Kyyn.Runtime.Bindings (collection, contractCodec, recipeType, inferredRecipeType, closedRecipe, rejectEvolution) where
+module Kyyn.Runtime.Bindings (collection, contractCodec, recipeType, inferredRecipeType, closedRecipe, interactiveFlow, rejectEvolution) where
 
 import Kyyn.Types.StoredShape (storedShape)
 import Data.Text (Text)
+import Kyyn.Interactive.Internal (FlowDefinition(..))
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Optics (Lens')
 import Kyyn.Edit.Internal (Collection(..))
 import Kyyn.Evolution (RecipeType, RecipeDefinition)
 import qualified Kyyn.Recipe.Internal as Recipe
-import Kyyn.Types.KnowledgeBase (Recipe(ClosedAgent), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), Recipe(ClosedAgent), FlowEntryRef(..))
 import qualified Kyyn.Types.Contract as D
 import Kyyn.Recipe (RecipeEvolution, recipeEdit)
 import Kyyn.Edit (refuse)
@@ -41,8 +42,16 @@ closedRecipe :: forall state. Contract state => Text -> Either ProjectionError (
 closedRecipe reference = do
   compiled <- compileContract (contract @state)
   name <- either (Left . ProjectionError []) Right (D.descriptionTypeName compiled.description)
-  Recipe.RecipeDefinition (ClosedAgent (FlowEntryRef reference)) <$> recipeType @state name
+  Recipe.RecipeDefinition (ClosedAgent Ordinary (FlowEntryRef reference)) <$> recipeType @state name
 
 -- A failed frozen decode has no successful observation or partial result.
 rejectEvolution :: EvolutionFailure -> RecipeEvolution root state
 rejectEvolution (EvolutionFailure diagnostics) = recipeEdit (Rationale mempty []) (refuse diagnostics)
+
+interactiveFlow :: forall input output. (Contract input, Contract output)
+  => Text -> Either ProjectionError (FlowDefinition input output)
+interactiveFlow reference = do
+  input <- compileWire (contract @input)
+  output <- compileWire (contract @output)
+  state <- recipeType @() "()"
+  pure (FlowDefinition (FlowEntryRef reference) (InteractionBindings []) state input output)

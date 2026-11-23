@@ -4,6 +4,7 @@ module Kyyn.Porcelain.Protocol.RecipePersistence
   , encodeStoredRecipes, decodeStoredRecipes, encodeRecipeContracts, decodeRecipeContracts ) where
 
 import Control.Monad (unless)
+import Data.Bifunctor (first)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (object, (.=), (.:), withObject, toJSON)
 import Data.Aeson.Types (parseEither, parseJSON)
@@ -33,11 +34,14 @@ encodeRecipes values = case checkRecipeDefinitions values of
 decodeRecipes :: DhallHandling :> es => Maybe ByteString -> Eff es (Either [Diagnostic] [Fact RecipeDefinition])
 decodeRecipes Nothing = pure (Right [])
 decodeRecipes (Just bytes) = case Text.decodeUtf8' bytes of
-  Left problem -> pure (failure (show problem))
+  Left problem -> pure (first contextual (failure (show problem)))
   Right source -> do
     decoded <- decodeValue recipesShape source
-    pure $ decoded >>= either failure checkRecipeDefinitions . parseEither parseRecipes
-  where failure = Left . pure . errorDiagnostic "recipe.invalid-data"
+    pure $ first contextual (decoded >>= either failure checkRecipeDefinitions . parseEither parseRecipes)
+  where
+    failure = Left . pure . errorDiagnostic "recipe.invalid-data"
+    contextual = map (\(Diagnostic severity code message location) ->
+      Diagnostic severity code ("recipes.dhall: " <> message) location)
 
 encodeStoredRecipes :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] FileTree)
@@ -57,7 +61,7 @@ decodeStoredRecipes definitions tree = runExceptT $ do
     (Fact (FactId name) _,_,contract) <- definitions] tree)
   traverse (\(Fact identity@(FactId name) definition,stateType,contract) -> do
     value <- maybe (bad ("Missing state for " ++ Text.unpack name)) pure (lookup (RecipeId name) states)
-    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ authored -> authored; ClosedRecipe _ -> stateType) contract value))) definitions
+    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ _ authored -> authored; ClosedRecipe _ _ -> stateType) contract value))) definitions
 
 encodeRecipeContracts :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] ByteString)

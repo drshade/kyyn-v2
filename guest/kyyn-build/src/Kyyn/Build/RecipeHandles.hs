@@ -12,13 +12,14 @@ import Kyyn.Types.Guest
 
 -- Only imports request handles. In particular, unfinished migration bodies need
 -- not parse or typecheck to discover their workspace API.
-data Handle = StateHandle Bool String String | FlowHandle String String
+data Handle = StateHandle Bool String String | FlowHandle Bool String String
 
 handleImports :: [String] -> [Handle]
 handleImports names = concatMap selected (nub names)
   where
     selected name = [StateHandle True reference name | Just reference <- [stripPrefix "Kyyn.Workspace.Target.RecipeTypes." name]] ++
-      [FlowHandle reference name | Just reference <- [stripPrefix "Kyyn.Workspace.Target.RecipeFlows." name]]
+      [FlowHandle False reference name | Just reference <- [stripPrefix "Kyyn.Workspace.Target.RecipeFlows." name]] ++
+      [FlowHandle True reference name | Just reference <- [stripPrefix "Kyyn.Workspace.Target.InteractiveFlows." name]]
 
 handleImportsWithStored :: [String] -> [String] -> [Handle]
 handleImportsWithStored authored stored = nubBy (\a b -> name a == name b)
@@ -27,13 +28,13 @@ handleImportsWithStored authored stored = nubBy (\a b -> name a == name b)
     optional (StateHandle _ reference selected) = StateHandle False reference selected
     optional handle = handle
     name (StateHandle _ _ selected) = selected
-    name (FlowHandle _ selected) = selected
+    name (FlowHandle _ _ selected) = selected
 
 handleModules :: [Handle] -> Either String [String]
 handleModules handles = nub . concat <$> traverse selected handles
   where
     selected (StateHandle _ reference _) = pure . Text.unpack . referenceModule <$> qualifiedReference True (Text.pack reference)
-    selected (FlowHandle reference _) = Right [reference]
+    selected (FlowHandle _ reference _) = Right [reference]
 
 writeRecipeHandles :: FilePath -> FilePath -> [String] -> [FilePath]
   -> Reference -> [Handle] -> IO ([String],[String],[String])
@@ -57,7 +58,7 @@ writeRecipeHandles libdir generated packages sourceRoots root handles = do
         if required then ["recipeType :: RecipeType " ++ reference,
           "recipeType = either (error . show) id (Bindings.recipeType @" ++ reference ++ " " ++ show reference ++ ")"]
         else ["$(optionalStateDefinition (mkName \"recipeType\") ''" ++ reference ++ " " ++ show reference ++ ")"])
-    FlowHandle _ _ -> pure ()) handles
+    FlowHandle _ _ _ -> pure ()) handles
   descriptions <- forM handles $ \handle -> case handle of
     StateHandle _ reference name -> do
       selected <- either fail pure (qualifiedReference True (Text.pack reference))
@@ -67,19 +68,22 @@ writeRecipeHandles libdir generated packages sourceRoots root handles = do
         ["describeEntry @" ++ reference ++ " " ++ show ("$import.state.Target." ++ reference) ++
          " (SchemaMetadata [] [] []) " ++ show closure],
         ["TargetEvolution.RecipeBinding (OpenState " ++ show reference ++ ") " ++ name ++ ".recipeType"])
-    FlowHandle reference name -> do
+    FlowHandle interactive reference name -> do
       (closure,exports) <- inspectExports libdir roots packages [reference]
       let candidates = nub [Text.unpack symbol.exportName | entry <- exports, symbol <- entry.moduleExports, symbol.exportKind == ExportValue]
           candidate value = "(" ++ show value ++ ",mkName " ++ show (reference ++ "." ++ value) ++ "," ++ show (reference ++ "." ++ value) ++ ")"
       write name (["{-# LANGUAGE TemplateHaskell #-}","module " ++ name ++ " where",
-        "import Language.Haskell.TH (mkName)", "import Kyyn.Build.RecipeTypes (flowDefinitions)",
+        "import Language.Haskell.TH (mkName)", "import Kyyn.Build.RecipeTypes (flowDefinitions, interactiveDefinitions)",
+        "import Kyyn.Interactive (FlowDefinition)", "import qualified Kyyn.Interactive as Interactive",
         "import qualified Kyyn.Recipe as Recipe", "import Kyyn.Evolution (RecipeDefinition)",
         "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified " ++ Text.unpack (referenceModule root),
         "import qualified " ++ reference,
-        "$(flowDefinitions ''" ++ Text.unpack (referenceName root) ++ " [" ++ Text.unpack (Text.intercalate "," (map (Text.pack . candidate) candidates)) ++ "])"])
+        (if interactive then "$(interactiveDefinitions [" else "$(flowDefinitions ''" ++ Text.unpack (referenceName root) ++ " [") ++ Text.unpack (Text.intercalate "," (map (Text.pack . candidate) candidates)) ++ "])"])
       (_,bindings) <- inspectExports libdir roots packages [name]
       let names = nub [Text.unpack symbol.exportName | entry <- bindings, symbol <- entry.moduleExports, symbol.exportKind == ExportValue]
-      pure ([name],["recipeStateEntry " ++ show ("$import.flow." ++ reference ++ "." ++ value) ++ " " ++ show closure ++ " " ++ name ++ "." ++ value | value <- names],
-        ["TargetEvolution.definitionBinding " ++ name ++ "." ++ value | value <- names])
+      let definition value = if interactive then "(Kyyn.Interactive.interactiveRecipe " ++ name ++ "." ++ value ++ ")" else name ++ "." ++ value
+          prefix = if interactive then "$import.interactive." else "$import.flow."
+      pure ([name,"Kyyn.Interactive"],["recipeStateEntry " ++ show (prefix ++ reference ++ "." ++ value) ++ " " ++ show closure ++ " " ++ definition value | value <- names],
+        ["TargetEvolution.definitionBinding " ++ definition value | value <- names])
   pure (nub (concat [names | (names,_,_) <- descriptions]),concat [entries | (_,entries,_) <- descriptions],
     concat [bindings | (_,_,bindings) <- descriptions])

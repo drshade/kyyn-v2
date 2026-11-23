@@ -1,1 +1,1 @@
-[] : List { id : Text, value : < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > }
+[] : List { id : Text, value : < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, flow : Text } > }

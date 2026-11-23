@@ -18,7 +18,7 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Control.Monad (unless)
 import qualified Data.Text as Text
 import Kyyn.Contract
-import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), Recipe(..), RecipeId(..), FlowEntryRef(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), CollectionDecl(..))
 import Kyyn.Types.GuestBuild (RecipeReference(..))
 import Kyyn.Types.StoredShape
@@ -37,7 +37,7 @@ data RecipeBinding where
 
 definitionBinding :: RecipeDefinition state -> RecipeBinding
 definitionBinding (RecipeDefinition method binding@(RecipeType name _ _ _)) = RecipeBinding
-  (case method of OpenAgent _ -> OpenState name; ClosedAgent (FlowEntryRef flow) -> ClosedFlow flow) binding
+  (case method of OpenAgent _ _ -> OpenState name; ClosedAgent Ordinary (FlowEntryRef flow) -> ClosedFlow flow; ClosedAgent (Interactive _) (FlowEntryRef flow) -> InteractiveFlow flow) binding
 
 targetBinding :: forall root. Contract root
   => SchemaMetadata -> [RecipeBinding] -> Either ProjectionError (TargetBinding root)
@@ -51,8 +51,9 @@ targetBinding (SchemaMetadata _ _ collections) bindings = do
       encode value = Right (RecordedValue shape (Wire.encodeWith codec value))
   pure (TargetBinding [(name,field) | CollectionDecl name field _ <- collections] shape decode encode decodeRecipe encodeRecipe)
   where
-    key (OpenAgent _) (Just name) = Right (OpenState name)
-    key (ClosedAgent (FlowEntryRef name)) Nothing = Right (ClosedFlow name)
+    key (OpenAgent _ _) (Just name) = Right (OpenState name)
+    key (ClosedAgent Ordinary (FlowEntryRef name)) Nothing = Right (ClosedFlow name)
+    key (ClosedAgent (Interactive _) (FlowEntryRef name)) Nothing = Right (InteractiveFlow name)
     key _ _ = failure "Invalid stored recipe definition"
     select reference = case [binding | binding@(RecipeBinding actual _) <- bindings, actual == reference] of
       [binding] -> Right binding
@@ -66,8 +67,8 @@ targetBinding (SchemaMetadata _ _ collections) bindings = do
     encodeRecipe (Typed.StoredRecipe definition value) = do
       let method = Typed.recipeMethod definition
           authored = case definition of
-            Typed.OpenDefinition _ name -> Just name
-            Typed.ClosedDefinition _ -> Nothing
+            Typed.OpenDefinition _ _ name -> Just name
+            Typed.ClosedDefinition _ _ -> Nothing
       reference <- key method authored
       RecipeBinding _ (RecipeType _ shape encode decode) <- select reference
       state <- either (failure . Text.pack) Right (decode value)

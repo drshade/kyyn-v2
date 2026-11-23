@@ -5,6 +5,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module CandidateTests (candidateTests) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import qualified Kyyn.Types.KnowledgeBase as KB
 import qualified Kyyn.Domain.Recipe as Value
 
@@ -82,7 +83,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       captured = CapturedEvolution context (StoredSnapshot [] [] []) code
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
-      recipeValues = [Fact (FactId "syncTodos") (unitRecipe (KB.OpenAgent "Read and explain λ"))]
+      recipeValues = [Fact (FactId "syncTodos") (unitRecipe (KB.OpenAgent Ordinary "Read and explain λ"))]
       report = EvolutionReport [PluginChange (either error id (pluginName "local-file")) Nothing
         (Just (PluginOrigin (LocalRepository scope) WholeTree revision)) [either error id (relativePath "source/README.md")]]
         [SnapshotStep TargetProjection (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])

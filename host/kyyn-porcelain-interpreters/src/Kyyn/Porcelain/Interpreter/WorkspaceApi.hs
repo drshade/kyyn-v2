@@ -14,7 +14,7 @@ import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), Evol
 import Kyyn.Domain.Root (factsLocation, recipeStatesLocation)
 import Kyyn.Domain.Recipe (RecipeDefinition(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (FlowEntryRef(..), RecipeId(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), FlowEntryRef(..), RecipeId(..))
 import Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Domain.Guest (checkedModules)
@@ -48,8 +48,8 @@ runWorkspaceApi = interpret $ \_ operation -> case operation of
     path <- checked (rootLocation kb)
     accepted <- ExceptT (Git.readTreeExcluding repository revision (Subtree path) [factsLocation,recipeStatesLocation])
     definitions <- ExceptT (readRootRecipes accepted)
-    let reference (OpenRecipe _ name) = OpenState (Text.pack name)
-        reference (ClosedRecipe (FlowEntryRef name)) = ClosedFlow name
+    let reference (OpenRecipe _ _ name) = OpenState (Text.pack name)
+        reference (ClosedRecipe lifetime (FlowEntryRef name)) = case lifetime of Ordinary -> ClosedFlow name; Interactive _ -> InteractiveFlow name
     selected <- case kind of
       AdHoc -> pure Nothing
       RecipeBased (RecipeId name) -> case [reference recipe | Fact (FactId identity) recipe <- definitions, name == identity] of

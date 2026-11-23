@@ -6,6 +6,7 @@
 {-# LANGUAGE GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON)
 import Data.Aeson.Types (parseEither)
@@ -28,7 +29,7 @@ import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(..))
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue)
-import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveRecipeProgram, executeRecordedRecipeProgram)
+import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, executeRecordedRecipeProgram)
 import Kyyn.Porcelain.Capability.RecipeRunStore (withRecipeRun)
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
@@ -113,8 +114,8 @@ main = do
       . capturedEvidence index . runPluginRead . runPluginPreparation . runRootStore
       . runAppendJournalIO . runRecipeRunStore (const (pure ())) . runRecipeInspection . runRecipeExecution $ do
         contracts <- inspectRecipeContracts (SourceRoot rootContract code definition [])
-          [Fact (FactId "review") (R.ClosedRecipe (FlowEntryRef "Flows.review"))]
-        rendered <- describeRecipe (SourceRoot rootContract code definition []) (FlowEntryRef "Flows.review") G.Tree
+          [Fact (FactId "review") (R.ClosedRecipe Ordinary (FlowEntryRef "Flows.review"))]
+        rendered <- describeRecipe (SourceRoot rootContract code definition []) Ordinary (FlowEntryRef "Flows.review") G.Tree
         stored <- materializeRoot rootContract code (R.KnowledgeBase (CheckedValue (contractId schema) (object ["items" .= ([] :: [Value])])) [])
         proposal <- case stored of
           Left errors -> pure (Left errors)
@@ -167,7 +168,7 @@ main = do
             . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . runDocumentPersistenceIO . runFlowJournal kb identity $
-              executeInteractiveRecipeProgram identity (\_ -> case invocation of
+              executeInteractiveProgram identity (\_ -> case invocation of
                 G.FulfilFlow{} -> error "Fulfilment unexpectedly observed execution"
                 _ -> pure ()) waitingEntry plugins Nothing (toJSON invocation)
           right outcome >>= right
