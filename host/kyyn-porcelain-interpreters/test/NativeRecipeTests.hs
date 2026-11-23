@@ -214,6 +214,8 @@ main = do
     case corrupt of Left [Diagnostic _ "flow.bundle-identity" _ _] -> pure (); _ -> fail "Corrupt bundle was not refused"
     Bytes.writeFile bundlePath originalBytes
     removeDirectoryLink retention
+    metadata <- store (readBundleDescription bundleId) >>= right >>= right
+    unless (bundleValue metadata == savedBundle) (fail "Missing executable prevented metadata inspection")
     missing <- store (readExecutionBundle bundleId) >>= right
     case missing of Left [Diagnostic _ "flow.build-unavailable" _ _] -> pure (); _ -> fail "Missing retained build was not refused"
     _ <- store (cancelInstance parent.instanceId Instance.FlowAndDescendants) >>= right >>= right

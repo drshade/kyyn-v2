@@ -610,11 +610,14 @@ kyyn-v2 flow await FLOW_ID
 
 A fulfilment acknowledgement says `queued`, not `accepted`. `flow show` exposes
 the eventual accepted, duplicate, conflicting, invalid or closed outcome and the
-actual reply origin. Invalid replies leave the wait open. Caller keys are
-required: reuse a key to retry the same start or delivery, and choose a new key
-for a new request. A reused key with changed contents is refused.
+actual reply origin. Invalid replies leave the wait open. Omit `--key` for a fresh
+start or delivery; supply a stable key to retry the same request idempotently.
+A reused key with changed contents is refused. Omit `--wait` when exactly one wait
+is open; otherwise the diagnostic lists the IDs to choose from.
 
-`flow worker --once` visits each current instance once and exits. Stopping the
+`--input` and results are Dhall; `--reply` and wait requests are JSON.
+
+`flow worker --once` visits eligible hosted instances once and exits. Stopping the
 worker does not cancel instances. Resumption uses the captured executable,
 original input and journal even if current KB source is broken; inspection and
 resumption do not need Nix. Completed durable operations are restored. An
@@ -625,13 +628,14 @@ failure blocks dispatch until explicitly retried after its cause is resolved:
 kyyn-v2 flow retry FLOW_ID
 kyyn-v2 flow cancel FLOW_ID
 kyyn-v2 flow cancel FLOW_ID --descendants
-kyyn-v2 flow clear FLOW_ID
+kyyn-v2 flow clear FLOW_ID --descendants
 ```
 
-`flow await` returns the terminal outcome, or diagnostics if execution is blocked.
+`flow await` succeeds only on completion; failed, cancelled or blocked outcomes
+return a nonzero exit status and retain the instance details in JSON.
 Cancellation and inspection work without the captured executable. Clearing only
-removes finished instances; include any retained finished children in the same
-`clear` command. It does not delete drafts or viewer recordings.
+removes finished instances; `--descendants` includes the full subtree and refuses
+unless every selected instance is finished. It does not delete drafts or viewer recordings.
 
 Each resume attempt has a run ID and `/runs/RUN_ID` link. Suspended attempts show
 the pending reply count; replayed steps appear as restored. A returned interactive

@@ -12,11 +12,11 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Recipe (RecipeId)
 
 data Flow :: Effect where
-  StartFlowAt :: KnowledgeBase -> GitRevision -> RecipeId -> Text -> Maybe Text
+  StartFlowAt :: KnowledgeBase -> GitRevision -> RecipeId -> Maybe Text -> Maybe Text
     -> Flow m (Either [Diagnostic] FlowInstance)
 type instance DispatchOf Flow = Dynamic
 
-startFlowAt :: Flow :> es => KnowledgeBase -> GitRevision -> RecipeId -> Text -> Maybe Text
+startFlowAt :: Flow :> es => KnowledgeBase -> GitRevision -> RecipeId -> Maybe Text -> Maybe Text
   -> Eff es (Either [Diagnostic] FlowInstance)
 startFlowAt kb revision recipe key = send . StartFlowAt kb revision recipe key
 

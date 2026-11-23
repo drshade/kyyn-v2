@@ -36,10 +36,10 @@ data Selection = Selection
 data OutputMode = Human | Json deriving (Eq, Show)
 
 data Command = WebServe Int (Maybe EvolutionId) | Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand | Run RunCommand | Flow FlowCommand deriving (Eq, Show)
-data FlowCommand = StartFlow RecipeId String (Maybe String) | ListFlows | ShowFlow FlowInstanceId
-  | FulfilFlow FlowInstanceId String String String | AwaitFlow FlowInstanceId
+data FlowCommand = StartFlow RecipeId (Maybe String) (Maybe String) | ListFlows | ShowFlow FlowInstanceId
+  | FulfilFlow FlowInstanceId (Maybe String) (Maybe String) String | AwaitFlow FlowInstanceId
   | CancelFlow FlowInstanceId CancelScope | RetryFlow FlowInstanceId
-  | ClearFlows [FlowInstanceId] | WorkFlows Bool deriving (Eq, Show)
+  | ClearFlows [FlowInstanceId] Bool | WorkFlows Bool deriving (Eq, Show)
 data RunCommand = ListRuns (Maybe RecipeId) | ShowRun RecipeRunId | ClearRun RecipeRunId deriving (Eq, Show)
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
@@ -157,18 +157,18 @@ flowParser = hsubparser
   <> group "list" "List stored instances without compiling the KB" (pure ListFlows)
   <> group "show" "Inspect an instance, pending waits and attempt links" (ShowFlow <$> ident)
   <> group "fulfil" "Queue a reply for validation by the worker"
-    (FulfilFlow <$> ident <*> strOption (long "wait" <> metavar "WAIT_ID") <*> key
+    (FulfilFlow <$> ident <*> optional (strOption (long "wait" <> metavar "WAIT_ID" <> help "Omit when exactly one wait is open")) <*> key
       <*> strOption (long "reply" <> metavar "JSON" <> help "Reply value checked by the actual await codec"))
   <> group "await" "Wait for a terminal outcome; stop with diagnostics if blocked" (AwaitFlow <$> ident)
   <> group "cancel" "Cancel this instance; optionally include descendants"
     (CancelFlow <$> ident <*> flag ThisFlow FlowAndDescendants (long "descendants"))
   <> group "retry" "Explicitly allow a blocked attempt to run again" (RetryFlow <$> ident)
-  <> group "clear" "Clear finished instances together with any referenced children" (ClearFlows <$> some ident)
+  <> group "clear" "Clear finished instances together with any referenced children" (ClearFlows <$> some ident <*> switch (long "descendants" <> help "Include all descendants; every selected instance must be finished"))
   <> group "worker" "Run the foreground worker; does not start Web or accept evolutions"
     (WorkFlows <$> switch (long "once" <> help "Visit each current instance once, then exit")))
   where
     ident = argument (eitherReader (flowInstanceId . Text.pack)) (metavar "FLOW_ID")
-    key = strOption (long "key" <> metavar "KEY" <> help "Stable caller key: retrying the same request is idempotent")
+    key = optional (strOption (long "key" <> metavar "KEY" <> help "Stable caller key for idempotent retries; omitted means a fresh request"))
 
 runParser :: Parser RunCommand
 runParser = hsubparser

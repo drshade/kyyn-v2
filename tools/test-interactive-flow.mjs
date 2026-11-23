@@ -30,6 +30,8 @@ import Kyyn.Agentic (Flow)
 import Kyyn.Plugin (FetchError(..))
 conversation :: Flow Integer Integer
 conversation = A.durably integer integer (\\_ n -> pure (n + 1)) A.>>> A.await integer integer
+multiple :: Flow Integer (Integer,Integer)
+multiple = A.await integer integer A.&&& A.await integer integer
 refuse :: Flow Integer Integer
 refuse = A.act (\\_ -> throwE (FetchError "Authored fixture refusal"))
 integer :: C.Codec Integer
@@ -43,31 +45,48 @@ import qualified Schema
 evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" []) (do
   createInteractiveRecipe (RecipeId "conversation") Flows.conversation
-  createInteractiveRecipe (RecipeId "refuse") Flows.refuse))
+  createInteractiveRecipe (RecipeId "refuse") Flows.refuse
+  createInteractiveRecipe (RecipeId "multiple") Flows.multiple))
 `);
  console.log('Declaring and accepting synthetic interactive recipes');
  cli(['evolution','check',setup.id]);cli(['evolution','ready',setup.id]);cli(['evolution','accept',setup.id]);
  const accepted=invoke('git',['-C',kb,'rev-parse','HEAD']).trim();
  const started=cli(['flow','start','conversation','--key','demo','--input','+1']).result;
+ assert.equal(started.input,'+1');
  assert.equal(started.status,'runnable');assert.deepEqual(started.attempts,[]);
  assert.equal(cli(['flow','start','conversation','--key','demo','--input','+1']).result.id,started.id);
  cli(['flow','start','conversation','--key','demo','--input','+2'],1);
  const cancelled=cli(['flow','start','conversation','--key','cancel-demo','--input','+1']).result;
  const failed=cli(['flow','start','refuse','--key','failure-demo','--input','+1']).result;
  assert.equal(invoke('git',['-C',kb,'rev-parse','HEAD']).trim(),accepted,'Start changed accepted knowledge');
+ const fresh=cli(['flow','start','conversation','--input','+1']).result;
+ const freshAgain=cli(['flow','start','conversation','--input','+1']).result;
+ assert.notEqual(fresh.id,freshAgain.id);
+ runtime(['flow','cancel',fresh.id]);runtime(['flow','cancel',freshAgain.id]);
+ const multiple=cli(['flow','start','multiple','--input','+1']).result;
  const worker=background(['flow','worker']);
  await until(()=>show(started.id).status==='waiting');
  await until(()=>show(cancelled.id).status==='waiting');
  await until(()=>show(failed.id).status==='failed');
+ await until(()=>show(multiple.id).status==='waiting');
+ const open=show(multiple.id).waits.filter(x=>x.status==='open');assert.equal(open.length,2);
+ const ambiguous=runtime(['flow','fulfil',multiple.id,'--reply','7'],1);
+ for(const wait of open)assert.ok(ambiguous.diagnostics[0].message.includes(wait.id));
+ runtime(['flow','cancel',multiple.id]);
+ assert.equal(runtime(['flow','await',failed.id],1).result.status,'failed');
  const waiting=show(started.id),wait=waiting.waits.find(x=>x.status==='open');
  assert.equal(wait.descriptor.request,2);assert.equal(waiting.attempts.length,1);
  assert.equal(waiting.attempts[0].path,'/runs/'+waiting.attempts[0].id);
  runtime(['run','clear',waiting.attempts[0].id]);
  assert.equal(show(started.id).attempts.length,1,'Clearing recording removed the durable link');
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','invalid','--reply','"not an integer"']);
- await until(()=>show(started.id).deliveries[0].outcome.invalid!==undefined);
+ await until(()=>show(started.id).deliveries[0].outcome==='invalid');
  assert.equal(show(started.id).status,'waiting');assert.equal(show(started.id).attempts.length,1);
  runtime(['flow','cancel',cancelled.id]);assert.equal(show(cancelled.id).status,'cancelled');
+ assert.equal(runtime(['flow','await',cancelled.id],1).result.status,'cancelled');
+ const closed=runtime(['flow','fulfil',cancelled.id,'--wait','missing','--reply','7'],1);
+ assert.equal(closed.result.outcome,'closed');
+ assert.equal(show(cancelled.id).deliveries.at(-1).outcome,'closed');
  worker.child.kill('SIGINT');await once(worker.child,'exit');
  assert.equal(show(started.id).status,'waiting','Stopping worker cancelled a flow');
  // New accepted source cannot replace the pinned executable/input/configuration.
@@ -75,19 +94,28 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  invoke('git',['-C',kb,'add','root/src/Conversations.hs']);invoke('git',['-C',kb,'-c','commit.gpgsign=false','commit','-qm','Break current source for pinned-runtime test']);
  const brokenRevision=invoke('git',['-C',kb,'rev-parse','HEAD']).trim();
  const waiter=background(['flow','await',started.id]);
- runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','answer','--reply','9']);
+ const delivery=runtime(['flow','fulfil',started.id,'--reply','9']).result;
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','same','--reply','9']);
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','conflict','--reply','10']);
- runtime(['flow','worker','--once']);
+ const visits=runtime(['flow','worker','--once']).result.visits;
+ assert.deepEqual(visits,[{id:started.id,outcome:'advanced'}]);
  await until(()=>waiter.child.exitCode!==null);
  assert.equal(waiter.child.exitCode,0,waiter.errors());
  assert.equal(JSON.parse(waiter.output()).result.status,'completed');
- const completed=show(started.id);assert.equal(completed.result,'9');assert.equal(completed.revision,accepted);
+ const completed=show(started.id);assert.equal(completed.result,'+9');assert.equal(completed.revision,accepted);
  assert.deepEqual(completed.deliveries.slice(1).map(x=>x.outcome),['accepted','duplicate','conflicting']);
  assert.equal(completed.waits[0].reply.origin.surface,'cli');
+ assert.notEqual(delivery.id,completed.deliveries[2].id);
+ assert.deepEqual(runtime(['flow','worker','--once']).result.visits,[]);
+ // Missing metadata degrades rendering, never hides lifecycle state.
+ const bundle=path.join(kb,'.kyyn/flows/bundles',completed.owner.bundle+'.json');
+ const captured=fs.readFileSync(bundle);fs.unlinkSync(bundle);
+ const absent=show(started.id);assert.equal(absent.status,'completed');assert.equal(absent.result,null);
+ assert.equal(absent.inspectionDiagnostics[0].code,'flow.bundle-missing');
+ fs.writeFileSync(bundle,captured);
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);
- runtime(['flow','clear',started.id,cancelled.id,failed.id]);
+ runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,'--descendants']);
  assert.deepEqual(runtime(['flow','list']).result.instances,[]);
  assert.equal(runtime(['run','show',completed.attempts[1].id]).result.status,'returned','Clearing flow hid its recording');
  assert.equal(invoke('git',['-C',kb,'rev-parse','HEAD']).trim(),brokenRevision,'Runtime changed accepted knowledge');

@@ -11,7 +11,7 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Plumbing.Capability.Git (Git, readTreeAt)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, readRootRecipes)
 import Kyyn.Porcelain.Capability.FlowPreparation (FlowPreparation, prepareInteractiveFlow)
-import Kyyn.Porcelain.Capability.FlowStore (FlowStore, startPreparedInstance)
+import Kyyn.Porcelain.Capability.FlowStore (FlowStore, startPreparedInstance, startNewPreparedInstance)
 import Kyyn.Porcelain.Capability.Flow
 
 runFlow :: (Git :> es, RootStore :> es, FlowPreparation :> es, FlowStore :> es)
@@ -19,10 +19,10 @@ runFlow :: (Git :> es, RootStore :> es, FlowPreparation :> es, FlowStore :> es)
 runFlow = interpret $ \_ (StartFlowAt kb revision recipe key input) -> start kb revision recipe key input
   where
     start kb@(KnowledgeBase repository _) revision recipe key input = runExceptT $ do
-      if Text.null (Text.strip key) then throwE [errorDiagnostic "flow.key" "Supply a nonempty caller key"] else pure ()
+      if maybe False (Text.null . Text.strip) key then throwE [errorDiagnostic "flow.key" "Supply a nonempty caller key"] else pure ()
       location <- either (throwE . pure . errorDiagnostic "kb.path") pure (rootLocation kb)
       source <- ExceptT (readTreeAt repository revision (Subtree location))
       recipes <- ExceptT (readRootRecipes source)
       prepared <- ExceptT (prepareInteractiveFlow revision source recipes recipe input)
-      ExceptT (either (Left . pure . flowProblem) Right <$> startPreparedInstance Nothing key prepared)
+      ExceptT (either (Left . pure . flowProblem) Right <$> maybe (startNewPreparedInstance Nothing) (startPreparedInstance Nothing) key prepared)
     
