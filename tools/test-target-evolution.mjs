@@ -41,7 +41,7 @@ assert.equal(result.value.after.recipes.length, 3);
 assert.equal(result.value.after.recipes[0].id, 'weekly');
 assert.deepEqual(result.value.after.recipes[0].value.state, {runs: '4', reviewed: true});
 const interactive = result.value.after.recipes.find(r => r.id === 'conversation');
-assert.deepEqual(interactive.value.definition, {tag: 'ClosedAgent', value: {lifetime: {tag: 'Interactive', value: {children: []}}, flow: 'Flows.conversation'}});
+assert.deepEqual(interactive.value.definition, {tag: 'ClosedAgent', value: {lifetime: {tag: 'Interactive', value: {children: [], events: []}}, flow: 'Flows.conversation'}});
 assert.deepEqual(interactive.value.state, {});
 const parent = result.value.after.recipes.find(r => r.id === 'coordinator');
 assert.deepEqual(parent.value.definition.value.lifetime.value.children, [{recipe: 'conversation', flow: 'Flows.conversation'}]);

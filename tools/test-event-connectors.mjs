@@ -16,13 +16,59 @@ try {
  const draft=cli(['evolution','new','events']).result;
  const config=cli(['plugin','install','--evolution',draft.id,'--from',path.join(repo,'tools/fixtures/event-plugin')]).result.configuration;
  fs.writeFileSync(path.join(kb,config.path),'[ { name = "updates", binding = "updates", connector = < Updates : Integer >.Updates +10 } ]');
+ const target=path.join(draft.path,'target');
+ fs.writeFileSync(path.join(target,'src/Conversations.hs'),`module Conversations where
+import qualified Agentic as A
+import Kyyn.Agentic (Flow)
+import Kyyn.Interactive (EventRef)
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_event_fixture.Updates as Updates
+import qualified Events
+import Data.Text (Text)
+reference = Updates.question Connectors.updates
+inputWitness :: EventRef request reply -> request -> ()
+inputWitness _ _ = ()
+replyWitness :: EventRef request reply -> (reply -> Text) -> ()
+replyWitness _ _ = ()
+conversation :: Flow () ()
+conversation = A.arr (\\_ -> case inputWitness reference (Events.makeRequest "Update please") of () -> replyWitness reference Events.replyText)
+`);
+ const declaration=`module Evolution where
+import Kyyn.Workspace.Evolution
+import Kyyn.Interactive (createInteractiveRecipe, withEvents, event)
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Conversations as Flows
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_event_fixture.Updates as Updates
+import qualified Schema
+evolution :: Evolution Schema.Root
+evolution = prepare (pure ()) (edit (Rationale "Declare the event conversation" [])
+  (createInteractiveRecipe (RecipeId "conversation") (withEvents [event (Updates.question Connectors.updates)] Flows.conversation)))
+`;
+ const evolutionFile=path.join(draft.path,'change/Evolution.hs');fs.writeFileSync(evolutionFile,declaration);
  cli(config.schemaCommand.slice('kyyn-v2 '.length).split(' '));
  cli(config.checkCommand.slice('kyyn-v2 '.length).split(' '));
+ fs.writeFileSync(evolutionFile,declaration.replace('[event (Updates.question Connectors.updates)]','[event (Updates.question Connectors.updates), event (Updates.question Connectors.updates)]'));
+ assert.match(JSON.stringify(cli(['evolution','check',draft.id],1)),/duplicate event declarations/);
+ fs.writeFileSync(evolutionFile,declaration.replace('import qualified Schema','import Kyyn.Types.Plugin (ConnectorInstance)\nimport qualified Schema').replace('Updates.question Connectors.updates','Updates.question (undefined :: ConnectorInstance ())'));
+ cli(['evolution','check',draft.id],1);
+ fs.writeFileSync(evolutionFile,declaration);
+ cli(['evolution','check',draft.id]);
  cli(['evolution','ready',draft.id]);
  cli(['evolution','accept',draft.id]);
+ const started=cli(['flow','start','conversation']).result;assert(started);
+ const changed=cli(['evolution','new','contract-drift']).result;
+ const source=path.join(changed.path,'target/plugins/packages/event-fixture/source/src/Events.hs');
+ fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('question :: Text','question :: Text, revision :: Integer').replace('makeRequest = Request','makeRequest text = Request text 0').replace('(Request question)','(Request question _)'));
+ cli(['evolution','check',changed.id]);
+ cli(['evolution','ready',changed.id]);
+ cli(['evolution','accept',changed.id]);
  cli(['plugin','connector','login','event-fixture','updates']);
  const refused=cli(['evidence','fetch','event-fixture','updates'],1);
  assert.match(JSON.stringify(refused),/source connector/);
+ const unsupported=cli(['evolution','new','unsupported-event']).result;
+ const unsupportedSource=path.join(unsupported.path,'target/plugins/packages/event-fixture/source/src/Events.hs');
+ fs.writeFileSync(unsupportedSource,fs.readFileSync(unsupportedSource,'utf8').replace('answer :: Text','answer :: Text, next :: Maybe Reply').replace('(Reply question)','(Reply question Nothing)').replace('(Reply text)','(Reply text _)'));
+ assert.match(JSON.stringify(cli(['plugin','connector','schema','show','event-fixture','--evolution',unsupported.id],1)),/recursive|Recursive/);
  web=spawn(executable,['--kb',kb,'web','serve','--port','0'],{cwd:temporary,env});
  let errors='';web.stderr.on('data',x=>errors+=x);
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});

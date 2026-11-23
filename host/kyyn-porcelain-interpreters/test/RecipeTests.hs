@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs #-}
 module RecipeTests (recipeTests) where
 
-import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference), FlowEntryRef(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..), flowClosure)
 import Control.Monad (unless)
 import qualified Data.Text as Text
@@ -44,25 +44,30 @@ recipeTests = do
     Left diagnostics -> let rendered = Text.pack (show diagnostics)
                         in "recipes.dhall" `Text.isInfixOf` rendered && "lifetime" `Text.isInfixOf` rendered
     Right _ -> False)
-  let child = Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.child"))
+  let child = Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [] [])) (FlowEntryRef "Flows.child"))
       parent = Fact (FactId "parent") (ClosedRecipe
-        (Interactive (InteractionBindings [ChildReference (RecipeId "child") (FlowEntryRef "Flows.child")])) (FlowEntryRef "Flows.parent"))
+        (Interactive (InteractionBindings [ChildReference (RecipeId "child") (FlowEntryRef "Flows.child")] [])) (FlowEntryRef "Flows.parent"))
       refused definitions = case checkRecipeDefinitions definitions of
         Left diagnostics -> let rendered = Text.pack (show diagnostics)
                             in "parent" `Text.isInfixOf` rendered && "child" `Text.isInfixOf` rendered
         Right _ -> False
   check "Parent and child added together refused" (checkRecipeDefinitions [parent,child] == Right [parent,child])
   let duplicateParent = Fact (FactId "parent") (ClosedRecipe
-        (Interactive (InteractionBindings (replicate 2 (ChildReference (RecipeId "child") (FlowEntryRef "Flows.child"))))) (FlowEntryRef "Flows.parent"))
+        (Interactive (InteractionBindings (replicate 2 (ChildReference (RecipeId "child") (FlowEntryRef "Flows.child"))) [])) (FlowEntryRef "Flows.parent"))
       self = Fact (FactId "self") (ClosedRecipe
-        (Interactive (InteractionBindings [ChildReference (RecipeId "self") (FlowEntryRef "Flows.self")])) (FlowEntryRef "Flows.self"))
+        (Interactive (InteractionBindings [ChildReference (RecipeId "self") (FlowEntryRef "Flows.self")] [])) (FlowEntryRef "Flows.self"))
   check "Duplicate child accepted" (case checkRecipeDefinitions [duplicateParent,child] of Left _ -> True; Right _ -> False)
+  let eventRef = EventReference "fixture" "Updates" "updates" "question"
+      duplicateEvents = Fact (FactId "events") (ClosedRecipe (Interactive (InteractionBindings [] [eventRef,eventRef])) (FlowEntryRef "Flows.events"))
+  check "Duplicate event declarations accepted" (case checkRecipeDefinitions [duplicateEvents] of
+    Left diagnostics -> "duplicate event declarations" `Text.isInfixOf` Text.pack (show diagnostics)
+    Right _ -> False)
   check "Self reference refused" (checkRecipeDefinitions [self] == Right [self])
   check "Missing child accepted" (refused [parent])
   check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
-  check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.other"))])
+  check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [] [])) (FlowEntryRef "Flows.other"))])
   let flow name refs = Fact (FactId name) (ClosedRecipe (Interactive (InteractionBindings
-        [ChildReference (RecipeId childName) (FlowEntryRef "Flows.shared") | childName <- refs])) (FlowEntryRef "Flows.shared"))
+        [ChildReference (RecipeId childName) (FlowEntryRef "Flows.shared") | childName <- refs] [])) (FlowEntryRef "Flows.shared"))
       graph = [flow "root" ["left","right"], flow "left" ["leaf"], flow "right" ["leaf"], flow "leaf" ["root"], flow "unused" []]
   check "Closure must handle diamond/cycle and preserve IDs sharing source" (case flowClosure graph (RecipeId "root") of
     Right declarations -> [ident | FlowDeclaration ident _ _ <- declarations] == map RecipeId ["root","left","leaf","right"]
@@ -81,4 +86,4 @@ recording selected = interpret $ \_ request -> case request of
   _ -> error "Recipe discovery performed a non-document Git operation"
 
 recipeData :: ByteString
-recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"
+recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"

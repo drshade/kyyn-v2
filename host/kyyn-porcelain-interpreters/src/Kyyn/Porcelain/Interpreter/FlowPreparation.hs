@@ -16,7 +16,7 @@ import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..), flowClosure)
 import Kyyn.Domain.Guest (InspectedSchema(..))
 import qualified Kyyn.Types.Guest as G
-import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..), InteractionBindings(..))
 import Kyyn.Types.Wire (parseWire)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
@@ -26,6 +26,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeEntry)
 import Kyyn.Plumbing.Protocol.Tool (decodeFlowValue)
 import Kyyn.Porcelain.Capability.FlowPreparation
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePluginsFromGuest)
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings)
 import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 
 runFlowPreparation :: (GuestCompilation :> es, GuestInspection :> es, GuestExecution :> es,
@@ -56,5 +57,6 @@ runFlowPreparation = interpret $ \_ -> \case
         Nothing -> throwE [errorDiagnostic "flow.input-required" "This interactive flow requires an input"]
       [] -> throwE [errorDiagnostic "flow.declaration" "Interactive closure is empty"]
     plugins <- ExceptT (preparePluginsFromGuest code program description)
+    mapM_ (\declaration -> ExceptT (pure (checkEventBindings declaration.bindings.events plugins))) declarations
     model <- ExceptT (readModelConfiguration code)
     pure (PreparedFlow selected input (FlowBundle revision program description prepared plugins model))

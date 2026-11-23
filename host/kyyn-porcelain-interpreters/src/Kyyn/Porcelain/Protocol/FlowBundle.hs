@@ -27,10 +27,11 @@ import Kyyn.Domain.Secret (secretNameText)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import qualified Kyyn.Types.Guest as G
-import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..), Lifetime(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..), Lifetime(..), InteractionBindings(..))
 import Kyyn.Plumbing.Protocol.ModelConfiguration (decodeConfiguration)
 import Kyyn.Porcelain.Capability.FlowPreparation
 import Kyyn.Porcelain.Capability.PluginPreparation
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings)
 import Kyyn.Porcelain.Protocol.PluginDescription (connectorDescription)
 
 bundleValue :: FlowBundle -> Value
@@ -98,6 +99,7 @@ parseBundle = exactObject "execution bundle" ["revision","program","guest","flow
       resolved <- either (fail . show) pure (flowClosure definitions first.declaration.recipe)
       unless (resolved == map (.declaration) flows) (fail "Captured closure is incomplete or contains undeclared entries")
   plugins <- fields .: "plugins" >>= traverse (parsePlugin program guest)
+  mapM_ (\flow -> either (fail . show) pure (checkEventBindings flow.declaration.bindings.events plugins)) flows
   let names = [name | PreparedPlugin (PreparedPackage name _ _) _ <- plugins]
       bindings = [binding | PreparedPlugin _ instances <- plugins, ConfiguredConnector _ binding _ _ <- instances]
   unless (length names == length (nub names) && length bindings == length (nub bindings)) (fail "Duplicate captured plugin or binding")

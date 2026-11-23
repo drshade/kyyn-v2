@@ -174,7 +174,12 @@ EventBindingRef identifies the captured plugin/instance/event declaration; its
 configured request/reply contracts are checked against the EventRef. The generated
 wrapper passes EventRequest request to await, so the host routes the persisted
 request by this binding, not by schema shape, labels or question text. The worker
-rejects bindings outside the instance's captured declarations before dispatch.
+rejects bindings outside the instance's captured declarations when a wait is
+published: the attempt blocks with an instance/event diagnostic, with no provider
+dispatch or reply wait recorded. Preparation rejects missing or duplicate declared
+events; the compiler checks authored uses against the current plugin types. The
+published wait is checked against its captured request/reply contracts. Preparation does not execute
+an arbitrary flow to discover every event a later data-dependent branch may use.
 No separate openWait operation or explicit send before await is required.
 The persistence envelope reserves the top-level `kyynWait` field: `"event"`
 selects an event binding and `"child"` selects a child-completion wait. A bare

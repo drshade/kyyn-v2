@@ -116,7 +116,7 @@ runFlowStore kb = interpret $ \_ operation -> do
                       parentDefinition <- case [flow.declaration | flow <- prepared.bundle.closure, flow.declaration.recipe == parentRecipe] of
                         [definition] -> Right definition
                         _ -> Left (InvalidTransition "Parent is missing from its captured execution bundle")
-                      let InteractionBindings allowed = parentDefinition.bindings
+                      let InteractionBindings allowed _ = parentDefinition.bindings
                       unless (ChildReference selected.recipe selected.entry `elem` allowed)
                         (Left (InvalidTransition "Child is outside the parent's declared child set"))
             case authority of

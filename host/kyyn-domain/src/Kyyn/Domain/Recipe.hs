@@ -17,7 +17,7 @@ import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Guest (DescriptionFormat(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference), Recipe(..), RecipeId(..), FlowEntryRef(..))
 
 recipeId :: String -> Either String RecipeId
 recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId (Text.pack value)))) (bindingName value)
@@ -68,9 +68,11 @@ checkRecipeDefinitions definitions = do
   mapM_ checkChildren definitions
   pure definitions
   where
-    checkChildren (Fact (FactId parent) (ClosedRecipe (Interactive (InteractionBindings refs)) _)) = do
+    checkChildren (Fact (FactId parent) (ClosedRecipe (Interactive (InteractionBindings refs selectedEvents)) _)) = do
       unless (length refs == length (nub refs)) (bad ("Recipe " <> Text.unpack parent <> ": duplicate child declarations"))
       mapM_ (checkChild parent) refs
+      let identities = [(p,i,m) | EventReference p _ i m <- selectedEvents]
+      unless (length identities == length (nub identities)) (bad ("Recipe " <> Text.unpack parent <> ": duplicate event declarations"))
     checkChildren _ = pure ()
     checkChild parent (ChildReference (RecipeId child) expected) =
       case [definition | Fact (FactId name) definition <- definitions, name == child] of

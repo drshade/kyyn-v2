@@ -1,6 +1,7 @@
 module Kyyn.Interactive
-  ( FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
+  ( EventRef, EventBinding, event, withEvents, FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
 
+import Kyyn.Interactive.Event (EventRef, EventBinding(..), event)
 import Kyyn.Interactive.Control (FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped)
 import Kyyn.Types.FlowStatus (FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..))
 import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef, ChildFlow(..))
@@ -24,8 +25,13 @@ createInteractiveRecipe ident definition = createRecipe ident (interactiveRecipe
 child :: RecipeId -> FlowDefinition input output -> ChildFlow
 child ident (FlowDefinition entry _ _ _ _) = ChildFlow (ChildReference ident entry)
 
--- | Declare the children this flow may start. References are resolved against
+-- | Replace the declared children this flow may start; preserve its event declarations. References are resolved against
 -- the complete evolution target, so parent and child may be added together.
 withChildren :: [ChildFlow] -> FlowDefinition input output -> FlowDefinition input output
-withChildren refs (FlowDefinition entry _ state input output) =
-  FlowDefinition entry (InteractionBindings [r | ChildFlow r <- refs]) state input output
+withChildren refs (FlowDefinition entry bindings state input output) =
+  FlowDefinition entry (bindings { children = [r | ChildFlow r <- refs] }) state input output
+
+-- | Replace the declared event providers this flow may await; preserve its children.
+withEvents :: [EventBinding] -> FlowDefinition input output -> FlowDefinition input output
+withEvents refs (FlowDefinition entry bindings state input output) =
+  FlowDefinition entry (bindings { events = [r | EventBinding r <- refs] }) state input output

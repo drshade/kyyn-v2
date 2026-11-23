@@ -369,6 +369,6 @@ preparedFixture = PreparedFlow (RecipeId "fixture") (object []) bundle
     program = CompiledProgram (BuildIdentity "fixture" "fixture" "fixture.drv" "/fixture") "/fixture/bin/kyyn-guest" "/fixture"
     entry = case compiledEntries program guest of [selected] -> selected; _ -> error "Fixture entry missing"
     declaration = FlowDeclaration (RecipeId "fixture") (FlowEntryRef "Flows.fixture")
-      (InteractionBindings [ChildReference (RecipeId "fixture") (FlowEntryRef "Flows.fixture")])
+      (InteractionBindings [ChildReference (RecipeId "fixture") (FlowEntryRef "Flows.fixture")] [])
     bundle = FlowBundle (either error id (gitRevision (replicate 40 'a'))) program guest
       [PreparedFlowEntry declaration entry contract contract (object []) "fixture"] [] Nothing

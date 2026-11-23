@@ -6,7 +6,7 @@
 {-# LANGUAGE GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
-import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Control.Monad (unless, void, when)
@@ -167,7 +167,7 @@ main = do
         | identity == contractId state && value == object ["runs" .= String "5"] -> pure ()
       other -> fail ("Wrong native recipe result: " ++ show other)
     let declaration ident children = Fact (FactId ident) (R.ClosedRecipe
-          (Interactive (InteractionBindings children)) (FlowEntryRef "Flows.waiting"))
+          (Interactive (InteractionBindings children [])) (FlowEntryRef "Flows.waiting"))
         declarations = [declaration "parent" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")],
           declaration "child" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]]
     preparedInteractive <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
@@ -180,6 +180,23 @@ main = do
       (fail "Preparation lost request or declaration identities sharing one source")
     unless (all (\selected -> entryProgram selected.entry == program && not (Text.null selected.mermaid)) interactive.bundle.closure)
       (fail "Closure does not retain the checked executable and graph")
+    let eventReference = EventReference "local-file" "Updates" "updates" "question"
+        withEvent ref = [Fact (FactId "event") (R.ClosedRecipe
+          (Interactive (InteractionBindings [] [ref])) (FlowEntryRef "Flows.waiting"))]
+        captureEvent ref = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+          . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
+          . runPluginPreparation . runFlowPreparation $
+            prepareInteractiveFlow (either error id (gitRevision (replicate 40 'a'))) code (withEvent ref) (R.RecipeId "event") (Just "+1")
+    declared <- captureEvent eventReference >>= right >>= right
+    unless ([flow.declaration.bindings | flow <- declared.bundle.closure] == [InteractionBindings [] [eventReference]])
+      (fail "Capture lost permitted event declaration")
+    reopenedEvent <- right (parseEither parseBundle (bundleValue declared.bundle))
+    unless (bundleValue reopenedEvent == bundleValue declared.bundle) (fail "Event declaration changed on reopen")
+    Foldable.forM_ [EventReference "local-file" "Updates" "missing" "question",
+      EventReference "local-file" "Updates" "updates" "missing",
+      EventReference "local-file" "Other" "updates" "question"] $ \invalid -> do
+        refusedCapture <- captureEvent invalid >>= right
+        case refusedCapture of Left _ -> pure (); Right _ -> fail "Invalid event declaration captured"
     let originalBundle = interactive.bundle
         capturedBundle = FlowBundle originalBundle.revision originalBundle.program originalBundle.guest originalBundle.closure originalBundle.plugins
           (Just (ModelConfiguration Anthropic "fixture-model" (either error id (secretName "model-credential"))))
@@ -438,7 +455,7 @@ main = do
     -- Crash precisely after child publication and before the durable completion
     -- is saved. A new guest process must recover the same child, then replay it.
     let parentDeclarations = [Fact (FactId "coordinator") (R.ClosedRecipe
-          (Interactive (InteractionBindings [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]))
+          (Interactive (InteractionBindings [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")] []))
           (FlowEntryRef "Flows.parentWaiting")), declaration "child" []]
     preparedParent <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program

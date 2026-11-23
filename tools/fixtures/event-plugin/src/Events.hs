@@ -1,4 +1,4 @@
-module Events where
+module Events (connectors, validate, login, dispatchQuestion, pollUpdates, makeRequest, replyText) where
 
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -29,3 +29,9 @@ dispatchQuestion config _ = pure (Right (Cursor config))
 pollUpdates :: Integer -> EventPoll Request Cursor -> LiveEvent (Either FetchError (EventBatch Reply Cursor))
 pollUpdates config (EventPoll (WaitId identity) (Request question) _) =
   pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply question)] (Cursor config)))
+
+makeRequest :: Text -> Request
+makeRequest = Request
+
+replyText :: Reply -> Text
+replyText (Reply text) = text

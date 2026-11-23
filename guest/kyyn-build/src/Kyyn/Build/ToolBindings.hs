@@ -43,6 +43,19 @@ writeToolBindings generated roots plugins = do
        "import qualified KyynToolCalls as Calls",
        "listEvidenceIds = Calls.listEvidence_" ++ tag index,
        "readEvidence = Calls.readEvidence_" ++ tag index])
+  let eventConnectors = [(plugin,connector,events) | RegisteredPlugin plugin declarations <- plugins,
+        connector@(P.EventConnector _ _ _ events) <- declarations]
+  forM_ eventConnectors $ \(plugin,connector,events) -> do
+    eventModules <- traverse (fmap (Text.unpack . referenceModule) . either fail pure . qualifiedReference False . (.poll)) events
+    let name = proxyModule plugin.pluginName connector.name
+    write name (unlines
+      (["{-# LANGUAGE NoMonomorphismRestriction #-}","module " ++ name ++ " (" ++
+          intercalate "," ("Instance" : [Text.unpack method.eventName | method <- events]) ++ ") where",
+        "import Kyyn.Types.Plugin (ConnectorInstance)","import qualified Kyyn.Runtime.Bindings as Bindings"] ++ map ("import qualified " ++) (nub eventModules) ++
+       ["data Tag", "type Instance = ConnectorInstance Tag"] ++
+       [Text.unpack method.eventName ++ " _kyynInstance = Bindings.eventRef " ++ unwords (map show
+          [plugin.pluginName,connector.name,method.eventName]) ++ " " ++ Text.unpack method.poll ++ " (_kyynInstance :: Instance)" |
+          method <- events]))
   configured <- fmap concat $ forM plugins $ \(RegisteredPlugin plugin declarations) -> do
     let path = "plugins/config/" ++ Text.unpack plugin.pluginName ++ ".dhall"
     exists <- doesFileExist path
@@ -57,7 +70,14 @@ writeToolBindings generated roots plugins = do
   write "Kyyn.Connectors" (unlines
     (["module Kyyn.Connectors where",
       "import Kyyn.Types.Program (Program)","import Kyyn.Types.Plugin (ConnectorInstance(..))",
-      "import qualified KyynToolCalls as Calls", "type Tool = Program Calls.Calls"] ++
+      "import qualified KyynToolCalls as Calls"] ++
+     ["import qualified " ++ proxyModule plugin.pluginName connector.name ++ " as E" ++ show index |
+       (index,(plugin,connector,_)) <- zip [0 :: Int ..] eventConnectors] ++ ["type Tool = Program Calls.Calls"] ++
+     concat [[Text.unpack selected.instanceBinding ++ " :: E" ++ show index ++ ".Instance",
+       Text.unpack selected.instanceBinding ++ " = ConnectorInstance " ++ show selected.instanceName] |
+       (plugin,selected,False) <- configured,
+       (index,(actual,connector,_)) <- zip [0 :: Int ..] eventConnectors,
+       actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector] ++
      concat [[Text.unpack selected.instanceBinding ++ " :: ConnectorInstance Calls." ++ tag index,
        Text.unpack selected.instanceBinding ++ " = ConnectorInstance " ++ show selected.instanceName] |
        (plugin,selected,True) <- configured,
