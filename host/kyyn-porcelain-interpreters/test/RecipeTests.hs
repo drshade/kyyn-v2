@@ -2,6 +2,7 @@
 module RecipeTests (recipeTests) where
 
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), FlowEntryRef(..))
+import Kyyn.Domain.FlowClosure (FlowDeclaration(..), flowClosure)
 import Control.Monad (unless)
 import qualified Data.Text as Text
 import Data.ByteString (ByteString)
@@ -60,6 +61,13 @@ recipeTests = do
   check "Missing child accepted" (refused [parent])
   check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
   check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.other"))])
+  let flow name refs = Fact (FactId name) (ClosedRecipe (Interactive (InteractionBindings
+        [ChildReference (RecipeId child) (FlowEntryRef "Flows.shared") | child <- refs])) (FlowEntryRef "Flows.shared"))
+      graph = [flow "root" ["left","right"], flow "left" ["leaf"], flow "right" ["leaf"], flow "leaf" ["root"], flow "unused" []]
+  check "Closure must handle diamond/cycle and preserve IDs sharing source" (case flowClosure graph (RecipeId "root") of
+    Right declarations -> [ident | FlowDeclaration ident _ _ <- declarations] == map RecipeId ["root","left","leaf","right"]
+    Left _ -> False)
+  check "Ordinary flow must not start interactively" (case flowClosure [recipe] (RecipeId "syncTodos") of Left _ -> True; Right _ -> False)
   putStrLn "Recipe discovery reads only selected Git recipe definitions without a compiler."
 
 repository :: Repository

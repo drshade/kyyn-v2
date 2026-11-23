@@ -6,7 +6,7 @@
 {-# LANGUAGE GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
-import Kyyn.Types.KnowledgeBase (Lifetime(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..))
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON)
 import Data.Aeson.Types (parseEither)
@@ -21,6 +21,9 @@ import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
+import Kyyn.Porcelain.Capability.FlowPreparation
+import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -137,6 +140,27 @@ main = do
       Right (FactProposal [FactProposalStep _ [_]] (CheckedValue identity value))
         | identity == contractId state && value == object ["runs" .= String "5"] -> pure ()
       other -> fail ("Wrong native recipe result: " ++ show other)
+    let declaration ident children = Fact (FactId ident) (R.ClosedRecipe
+          (Interactive (InteractionBindings children)) (FlowEntryRef "Flows.waiting"))
+        declarations = [declaration "parent" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")],
+          declaration "child" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]]
+    preparedInteractive <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+      . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
+      . runPluginPreparation . runFlowPreparation $
+        prepareInteractiveFlow code declarations (R.RecipeId "parent") (Just "+1")
+    interactive <- right preparedInteractive >>= right
+    unless (interactive.request == String "1" &&
+        map (\selected -> selected.declaration.recipe) interactive.closure == [R.RecipeId "parent",R.RecipeId "child"])
+      (fail "Preparation lost request or declaration identities sharing one source")
+    unless (all (\selected -> entryProgram selected.entry == program && not (Text.null selected.mermaid)) interactive.closure)
+      (fail "Closure does not retain the checked executable and graph")
+    invalidInteractive <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+      . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
+      . runPluginPreparation . runFlowPreparation $
+        prepareInteractiveFlow code declarations (R.RecipeId "parent") (Just "True")
+    case invalidInteractive of
+      Right (Left _) -> pure ()
+      _ -> fail "Preparation accepted an invalid request"
     waitingEntry <- case filter ((== "$interactive.Flows.waiting") . invocationName) (compiledEntries program description) of
       [entry] -> pure entry
       _ -> fail "Missing waiting recipe"
@@ -192,7 +216,7 @@ main = do
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
 fixedCompilation program = interpret $ \_ (CompileGuest source) ->
-  if selectedBuild source == RecipeEntries [ClosedFlow "Flows.review"] then pure (Right program)
+  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"]] then pure (Right program)
   else error "Recipe path attempted a separate plugin or host-generated build"
 
 capturedEvidence :: EvidenceIndex -> Eff (EvidenceStore : es) a -> Eff es a
