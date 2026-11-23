@@ -1,11 +1,14 @@
 {-# LANGUAGE DataKinds, GADTs, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.FlowPreparation
-  (FlowPreparation(..), PreparedFlow(..), PreparedFlowEntry(..), prepareInteractiveFlow) where
+  (FlowPreparation(..), PreparedFlow(..), FlowBundle(..), PreparedFlowEntry(..), prepareInteractiveFlow) where
 
 import Data.Aeson (Value)
 import Data.Text (Text)
 import Effectful (Effect, Eff, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
+import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.Guest (CheckedGuest)
+import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -24,15 +27,17 @@ data PreparedFlowEntry = PreparedFlowEntry
   , inputContract :: CheckedContract, outputContract :: CheckedContract
   , graph :: Value, mermaid :: Text }
 data PreparedFlow = PreparedFlow
-  { selected :: RecipeId, request :: Value, closure :: [PreparedFlowEntry]
-  , plugins :: [PreparedPlugin], model :: Maybe ModelConfiguration }
+  { selected :: RecipeId, request :: Value, bundle :: FlowBundle }
+data FlowBundle = FlowBundle
+  { revision :: GitRevision, program :: CompiledProgram, guest :: CheckedGuest
+  , closure :: [PreparedFlowEntry], plugins :: [PreparedPlugin], model :: Maybe ModelConfiguration }
 
 data FlowPreparation :: Effect where
-  PrepareInteractiveFlow :: FileTree -> [Fact RecipeDefinition] -> RecipeId -> Maybe Text
+  PrepareInteractiveFlow :: GitRevision -> FileTree -> [Fact RecipeDefinition] -> RecipeId -> Maybe Text
     -> FlowPreparation m (Either [Diagnostic] PreparedFlow)
 type instance DispatchOf FlowPreparation = Dynamic
 
 prepareInteractiveFlow :: FlowPreparation :> es
-  => FileTree -> [Fact RecipeDefinition] -> RecipeId -> Maybe Text
+  => GitRevision -> FileTree -> [Fact RecipeDefinition] -> RecipeId -> Maybe Text
   -> Eff es (Either [Diagnostic] PreparedFlow)
-prepareInteractiveFlow code definitions ident = send . PrepareInteractiveFlow code definitions ident
+prepareInteractiveFlow revision code definitions ident = send . PrepareInteractiveFlow revision code definitions ident

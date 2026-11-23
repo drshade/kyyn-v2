@@ -12,7 +12,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Evidence (validateReportContract)
 import Kyyn.Domain.Contract (contractShape, contractId)
 import Kyyn.Domain.CompiledEntry (CompiledConnector(..), compiledConnectors)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
@@ -32,6 +31,7 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, GuestSelec
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.Validation (decodeReport)
+import Kyyn.Porcelain.Protocol.PluginDescription (connectorDescription)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
 runPluginPreparation :: (GuestCompilation :> es, GuestInspection :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es)
@@ -85,25 +85,14 @@ prepareFromGuest code program description = do
     prepared <- forM [connector | connector <- connectors, (owner connector).connectorPlugin == Text.pack name] $ \connector -> do
       let identity = owner connector
           connectorLabel = label ++ "/" ++ Text.unpack identity.connectorType
-      kind <- checked connectorLabel (connectorTypeName (Text.unpack identity.connectorType))
-      case connector of
-        CompiledSource _ contracts acquisition validator login captured -> do
-          let (config,options,payload,position,report) = case contracts of
-                G.StatelessContracts c o p -> (c,o,p,Nothing,Nothing)
-                G.StatefulContracts c o p s r -> (c,o,p,Just s,Just r)
-          mapM_ (checked connectorLabel . validateReportContract . getField @"contract") report
-          methods <- forM captured $ \(method,entry) -> do
-            selectedName <- checked connectorLabel (methodName (Text.unpack method.capturedName))
-            let G.CapturedContracts input _ result = method.capturedInvocation.invocationContract
-            pure (PreparedMethod selectedName (Text.unpack method.capturedDescription) input.contract result.contract entry)
-          pure (PreparedConnector kind config.contract payload.contract acquisition validator methods
-            (getField @"contract" <$> options) login (getField @"contract" <$> position) (getField @"contract" <$> report))
-        CompiledSink _ (G.SinkContracts config options input result) publication validator defaults -> do
-          bytes <- ExceptT (Right <$> executeEntry defaults (toJSON G.SinkDefaultsInvocation))
+      defaults <- case connector of
+        CompiledSource{} -> pure Nothing
+        CompiledSink _ (G.SinkContracts _ options _ _) _ _ defaultEntry -> do
+          bytes <- ExceptT (Right <$> executeEntry defaultEntry (toJSON G.SinkDefaultsInvocation))
           value <- checked connectorLabel (decodeWire bytes)
           _ <- located connectorLabel (encodeValue (contractShape options.contract) value)
-          pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract publication
-            (CheckedValue (contractId options.contract) value))
+          pure (Just value)
+      ExceptT (pure (connectorDescription connector defaults))
     pure (PreparedPackage (manifestName manifest) (packageIdentity package) prepared)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]

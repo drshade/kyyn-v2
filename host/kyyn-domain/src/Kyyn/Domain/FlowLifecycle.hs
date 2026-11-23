@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Domain.FlowLifecycle
-  ( begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart ) where
+  ( begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart, clearFinished ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value)
@@ -120,3 +120,17 @@ resolve identity outcome current = do
 
 closeWait :: FlowWait -> FlowWait
 closeWait wait = case wait.waitStatus of Open -> wait { waitStatus = Closed }; _ -> wait
+
+-- Explicit clearing never removes a parent while a retained child names it.
+-- Missing IDs are already cleared, making cleanup retries idempotent.
+clearFinished :: [FlowInstanceId] -> [FlowInstance]
+  -> Either FlowStoreProblem ([FlowInstanceId],[FlowInstance])
+clearFinished requested catalog = do
+  let removed = [item | item <- catalog, item.instanceId `elem` requested]
+      remaining = [item | item <- catalog, item.instanceId `notElem` requested]
+      ids = map (.instanceId) removed
+  unless (all (\item -> case item.status of Finished{} -> True; _ -> False) removed)
+    (Left (InvalidTransition "Only finished instances can be cleared"))
+  unless (all (\item -> maybe True (`notElem` ids) item.parent) remaining)
+    (Left (InvalidTransition "Clear an instance together with its finished descendants, or clear its children first"))
+  pure (ids,remaining)

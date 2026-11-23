@@ -4,7 +4,8 @@
 {-# LANGUAGE DataKinds, GADTs, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Concurrent.Async (concurrently, withAsync)
+import Control.Concurrent.Async (concurrently, withAsync, cancel)
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar
 import Control.Monad (unless, replicateM_, forM_)
 import qualified Data.ByteString as Bytes
@@ -21,9 +22,9 @@ import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope, directoryScope)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem, entryExists)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -142,6 +143,46 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
       Left CancelledAncestor -> pure ()
       Right item -> readFlow item.instanceId >>= \actual -> assert (actual.status == Finished Cancelled) "Racing child escaped cancellation"
       other -> fail ("Unexpected race result: " ++ show other)
+  -- Clearing preserves every ancestor of an unfinished descendant.
+  ancestor <- start Nothing "clear-ancestor"
+  middle <- start (Just ancestor.instanceId) "clear-middle"
+  leaf <- start (Just middle.instanceId) "clear-leaf"
+  _ <- update (finishInstance ancestor.instanceId (Completed Null))
+  _ <- update (finishInstance middle.instanceId (Completed Null))
+  unfinished <- store scope (clearInstances [ancestor.instanceId,middle.instanceId])
+  assert (case unfinished of Left InvalidTransition{} -> True; _ -> False) "Cleared ancestor of unfinished grandchild"
+  _ <- update (beginAttempt leaf.instanceId)
+  runningClear <- store scope (clearInstances [leaf.instanceId])
+  assert (case runningClear of Left InvalidTransition{} -> True; _ -> False) "Cleared running/interrupted instance"
+  _ <- update (finishInstance leaf.instanceId (Completed Null))
+  _ <- update (clearInstances [middle.instanceId,leaf.instanceId])
+  retainedParent <- readFlow ancestor.instanceId
+  assert (retainedParent.status == Finished (Completed Null)) "Clearing finished children removed their retained parent"
+  _ <- update (clearInstances [ancestor.instanceId])
+
+  -- Interrupt clearing after its catalog commit, while journal deletion waits
+  -- for an exiting attempt. A subsequent empty clear must sweep the orphan.
+  orphan <- start Nothing "clear-orphan"
+  _ <- update (finishInstance orphan.instanceId (Completed Null))
+  journalEntered <- newEmptyMVar
+  journalRelease <- newEmptyMVar
+  let orphanIdentity = FlowJournalIdentity (flowInstanceIdText orphan.instanceId) "revision" Null
+      journalPath = either error id (relativePath (".kyyn/flows/journals/" ++ Text.unpack (flowInstanceIdText orphan.instanceId)))
+      awaitRemoval = do
+        found <- store scope (readInstance orphan.instanceId)
+        case found of Nothing -> pure (); Just _ -> threadDelay 1000 >> awaitRemoval
+  withAsync (execute scope (runFlowJournal kb orphanIdentity (liftIO (putMVar journalEntered () >> takeMVar journalRelease)))) $ \_ -> do
+    takeMVar journalEntered
+    withAsync (store scope (clearInstances [orphan.instanceId])) $ \clearing -> do
+      removed <- timeout 3000000 awaitRemoval
+      assert (removed == Just ()) "Clearing did not commit before waiting for the journal lock"
+      cancel clearing
+    putMVar journalRelease ()
+  exists <- execute scope (entryExists scope journalPath)
+  assert exists "Interrupted clear unexpectedly deleted its locked journal"
+  _ <- update (clearInstances [])
+  swept <- execute scope (entryExists scope journalPath)
+  assert (not swept) "Repeated clear leaked an orphan journal"
   collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
     . collisionDocuments . runFlowStore kb $ do
       first <- startInstance Nothing "first" launch

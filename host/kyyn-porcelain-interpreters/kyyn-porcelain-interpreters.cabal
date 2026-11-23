@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   other-modules: Kyyn.Porcelain.Protocol.ModelConfiguration
     Kyyn.Porcelain.Protocol.CapturedBlobs
+    Kyyn.Porcelain.Protocol.PluginDescription
   exposed-modules: Kyyn.Porcelain.Interpreter.Inspection
     Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.PluginInstallation
@@ -49,6 +50,7 @@ library
     Kyyn.Porcelain.Interpreter.FlowStore
     Kyyn.Porcelain.Interpreter.FlowPreparation
     Kyyn.Porcelain.Protocol.FlowCatalog
+    Kyyn.Porcelain.Protocol.FlowBundle
     Kyyn.Porcelain.Interpreter.FlowJournal
     Kyyn.Porcelain.Interpreter.RecipeExecution
     Kyyn.Porcelain.Interpreter.RecipeInspection

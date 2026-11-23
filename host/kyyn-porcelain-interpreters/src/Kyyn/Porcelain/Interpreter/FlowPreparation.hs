@@ -32,7 +32,7 @@ runFlowPreparation :: (GuestCompilation :> es, GuestInspection :> es, GuestExecu
   PluginPreparation :> es, DhallHandling :> es, Failure :> es)
   => Eff (FlowPreparation : es) a -> Eff es a
 runFlowPreparation = interpret $ \_ -> \case
-  PrepareInteractiveFlow code definitions selected authored -> runExceptT $ do
+  PrepareInteractiveFlow revision code definitions selected authored -> runExceptT $ do
     declarations <- ExceptT (pure (flowClosure definitions selected))
     let references = nub [InteractiveFlow name | FlowDeclaration _ (FlowEntryRef name) _ <- declarations]
         checked = either (throwE . pure . errorDiagnostic "flow.preparation") pure
@@ -57,4 +57,4 @@ runFlowPreparation = interpret $ \_ -> \case
       [] -> throwE [errorDiagnostic "flow.declaration" "Interactive closure is empty"]
     plugins <- ExceptT (preparePluginsFromGuest code program description)
     model <- ExceptT (readModelConfiguration code)
-    pure (PreparedFlow selected input prepared plugins model)
+    pure (PreparedFlow selected input (FlowBundle revision program description prepared plugins model))
