@@ -3,17 +3,17 @@
     "agentic": {
       "flake": false,
       "locked": {
-        "lastModified": 1794561979,
-        "narHash": "sha256-ThH+QuVjj/an1Q641gszvlYgYwRABH8rLErrRvcf+6E=",
+        "lastModified": 1795448228,
+        "narHash": "sha256-/A/kwudOgSOXnyWWG+fV4JMBc/okt2FYcd68WLpwG2o=",
         "owner": "drshade",
         "repo": "haskell-agentic",
-        "rev": "a1e24d3f68bcaf037a3e1fcf43fa1cb1e99258f0",
+        "rev": "3d8f04413155cf4a7d9f9e562032850311e1b0d6",
         "type": "github"
       },
       "original": {
         "owner": "drshade",
         "repo": "haskell-agentic",
-        "rev": "a1e24d3f68bcaf037a3e1fcf43fa1cb1e99258f0",
+        "rev": "3d8f04413155cf4a7d9f9e562032850311e1b0d6",
         "type": "github"
       }
     },

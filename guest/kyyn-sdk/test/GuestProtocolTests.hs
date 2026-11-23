@@ -7,6 +7,7 @@ module Main (main) where
 
 import Control.Monad (unless, forM_)
 import qualified FlowObservationTests
+import qualified FlowWaitingTests
 import Agentic.Aeson (toAeson)
 import Kyyn.Runtime.ModelWire (valueCodec)
 import Control.Exception (SomeException, try)
@@ -80,6 +81,7 @@ main = do
     ["--api-bindings-built",path] -> checkApi True (path,[])
     [] -> do
       FlowObservationTests.check
+      FlowWaitingTests.check
       checkModelBridge
       path <- getExecutablePath
       checkObservationTransport (path,["--flow-observation-guest"])
