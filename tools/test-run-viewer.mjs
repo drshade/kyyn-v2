@@ -99,3 +99,26 @@ const branchTarget=flow(occurrence('call',c0),each,'act',{kind:'entered',total:n
 reduceEvent(selectedState,branchTarget);
 assert.deepEqual(observedMotion(selectedState,branchTarget).edges,[]);
 console.log('Motion: open-source refusal and selection pulse deduplication passed.');
+
+// Suspension ends only the recorded attempt; replayed effects stay distinguishable.
+seq=0;
+const waitingRecords=[flow(root,null,'run',{kind:'entered',total:null}),
+  flow(call,root,'await',{kind:'entered',total:null}),flow(call,root,'await',{kind:'suspended'}),
+  flow(root,null,'run',{kind:'suspended'})];
+waitingRecords.push({sequence:String(seq),event:{elapsedNanos:'5000000000',body:{kind:'suspended',waitCount:'1'}}});
+const waiting=replay(graph,waitingRecords,5000000000n);
+assert.equal(waiting.terminal.kind,'suspended');
+assert.equal(nodeState(waiting,'call',true),'suspended');
+assert.equal(nodeState(waiting,'root',true),'suspended');
+assert.match(eventText({kind:'suspended'},waiting.graph),/Suspended/);
+seq=0;
+const resumedRecords=[flow(root,null,'run',{kind:'entered',total:null}),
+  flow(call,root,'await',{kind:'entered',total:null}),flow(call,root,'await',{kind:'restored',operation:'wait'}),
+  flow(call,root,'await',{kind:'returned',outcome:'completed'}),flow(root,null,'run',{kind:'returned',outcome:'completed'})];
+resumedRecords.push({sequence:String(seq),event:{elapsedNanos:'6000000000',body:{kind:'returned'}}});
+const resumed=replay(graph,resumedRecords,6000000000n);
+assert.equal(resumed.terminal.kind,'returned');
+assert.equal(nodeState(resumed,'call',true),'restored');
+assert.match(eventText({kind:'restored',operation:'wait'},resumed.graph),/not re-executed/);
+assert.equal(observedMotion(resumed,resumedRecords[3]),null,'Restored completion must not animate executed work');
+assert.deepEqual(resumedRecords.reduce(reduceEvent,newRecording(graph)),resumed);

@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Domain.FlowLifecycle
-  ( begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart, clearFinished ) where
+  ( begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart, clearFinished, blockAttempt, retry ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value)
@@ -12,12 +12,13 @@ import Kyyn.Domain.FlowInstance
 begin :: FlowInstance -> Either FlowStoreProblem FlowInstance
 begin current
   | current.launch.owner == External = Left NotHosted
-  | not (null current.blocked) = Left ExecutionBlocked
+  | current.retryRequired || not (null current.blocked) = Left ExecutionBlocked
   | Finished{} <- current.status = Left AlreadyFinished
   | otherwise = Right current { status = Running }
 
 -- A successful frontier is authoritative; a failed attempt never calls this.
 frontier :: [(Text,Value)] -> FlowInstance -> Either FlowStoreProblem FlowInstance
+frontier _ current | Finished{} <- current.status = Left AlreadyFinished
 frontier reached current = do
   unless (current.status == Running) (Left (InvalidTransition "Frontier requires a running attempt"))
   unless (length (nub (map fst reached)) == length reached && not (null reached))
@@ -40,9 +41,22 @@ finish outcome current = case current.status of
   _ -> Right current { status = Finished outcome, waits = map closeWait current.waits }
 
 block :: [Diagnostic] -> FlowInstance -> Either FlowStoreProblem FlowInstance
+block _ current | current.retryRequired = Left ExecutionBlocked
 block problems current = case current.status of
   Finished{} -> Left AlreadyFinished
   _ -> Right current { blocked = problems }
+
+-- Reported attempt failures require an explicit author/operator retry. Polling
+-- can revalidate unavailable prerequisites but cannot repeat uncertain actions.
+blockAttempt :: [Diagnostic] -> FlowInstance -> Either FlowStoreProblem FlowInstance
+blockAttempt problems current = case current.status of
+  Finished{} -> Left AlreadyFinished
+  _ -> Right current { blocked = problems, retryRequired = True }
+
+retry :: FlowInstance -> Either FlowStoreProblem FlowInstance
+retry current = case current.status of
+  Finished{} -> Left AlreadyFinished
+  _ -> Right current { blocked = [], retryRequired = False }
 
 parentAllowsStart :: Maybe FlowInstanceId -> [FlowInstance] -> Either FlowStoreProblem ()
 parentAllowsStart Nothing _ = Right ()

@@ -16,7 +16,7 @@ data RecipeRunWriter = RecipeRunWriter KnowledgeBase RecipeRunHeader
 data RecipeRunStore :: Effect where
   WithRecipeRun :: PreparedRecipeRun -> (RecipeRunWriter -> m a) -> RecipeRunStore m a
   AppendRunEvent :: RecipeRunWriter -> RunEventBody -> RecipeRunStore m RunEvent
-  ListRecipeRuns :: KnowledgeBase -> Maybe RecipeId -> RecipeRunStore m [RecipeRunSummary]
+  ListRecipeRuns :: KnowledgeBase -> Maybe RecipeId -> RecipeRunStore m RecipeRunListing
   ReadRecipeRun :: KnowledgeBase -> RecipeRunId -> Maybe Natural -> Natural -> RecipeRunStore m RecipeRunPage
   ClearRecipeRun :: KnowledgeBase -> RecipeRunId -> RecipeRunStore m ()
 type instance DispatchOf RecipeRunStore = Dynamic
@@ -25,7 +25,7 @@ withRecipeRun :: RecipeRunStore :> es => PreparedRecipeRun -> (RecipeRunWriter -
 withRecipeRun prepared = send . WithRecipeRun prepared
 appendRunEvent :: RecipeRunStore :> es => RecipeRunWriter -> RunEventBody -> Eff es RunEvent
 appendRunEvent writer = send . AppendRunEvent writer
-listRecipeRuns :: RecipeRunStore :> es => KnowledgeBase -> Maybe RecipeId -> Eff es [RecipeRunSummary]
+listRecipeRuns :: RecipeRunStore :> es => KnowledgeBase -> Maybe RecipeId -> Eff es RecipeRunListing
 listRecipeRuns kb = send . ListRecipeRuns kb
 readRecipeRun :: RecipeRunStore :> es => KnowledgeBase -> RecipeRunId -> Maybe Natural -> Natural -> Eff es RecipeRunPage
 readRecipeRun kb identity cursor = send . ReadRecipeRun kb identity cursor

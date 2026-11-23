@@ -401,6 +401,7 @@ data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
   , before :: GitRevision, build :: BuildIdentity
   , startedAt :: Instant, graph :: FlowGraph, mermaid :: Text
+  , instanceId :: Maybe FlowInstanceId
   }
 
 data RunEvent = RunEvent
@@ -414,17 +415,38 @@ data RunEventBody
   | RunCompleted EvolutionId
   | RunFailed [Diagnostic]
   | RunCancelled
+  | RunSuspended Natural -- number of pending replies
+  | RunReturned          -- interactive result is stored on the instance
 ```
 
 The summary preserves occurrence, parent, node kind, labels and the upstream
 phase: `Entered`, `Returned`, `Failed`, `Cancelled`, `Selected`, `CallResolved`,
-`Drafting`, `Turned`, `OutputRejected` or `Judged`. Each entry includes its exact
+`Suspended`, `Restored`, `Drafting`, `Turned`, `OutputRejected` or `Judged`. Each entry includes its exact
 total, including zero. Progress counts returns of element body roots identified
 by the published body relation, not arbitrary descendant returns. Repeat has no
 predicted total. Turns carry their index and action kind, not tool names; Judged
 has no answer count, and OutputRejected has no rejection text. Call return
 outcomes distinguish completed, unknown-tool and invalid-input results. A resolved
 call can reject input without entering its body.
+
+For an interactive recipe each resume attempt has its own recording, linked to
+its durable instance. `RunSuspended` ends that attempt while the instance waits;
+`RunReturned` reports that the guest returned without implying a draft evolution.
+Neither carries request, reply or result values. Upstream `Restored` distinguishes
+journal restoration from re-execution, and `Suspended` closes the observed scopes
+without inventing completion. The viewer stops live activity on suspension and
+shows the pending reply count. Failed recording writes stop further dispatch;
+they interrupt the attempt without replacing the instance's previous frontier
+with a logical failure. Lock-busy, blocked and cancelled preflight checks create
+no attempt recording.
+
+Instance attempt links are appended under the short catalog lock. Both sides are
+independently disposable: a missing recording does not prevent instance inspection,
+and a missing instance does not prevent opening its recording. Neither link is a
+foreign-key deletion constraint, and clearing recordings never touches replay state. An
+unreadable recording produces a per-recording diagnostic in the list; other
+recordings remain accessible. Explicit clearing does not decode a recording's
+header or events. This provides disposal of invalid data, not a compatibility reader.
 
 The summary excludes inputs, outputs, conversations, model results and exception
 payloads. Projection must neither retain payload closures nor evaluate discarded

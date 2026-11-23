@@ -79,7 +79,11 @@ be Running with earlier unanswered waits. Waiting means an attempt returned a
 waiting frontier and there is no currently scheduled execution. Fulfilling any
 one wait makes it Runnable; the authored composition still determines whether
 other replies are needed before a join can progress. Runtime storage/dispatch
-failures retain ADR 0019's operational failure boundary.
+failures retain ADR 0019's operational failure boundary. A reported attempt failure
+blocks further dispatch until an explicit retry; polling must not repeatedly run
+an uncertain action. Missing execution prerequisites may be revalidated without
+an attempt, but that does not clear an attempt-failure block. An unreported process
+loss leaves interrupted work eligible for replay under the at-least-once contract.
 
 ### Parents author how they manage children
 

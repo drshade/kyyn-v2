@@ -10,6 +10,8 @@ import Lucid
 import Lucid.Base (makeAttribute)
 import Network.HTTP.Types (urlEncode)
 import Kyyn.Domain.Recipe (RecipeId(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.FlowInstance (flowInstanceIdText)
 import Kyyn.Domain.RecipeRun
 import Kyyn.Domain.Evolution (evolutionIdName)
 import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue)
@@ -20,8 +22,10 @@ import Kyyn.Domain.CompiledProgram (BuildIdentity(..))
 
 data RunContent = RunHtml (Html ()) | RunJson Value
 
-runIndex :: Maybe RecipeId -> [RecipeRunSummary] -> Html ()
-runIndex selected runs = document "Recipe runs" $ do
+runIndex :: Maybe RecipeId -> RecipeRunListing -> Html ()
+runIndex selected listing = document "Recipe runs" $ do
+  let runs = listing.runs
+  forM_ listing.unavailable $ \problem -> p_ [class_ "diagnostic"] (toHtml ("Recording unavailable: " <> problem.message))
   case selected of
     Nothing -> mempty
     Just (RecipeId name) -> p_ $ do
@@ -45,6 +49,7 @@ runPage run = document name $ do
   p_ [class_ "muted"] $ do
     toHtml (Text.pack (runIdText run.header.runId) <> " · " <> run.header.startedAt <> " · ")
     a_ [href_ ("/runs?recipe=" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 name)))] "Matching runs"
+  forM_ run.header.instanceId $ \identity -> p_ (toHtml ("Interactive instance: " <> flowInstanceIdText identity))
   textarea_ [id_ "run-data", style_ "display:none", makeAttribute "aria-hidden" "true"]
     (toHtml (Text.decodeUtf8 (Bytes.toStrict (encode (summaryValue run)))))
   div_ [id_ "run-viewer"] $ do
@@ -85,6 +90,8 @@ status Interrupted = "Interrupted"
 status (Completed _) = "Completed"
 status Failed = "Failed"
 status Cancelled = "Cancelled"
+status (Suspended count) = "Suspended · waiting on " <> Text.pack (show count) <> (if count == 1 then " reply" else " replies")
+status Returned = "Returned"
 document :: Text.Text -> Html () -> Html ()
 document title body = pageDocument Nothing Nothing title
   (link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"]) body

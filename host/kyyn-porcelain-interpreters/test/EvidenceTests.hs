@@ -389,9 +389,11 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
 type Recording = (Maybe Bytes.ByteString,[String])
 
 recordDocuments :: State.State Recording :> es => Eff (DocumentPersistence : es) a -> Eff es a
-recordDocuments = interpret $ \env (WithLockedDocument _ _ action) ->
-  localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
-    unlift (interpret (\_ operation -> liftLocal (recordDocument operation)) action)
+recordDocuments = interpret $ \env request -> case request of
+  TryLockedDocument{} -> error "Unexpected nonblocking lock in this fixture"
+  WithLockedDocument _ _ action ->
+    localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
+      unlift (interpret (\_ operation -> liftLocal (recordDocument operation)) action)
 
 recordDocument :: State.State Recording :> es => DocumentAccess m a -> Eff es a
 recordDocument operation = do

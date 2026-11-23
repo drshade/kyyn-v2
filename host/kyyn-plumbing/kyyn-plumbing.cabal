@@ -35,6 +35,7 @@ library
     Kyyn.Plumbing.Protocol.EvolutionSources
     Kyyn.Plumbing.Protocol.FactEdits
     Kyyn.Plumbing.Protocol.FactProposal
+    Kyyn.Plumbing.Protocol.Interactive
     Kyyn.Plumbing.Protocol.RecipeRun
     Kyyn.Plumbing.Protocol.Recipes
 

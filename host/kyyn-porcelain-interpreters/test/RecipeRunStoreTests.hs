@@ -8,7 +8,9 @@ import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (async, cancel, wait)
 import Control.Monad (unless)
 import qualified Control.Exception as E
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict')
+import qualified Data.Aeson.KeyMap as Keys
+import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString.Char8 as Bytes
 import Data.Either (isLeft)
 import Data.List (isInfixOf)
@@ -55,12 +57,12 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
       kb = KnowledgeBase (Repository scope) WholeTree
       prepared = PreparedRecipeRun kb (RecipeId "review") (FlowEntryRef "Flows.review")
         (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output")
-        (object ["upstream" .= String "graph"]) "flowchart TD"
+        (object ["upstream" .= String "graph"]) "flowchart TD" Nothing
       draft = either error id (evolutionId "000001-review")
       event = FlowObserved (object ["opaque" .= String "summary"])
       eventFile identity = directory </> ".kyyn/runs" </> runIdText identity </> "events.jsonl"
   empty <- execute (listRecipeRuns kb Nothing)
-  check "empty listing" (null empty)
+  check "empty listing" (null empty.runs && null empty.unavailable)
   created <- doesDirectoryExist (directory </> ".kyyn/runs")
   check "read must not create runs" (not created)
   completed <- execute $ withRecipeRun prepared $ \writer@(RecipeRunWriter _ header) -> do
@@ -81,6 +83,20 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
   one <- single first.events
   two <- single second.events
   check "timestamps/order" (one.elapsedNanos <= two.elapsedNanos && one.body == event && two.body == RunCompleted draft)
+  legacy <- execute (withRecipeRun prepared (\(RecipeRunWriter _ header) -> pure header))
+  let legacyHeader = directory </> ".kyyn/runs" </> runIdText legacy.runId </> "header.json"
+  encodedHeader <- Bytes.readFile legacyHeader
+  oldHeader <- case eitherDecodeStrict' encodedHeader of
+    Right (Object fields) -> pure (Object (Keys.delete "instance" fields))
+    _ -> fail "Expected a header object"
+  Bytes.writeFile legacyHeader (Lazy.toStrict (encode oldHeader))
+  mixed <- execute (listRecipeRuns kb Nothing)
+  check "one unreadable header hid healthy recordings" (length mixed.runs == 1 && length mixed.unavailable == 1)
+  oldRead <- E.try @E.IOException (execute (readRecipeRun kb legacy.runId Nothing 1))
+  check "old header silently opened" (isLeft oldRead)
+  execute (clearRecipeRun kb legacy.runId)
+  afterOldClear <- execute (listRecipeRuns kb Nothing)
+  check "unreadable recording could not be cleared" (null afterOldClear.unavailable && length afterOldClear.runs == 1)
   interrupted <- execute $ withRecipeRun prepared $ \writer@(RecipeRunWriter _ header) -> appendRunEvent writer event >> pure header
   Bytes.appendFile (eventFile interrupted.runId) "{partial"
   partial <- execute (readRecipeRun kb interrupted.runId Nothing 10)
@@ -101,7 +117,7 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
     raiseFailure failure
   check "operational failure escaped its recording" (isLeft (refused :: Either E.IOException ()))
   failures <- execute (listRecipeRuns failingKb Nothing)
-  failureHeader <- case failures of [r] -> pure r.header; _ -> fail "Missing operational failure recording"
+  failureHeader <- case failures.runs of [r] -> pure r.header; _ -> fail "Missing operational failure recording"
   failurePage <- execute (readRecipeRun failingKb failureHeader.runId Nothing 10)
   failureEvent <- single failurePage.events
   check "recording diagnostic differs from the CLI" (failureEvent.body == RunFailed [Failure.operationalDiagnostic failure])
@@ -124,7 +140,7 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
   that <- wait other
   check "concurrent run IDs collided" (this.runId /= that.runId)
   allRuns <- execute (listRecipeRuns kb (Just (RecipeId "absent")))
-  check "recipe filter ignored" (null allRuns)
+  check "recipe filter ignored" (null allRuns.runs)
   Bytes.appendFile (eventFile completed.runId) "{\"elapsedNanos\":\"99999999999999999\",\"body\":{\"kind\":\"cancelled\"}}\n"
   afterTerminal <- E.try @E.IOException (execute (readRecipeRun kb completed.runId Nothing 10))
   check "event after terminal accepted" (case afterTerminal of Left err -> "Event follows terminal" `isInfixOf` show err; _ -> False)
@@ -137,14 +153,14 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
   (deathStatus,_,_) <- readProcessWithExitCode executable ["--die",deathDirectory] ""
   check "child should be killed" (deathStatus /= ExitSuccess)
   dead <- execute (listRecipeRuns deathKb Nothing)
-  check "killed process lock remained active or terminal invented" (case dead of [r] -> r.status == Interrupted && r.eventCount == 1; _ -> False)
+  check "killed process lock remained active or terminal invented" (case dead.runs of [r] -> r.status == Interrupted && r.eventCount == 1; _ -> False)
   let brokenDirectory = directory </> "broken"
       brokenKb = KnowledgeBase (Repository (either error id (directoryScope brokenDirectory))) WholeTree
   (brokenStatus,brokenOutput,brokenErrors) <- readProcessWithExitCode executable ["--write-failure",brokenDirectory] ""
   check ("write-failure child failed: " ++ brokenErrors) (brokenStatus == ExitSuccess)
   check "terminal write failure omitted existing draft or path" ("draft already exists: 000001-review" `isInfixOf` brokenOutput && "events.jsonl" `isInfixOf` brokenOutput)
   brokenRuns <- execute (listRecipeRuns brokenKb Nothing)
-  brokenRun <- case brokenRuns of [r] -> pure r; _ -> fail "Missing failed-write recording"
+  brokenRun <- case brokenRuns.runs of [r] -> pure r; _ -> fail "Missing failed-write recording"
   brokenPage <- execute (readRecipeRun brokenKb brokenRun.header.runId Nothing 10)
   check "partial terminal was retried or treated as success" (brokenPage.incompleteTail && brokenPage.summary.status == Interrupted && brokenPage.summary.eventCount == 0)
   putStrLn "Recipe recordings: visibility, locks, cursors, terminals, cancellation and corruption passed."
@@ -159,7 +175,7 @@ child :: String -> FilePath -> IO ()
 child mode directory = do
   let kb = KnowledgeBase (Repository (either error id (directoryScope directory))) WholeTree
       prepared = PreparedRecipeRun kb (RecipeId "review") (FlowEntryRef "Flows.review")
-        (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output") (object []) "flowchart TD"
+        (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output") (object []) "flowchart TD" Nothing
   case mode of
     "--die" -> execute $ withRecipeRun prepared $ \writer -> do
       _ <- appendRunEvent writer (FlowObserved (object []))

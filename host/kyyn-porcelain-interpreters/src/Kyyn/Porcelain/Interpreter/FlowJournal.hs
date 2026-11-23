@@ -1,5 +1,5 @@
-{-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables #-}
-module Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal) where
+{-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables, RankNTypes, TypeApplications #-}
+module Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal, runFlowJournalLocked) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, encode, eitherDecodeStrict', object, (.=), (.:), withObject)
@@ -12,6 +12,7 @@ import Data.List (nub, sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (reinterpret)
+import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
 import Kyyn.Domain.Path (scopePath, directoryScope, relativePath)
 import qualified Kyyn.Domain.Failure as Failure
@@ -28,39 +29,57 @@ runFlowJournal :: forall es a. (DocumentPersistence :> es, FileSystem.FileSystem
 runFlowJournal kb expected action = do
   let name = Text.unpack expected.namespace
       valid c = isAsciiLower c || isAsciiUpper c || isDigit c || c == '-' || c == '_'
-  unless (not (null name) && all valid name) (problem "Invalid flow journal namespace")
-  kbScope <- either problem pure (knowledgeBaseScope kb)
+  unless (not (null name) && all valid name) (problem (JournalCorrupt "Invalid flow journal namespace"))
+  kbScope <- either (problem . JournalCorrupt . Text.pack) pure (knowledgeBaseScope kb)
   let directory = scopePath kbScope </> ".kyyn/flows/journals" </> name
-  scope <- either problem pure (directoryScope directory)
-  file <- either problem pure (relativePath "journal.json")
-  ignored <- either problem pure (relativePath ".kyyn")
+  scope <- either (problem . JournalCorrupt . Text.pack) pure (directoryScope directory)
+  file <- either (problem . JournalCorrupt . Text.pack) pure (relativePath "journal.json")
+  ignored <- either (problem . JournalCorrupt . Text.pack) pure (relativePath ".kyyn")
   FileSystem.ensureIgnoredDirectory kbScope ignored
-  reinterpret (\inside -> withLockedDocument scope file $ do
-    existing <- readCurrent
-    case existing of
-      Nothing -> replaceCurrent (serialise expected [])
-      Just bytes -> do
-        (actual,_) <- either problem pure (decode bytes)
-        unless (actual == expected) (problem "Flow journal revision or original input differs")
-    inside)
-    (\_ -> \case
-      LookupCompletion key -> lookup key <$> records
-      SaveCompletion key value -> do
-        entries <- records
-        case lookup key entries of
-          Just old | old == value -> pure ()
-                   | otherwise -> problem "Conflicting immutable flow completion"
-          Nothing -> replaceCurrent (serialise expected (entries ++ [(key,value)]))) action
+  reinterpret (\inside -> withLockedDocument scope file (initialise problem expected inside))
+    (\_ -> handleJournal problem expected) action
   where
-    problem :: Failure :> effects => String -> Eff effects b
-    problem message = raiseFailure (Failure.StorageUnavailable
+    problem :: Failure :> effects => FlowJournalProblem -> Eff effects b
+    problem issue = raiseFailure (Failure.StorageUnavailable
       (Failure.StorageDiagnostic Failure.InspectEntry
-        (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows/journals" </> Text.unpack expected.namespace </> "journal.json") message))
-    records :: (DocumentAccess :> effects, Failure :> effects) => Eff effects [(Value,Value)]
+        (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows/journals" </> Text.unpack expected.namespace </> "journal.json") (show issue)))
+
+-- The worker acquires a nonblocking writer lock, rechecks the catalog while
+-- holding it, then installs this interpreter. Inspection probes never call it.
+runFlowJournalLocked :: DocumentAccess :> es
+  => FlowJournalIdentity -> Eff (FlowJournal : es) a -> Eff es (Either FlowJournalProblem a)
+runFlowJournalLocked expected = reinterpret
+  (runErrorNoCallStack @FlowJournalProblem . initialise throwError expected)
+  (\_ -> handleJournal throwError expected)
+
+initialise :: DocumentAccess :> es
+  => (forall b. FlowJournalProblem -> Eff es b) -> FlowJournalIdentity -> Eff es a -> Eff es a
+initialise problem expected inside = do
+  existing <- readCurrent
+  case existing of
+    Nothing -> replaceCurrent (serialise expected [])
+    Just bytes -> do
+      (actual,_) <- either (problem . JournalCorrupt . Text.pack) pure (decode bytes)
+      unless (actual == expected) (problem JournalIdentityMismatch)
+  inside
+
+handleJournal :: DocumentAccess :> es
+  => (forall b. FlowJournalProblem -> Eff es b) -> FlowJournalIdentity -> FlowJournal m a -> Eff es a
+handleJournal problem expected = \case
+  LookupCompletion key -> lookup key <$> records
+  SaveCompletion key value -> do
+    entries <- records
+    case lookup key entries of
+      Just old | old == value -> pure ()
+               | otherwise -> problem JournalCompletionConflict
+      Nothing -> replaceCurrent (serialise expected (entries ++ [(key,value)]))
+  where
     records = readCurrent >>= \case
-      Nothing -> problem "Flow journal disappeared during execution"
-      Just bytes -> snd <$> either problem pure (decode bytes)
-    decode bytes = eitherDecodeStrict' bytes >>= parseEither document
+      Nothing -> problem (JournalCorrupt "Flow journal disappeared during execution")
+      Just bytes -> snd <$> either (problem . JournalCorrupt . Text.pack) pure (decode bytes)
+
+decode :: ByteString -> Either String (FlowJournalIdentity,[(Value,Value)])
+decode bytes = eitherDecodeStrict' bytes >>= parseEither document
 
 serialise :: FlowJournalIdentity -> [(Value,Value)] -> ByteString
 serialise identity entries = Lazy.toStrict (encode (object

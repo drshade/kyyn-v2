@@ -23,15 +23,15 @@ import Data.Either (isLeft)
 import Effectful (Eff, IOE, runEff, liftIO)
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope, directoryScope)
-import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath)
+import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence, tryLockedDocument)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.FlowJournal
-import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
+import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal, runFlowJournalLocked)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -90,6 +90,10 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
   release <- newEmptyMVar
   owner <- async (execute (journal (liftIO (putMVar entered () >> takeMVar release))))
   takeMVar entered
+  let journalScope = either error id (directoryScope (directory </> ".kyyn/flows/journals/flow-example"))
+      journalFile = either error id (relativePath "journal.json")
+  probe <- execute (tryLockedDocument journalScope journalFile (pure ()))
+  assert "active writer probe must be nonblocking" (probe == Nothing)
   contender <- async (execute (journal (lookupCompletion key)))
   threadDelay 20000
   blocked <- poll contender
@@ -98,6 +102,19 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
   wait owner
   second <- wait contender
   assert "next writer reads the persisted completion" (second == Just value)
+  released <- execute (tryLockedDocument journalScope journalFile (pure ()))
+  assert "released writer probe must succeed" (released == Just ())
+  reopened <- execute (tryLockedDocument journalScope journalFile
+    (runFlowJournalLocked identity (lookupCompletion key)))
+  assert "held-lock interpreter restores journal" (reopened == Just (Right (Just value)))
+  mismatch <- execute (tryLockedDocument journalScope journalFile
+    (runFlowJournalLocked (identity { revision = "changed" }) (lookupCompletion key)))
+  assert "held-lock identity error is typed" (mismatch == Just (Left JournalIdentityMismatch))
+  conflict <- execute (tryLockedDocument journalScope journalFile
+    (runFlowJournalLocked identity (saveCompletion key Null)))
+  assert "held-lock completion conflict is typed" (conflict == Just (Left JournalCompletionConflict))
+  unchanged <- Bytes.readFile file
+  assert "probes and refused locked attempts never alter journal" (unchanged == after)
   effectCount <- newIORef (0 :: Int)
   let waitingIdentity = FlowJournalIdentity "waiting-flow" "fixed-code" (Number 7)
       codec = Codec.primitive Schema.SInteger V.Integer (\v -> case v of
@@ -122,4 +139,9 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
   Bytes.writeFile file "{incomplete"
   corrupted <- runEff (runFailure (runFileSystemIO scope (runDocumentPersistenceIO (journal (lookupCompletion key)))))
   assert "corrupt journal is never an empty store" (isLeft corrupted)
+  heldCorrupt <- execute (tryLockedDocument journalScope journalFile
+    (runFlowJournalLocked identity (lookupCompletion key)))
+  assert "held-lock corruption is typed" (case heldCorrupt of Just (Left JournalCorrupt{}) -> True; _ -> False)
+  retainedCorrupt <- Bytes.readFile file
+  assert "corruption is never silently repaired" (retainedCorrupt == "{incomplete")
   putStrLn "Flow journal identity, immutable completion, restart and writer lock checks passed."

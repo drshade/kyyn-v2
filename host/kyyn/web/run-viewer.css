@@ -49,3 +49,8 @@ button:focus-visible,a:focus-visible{outline:2px solid #245a94;outline-offset:3p
 .run-activity{font-variant-numeric:tabular-nums;color:#245a94;font-weight:600}
 @keyframes flow-pulse{50%{stroke-width:4px;filter:drop-shadow(0 0 5px #4095ec)}}
 @media(prefers-reduced-motion:reduce){.motion-running .node[data-state=open] .label-container{animation:none}}
+
+.graph-viewport [data-state=suspended]{--run-fill:#fff3d6;--run-stroke:#ae7b16}
+.graph-viewport [data-state=restored]{--run-fill:#eee9fb;--run-stroke:#7561a9}
+.node-list [data-state=suspended]{background:#fff3d6}
+.node-list [data-state=restored]{background:#eee9fb}
