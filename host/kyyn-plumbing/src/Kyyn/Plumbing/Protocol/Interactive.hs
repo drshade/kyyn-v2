@@ -9,8 +9,8 @@ import Data.Text (Text)
 import Data.List (nub)
 import Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec)
 import Kyyn.Types.EventWait (decodeEventRequest)
+import Agentic.Codec (Codec(..))
 import qualified Agentic.Value as V
-import qualified Agentic.Codec as C
 import qualified Agentic.Wait as Wait
 import qualified Agentic.Journal as Journal
 import Agentic.Runtime (PendingWait(..))
@@ -41,7 +41,7 @@ parseProgress namespace revision value = do
       kind <- case pending.request of
         V.Object fields | Just tag <- lookup "kyynWait" fields -> case tag of
           V.String "child" -> do
-            ChildWaitRequest identity output <- either (Left . Text.unpack) Right (C.decode childWaitCodec pending.request)
+            ChildWaitRequest identity output <- either (Left . Text.unpack) Right (childWaitCodec.decode pending.request)
             ChildWait <$> flowInstanceId identity <*> pure output
           V.String "event" -> EventWait <$> either (Left . Text.unpack) Right (decodeEventRequest pending.request)
           _ -> Left "Unknown Kyyn wait envelope"

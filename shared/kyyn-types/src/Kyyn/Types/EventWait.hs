@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, OverloadedRecordDot #-}
+{-# LANGUAGE NoFieldSelectors, DeriveGeneric, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Types.EventWait
   ( ReplyOrigin(..), ReceivedReply(..), receivedReplyCodec, encodeReceivedReply
   , EventWaitRequest(..), eventRequestCodec, encodeEventRequest, decodeEventRequest ) where

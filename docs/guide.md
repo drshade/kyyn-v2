@@ -645,6 +645,36 @@ attempt does not imply a draft evolution. Clearing a recording leaves the flow's
 journal and attempt link intact, and clearing an instance leaves its recordings
 readable. Use `root recipe run` for ordinary proposal-producing recipes.
 
+#### Awaiting a plugin event
+
+An event connector generates typed references alongside its configured instance.
+Use `awaitReply (Updates.question Connectors.updates)` in the flow and declare
+`withEvents [event (Updates.question Connectors.updates)]` on its generated flow
+definition when registering the recipe. `withEvents` preserves child declarations;
+`withChildren` preserves event declarations. Each replaces its own list.
+
+`awaitReply` takes the connector's request type and returns
+`ReceivedReply reply`, whose `origin` is `ManualReply surface` or
+`ProviderReply binding eventIdentity`. The host supplies this origin. For manual
+fulfilment, pass only the reply payload as JSON, without an origin wrapper:
+
+```sh
+kyyn-v2 flow fulfil FLOW_ID --reply '{"answer":"Confirmed"}'
+```
+
+The host validates the request before publishing a frontier and each reply before
+calling guest fulfilment. A malformed reply becomes an `invalid` delivery and
+leaves the wait open. Equal replies are duplicates regardless of origin; the first
+accepted value and origin are retained, alongside each delivery's own provenance.
+If one wait names an undeclared event, the whole new frontier is refused and the
+attempt blocks. `flow retry` reuses the same captured declaration: accepting a
+corrected recipe requires starting a new instance, not retrying the old one.
+
+Event waits show `dispatch: pending` when their connector declares a dispatch, or
+`dispatch: not required` otherwise. Provider dispatch and polling are not yet
+implemented; both kinds can be fulfilled manually. Manual fulfilment preserves
+dispatch state. Bare upstream waits and child-completion waits remain distinct.
+
 #### Starting child flows
 
 An interactive parent starts only children declared by its accepted recipe. In
