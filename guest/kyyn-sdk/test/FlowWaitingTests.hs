@@ -49,7 +49,7 @@ flow = A.each (A.durably integer integer (\_ n -> lift (request Effect) >> pure 
 
 -- Round-trip every persisted value through the actual host/guest value codec.
 wire :: V.Value -> IO V.Value
-wire value = either (fail . Text.unpack) pure
+wire value = either fail pure
   (Wire.decodeWith valueCodec (Wire.encodeWith valueCodec value))
 
 run :: Store -> Step a -> IO (Either FetchError a,Store,Int,[A.Summary])
