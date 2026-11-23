@@ -7,7 +7,8 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value(..), object, (.=), toJSON)
+import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON)
+import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as Bytes
@@ -26,8 +27,8 @@ import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(..))
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue)
-import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveRecipeProgram, executeToolProgram)
+import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue)
+import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveRecipeProgram, executeRecordedRecipeProgram)
 import Kyyn.Porcelain.Capability.RecipeRunStore (withRecipeRun)
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
@@ -48,6 +49,8 @@ import qualified Kyyn.Types.Guest as G
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
+import Kyyn.Types.Wire (parseWire)
+import Kyyn.Plumbing.Capability.GuestExecution (executeEntry)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestInspection (describeGuest)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -142,9 +145,15 @@ main = do
     ordinary <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
       . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
       . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
-      . capturedEvidence index . runPluginRead $
-        executeToolProgram ordinaryEntry plugins Nothing [] (toJSON (G.RunRecipe
-          (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])))
+      . capturedEvidence index . runPluginRead . runAppendJournalIO . runRecipeRunStore (const (pure ())) $ do
+        captured <- executeEntry ordinaryEntry (toJSON G.CaptureRecipeGraph)
+        let (graph,mermaid) = either error id (parseWire captured >>= parseEither (withObject "captured graph" (\fields ->
+              (,) <$> (fields .: "graph" >>= decodeFlowValue) <*> fields .: "mermaid")))
+        withRecipeRun (PreparedRecipeRun (KnowledgeBase (Repository scope) WholeTree)
+          (R.RecipeId "waitingOrdinary") (FlowEntryRef "Flows.waitingOrdinary")
+          (either error id (gitRevision (replicate 40 'a'))) program.identity graph mermaid) $ \writer ->
+            executeRecordedRecipeProgram writer ordinaryEntry plugins Nothing (toJSON (G.RunRecipe
+              (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])))
     refused <- right ordinary
     unless (case refused of Left errors -> any (Text.isInfixOf "AwaitWithoutJournal" . (.message)) errors; Right _ -> False)
       (fail "Ordinary recipe was silently promoted to interactive execution")
