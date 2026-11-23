@@ -42,7 +42,7 @@ check executable = do
   expect "malformed cursor rejected" (isLeft (decodeWith batch (object
     ["arrivals" .= [object ["identity" .= String "x","value" .= String "valid"]],"cursor" .= True])))
   let extra codec value = case encodeWith codec value of
-        Object fields -> isLeft (decodeWith codec (Object (Keys.insert "extra" (String "unexpected") fields)))
+        Object members -> isLeft (decodeWith codec (Object (Keys.insert "extra" (String "unexpected") members)))
         _ -> False
   expect "strict dispatch fields" (extra (dispatchCodec textCodec) (EventDispatch (WaitId "w") "q"))
   expect "strict poll fields" (extra poll (EventPoll (WaitId "w") "q" Nothing))
