@@ -192,6 +192,9 @@ main = do
     reopened <- right (parseEither parseBundle savedBundle)
     unless (bundleValue reopened == savedBundle && reopened.plugins == capturedBundle.plugins)
       (fail "Bundle reopening changed captured configuration or execution")
+    unless (length [() | PreparedPlugin _ instances <- reopened.plugins,
+      ConfiguredConnector _ _ PreparedEventConnector{} (CheckedValue _ (String "10")) <- instances] == 1)
+      (fail "Bundle lost configured event instance")
     let kbForCapture = KnowledgeBase (Repository scope) WholeTree
         store :: Eff '[FlowStore, DocumentPersistence, FileSystem, Failure, IOE] result -> IO (Either OperationalFailure result)
         store action = runEff . runFailure . runFileSystemIO scope . runDocumentPersistenceIO . runFlowStore kbForCapture $ action

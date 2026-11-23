@@ -129,14 +129,20 @@ runInspection = interpret $ \_ -> \case
               in case connector of
                 Plugins.PreparedConnector { Plugins.payloadContract = payload, Plugins.fetchOptionsContract = options,
                   Plugins.reportContract = report, Plugins.methods = methods } ->
-                  ConnectorDeclarationInspection connector.connectorType False
+                  ConnectorDeclarationInspection connector.connectorType SourceKind
                     ([config,("payload",payload)] ++ maybe [] (pure . ("options",)) options ++ maybe [] (pure . ("report",)) report ++
                      concat [[("method:" ++ method ++ ":input",input),("method:" ++ method ++ ":result",output)] |
                        Plugins.PreparedMethod (MethodName method) _ input output _ <- methods])
                     [(method,description) | Plugins.PreparedMethod method description _ _ _ <- methods] configured
+                Plugins.PreparedEventConnector { Plugins.events = events } ->
+                  ConnectorDeclarationInspection connector.connectorType EventKind
+                    (config : concat [[("event:" ++ eventName ++ ":request",input),("event:" ++ eventName ++ ":reply",reply),
+                      ("event:" ++ eventName ++ ":cursor",cursor)] |
+                      Plugins.PreparedEvent (MethodName eventName) _ _ input reply cursor _ _ <- events])
+                    [(eventName,description) | Plugins.PreparedEvent eventName description _ _ _ _ _ _ <- events] configured
                 Plugins.PreparedSinkConnector { Plugins.sinkInputContract = input, Plugins.sinkOptionsContract = options,
                   Plugins.sinkResultContract = output } ->
-                  ConnectorDeclarationInspection connector.connectorType True
+                  ConnectorDeclarationInspection connector.connectorType SinkKind
                     [config,("input",input),("options",options),("result",output)] [] configured
         pure (PluginInspection identity fingerprint origin (map describe connectors))
       OutputRequest name -> do

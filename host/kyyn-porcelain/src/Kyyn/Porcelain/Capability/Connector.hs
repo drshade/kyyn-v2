@@ -40,7 +40,10 @@ loginConfiguredConnector kb revision plugin name = runExceptT $ do
   plugins <- ExceptT (preparePlugins code)
   (package,instanceValue@(ConfiguredConnector _ _ connector config)) <-
     checked (selectedInstance plugin name plugins)
-  (_,_,_,_,_,entry,_,_) <- checked (sourceDetails connector)
+  let entry = case connector of
+        PreparedConnector {loginEntry = login} -> login
+        PreparedEventConnector {loginEntry = login} -> login
+        PreparedSinkConnector{} -> Nothing
   selected <- maybe (throwE [errorDiagnostic "plugin.login-unsupported" "This connector does not provide a login operation."]) pure entry
   report <- ExceptT (validatePlugins [PreparedPlugin package [instanceValue]])
   case checkReport () report of

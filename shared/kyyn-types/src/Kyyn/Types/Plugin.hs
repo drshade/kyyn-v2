@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
-  ( Connector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
+  ( Connector(..), EventMethod(..), Seconds(..), RepeatSafety(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
-import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
+import qualified Data.Text as Text
+import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject, withText, Value(String))
 import qualified Data.Aeson.KeyMap as Keys
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 
@@ -24,7 +25,7 @@ data FetchResult payload position report = FetchResult
 -- | A configured instance of one connector type.
 newtype ConnectorInstance connector = ConnectorInstance Text
 
--- | Register source and sink connectors in the plugin entry module's connectors value.
+-- | Register source, sink and event connectors in the plugin entry module's connectors value.
 data Connector = SourceConnector
   { -- | Unique connector type name: an ASCII uppercase letter followed by letters, digits or underscores.
     name :: Text
@@ -46,7 +47,41 @@ data Connector = SourceConnector
     publish :: Text
   , -- | Qualified pure Options value used when invocation options are omitted.
     defaultOptions :: Text
-  } deriving (Eq, Show)
+  }
+  | EventConnector
+  { name :: Text, validateConfig :: Text, login :: Maybe Text, events :: [EventMethod] }
+  deriving (Eq, Show)
+
+data EventMethod = EventMethod
+  { eventName :: Text, eventDescription :: Text, poll :: Text
+  , dispatch :: Maybe (Text, RepeatSafety), minimumPollInterval :: Seconds }
+  deriving (Eq, Show)
+data RepeatSafety = SafeToRepeat | RequireExplicitRetry deriving (Eq, Show)
+
+newtype Seconds = Seconds Integer deriving (Eq, Ord, Show)
+instance ToJSON Seconds where
+  toJSON (Seconds seconds) = toJSON (show seconds)
+instance FromJSON Seconds where
+  parseJSON = withText "seconds" $ \raw -> case reads (Text.unpack raw) of
+    [(n, "")] | show n == Text.unpack raw -> pure (Seconds n)
+    _ -> fail "Expected canonical integer seconds"
+
+instance ToJSON RepeatSafety where
+  toJSON SafeToRepeat = String "safe-to-repeat"
+  toJSON RequireExplicitRetry = String "require-explicit-retry"
+instance FromJSON RepeatSafety where
+  parseJSON = withText "dispatch repeat safety" $ \value -> case value of
+    "safe-to-repeat" -> pure SafeToRepeat
+    "require-explicit-retry" -> pure RequireExplicitRetry
+    _ -> fail "Unknown dispatch repeat safety"
+instance ToJSON EventMethod where
+  toJSON (EventMethod name description poll dispatch interval) = object
+    ["name" .= name,"description" .= description,"poll" .= poll,
+     "dispatch" .= optionalValue dispatch,"minimumPollInterval" .= interval]
+instance FromJSON EventMethod where
+  parseJSON = exactObject "event method" ["name","description","poll","dispatch","minimumPollInterval"] $ \fields -> do
+    EventMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "poll"
+      <*> (fields .: "dispatch" >>= parseOptionalValue) <*> fields .: "minimumPollInterval"
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.
 data CapturedMethod = CapturedMethod
@@ -84,6 +119,8 @@ instance ToJSON Connector where
      "login" .= optionalValue login]
   toJSON (SinkConnector name validate publish defaults) = object
     ["name" .= name,"validateConfig" .= validate,"publish" .= publish,"defaultOptions" .= defaults]
+  toJSON (EventConnector name validate login events) = object
+    ["name" .= name,"validateConfig" .= validate,"login" .= optionalValue login,"events" .= events]
 instance FromJSON Connector where
   parseJSON value = withObject "connector" (\fields ->
     if Keys.member "fetch" fields then
@@ -91,6 +128,10 @@ instance FromJSON Connector where
         (\selected -> SourceConnector <$> selected .: "name" <*> selected .: "fetch"
           <*> selected .: "validateConfig" <*> selected .: "methods"
           <*> (selected .: "login" >>= parseOptionalValue)) value
+    else if Keys.member "events" fields then
+      exactObject "event connector" ["name","validateConfig","login","events"]
+        (\selected -> EventConnector <$> selected .: "name" <*> selected .: "validateConfig"
+          <*> (selected .: "login" >>= parseOptionalValue) <*> selected .: "events") value
     else exactObject "sink connector" ["name","validateConfig","publish","defaultOptions"]
       (\selected -> SinkConnector <$> selected .: "name" <*> selected .: "validateConfig"
         <*> selected .: "publish" <*> selected .: "defaultOptions") value) value

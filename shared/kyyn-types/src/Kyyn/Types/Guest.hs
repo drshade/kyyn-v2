@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( InteractiveInvocation(..), InteractiveContracts(..), EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( EventEntry(..), EventContracts(..), DispatchContracts(..), InteractiveInvocation(..), InteractiveContracts(..), EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -10,6 +10,7 @@ module Kyyn.Types.Guest
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject, withText)
 import Data.Text (Text)
+import Kyyn.Types.Plugin (RepeatSafety, Seconds)
 import Kyyn.Types.Contract
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 import Kyyn.Types.SchemaMetadata
@@ -199,6 +200,35 @@ data Invocation contract = Invocation { invocationName :: Text, invocationContra
 data CapturedEntry contract = CapturedEntry
   { capturedName :: Text, capturedDescription :: Text, capturedInvocation :: Invocation (CapturedContracts contract) }
   deriving (Eq, Show, Functor, Foldable, Traversable)
+data EventContracts contract = EventContracts contract contract contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+data DispatchContracts contract = DispatchContracts contract contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+data EventEntry contract = EventEntry
+  { eventName :: Text, eventDescription :: Text, minimumPollInterval :: Seconds
+  , eventPoll :: Invocation (EventContracts contract)
+  , eventDispatch :: Maybe (Invocation (DispatchContracts contract), RepeatSafety) }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance ToJSON contract => ToJSON (EventContracts contract) where
+  toJSON (EventContracts config request cursor reply) = object
+    ["config" .= config,"request" .= request,"cursor" .= cursor,"reply" .= reply]
+instance FromJSON contract => FromJSON (EventContracts contract) where
+  parseJSON = exactObject "event contracts" ["config","request","cursor","reply"] $ \fields ->
+    EventContracts <$> fields .: "config" <*> fields .: "request" <*> fields .: "cursor" <*> fields .: "reply"
+instance ToJSON contract => ToJSON (DispatchContracts contract) where
+  toJSON (DispatchContracts config request cursor) = object
+    ["config" .= config,"request" .= request,"cursor" .= cursor]
+instance FromJSON contract => FromJSON (DispatchContracts contract) where
+  parseJSON = exactObject "dispatch contracts" ["config","request","cursor"] $ \fields ->
+    DispatchContracts <$> fields .: "config" <*> fields .: "request" <*> fields .: "cursor"
+instance ToJSON contract => ToJSON (EventEntry contract) where
+  toJSON (EventEntry name description interval poll dispatch) = object
+    ["name" .= name,"description" .= description,"minimumPollInterval" .= interval,
+     "poll" .= poll,"dispatch" .= optionalValue dispatch]
+instance FromJSON contract => FromJSON (EventEntry contract) where
+  parseJSON = exactObject "event entry" ["name","description","minimumPollInterval","poll","dispatch"] $ \fields ->
+    EventEntry <$> fields .: "name" <*> fields .: "description" <*> fields .: "minimumPollInterval"
+      <*> fields .: "poll" <*> (fields .: "dispatch" >>= parseOptionalValue)
 data ConnectorEntries contract
   = SourceEntries
       { configure :: Invocation contract
@@ -211,6 +241,8 @@ data ConnectorEntries contract
       , publish :: Invocation (SinkContracts contract)
       , defaults :: Invocation contract
       }
+  | EventEntries
+      { configure :: Invocation contract, login :: Maybe (Invocation contract), eventMethods :: [EventEntry contract] }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 entryNames :: GuestEntry contract -> [Text]
@@ -219,6 +251,10 @@ entryNames (ConnectorEntry _ (SourceEntries config acquisition authentication ca
   map (invocationName . capturedInvocation) captured
 entryNames (ConnectorEntry _ (SinkEntries config publication options)) =
   [invocationName config,invocationName publication,invocationName options]
+entryNames (ConnectorEntry _ (EventEntries config authentication events)) =
+  [invocationName config] ++ maybe [] (pure . invocationName) authentication ++
+  concat [invocationName poll : maybe [] (pure . invocationName . fst) dispatch |
+    EventEntry _ _ _ poll dispatch <- events]
 entryNames (ValidatorEntry name _) = [name]
 entryNames (EvolutionEntry name _) = [name]
 entryNames (InteractiveEntry name _ _) = [name]
@@ -244,6 +280,8 @@ instance ToJSON contract => ToJSON (ConnectorEntries contract) where
      "login" .= optionalValue authentication,"methods" .= captured]
   toJSON (SinkEntries config publication options) = object
     ["kind" .= String "sink","configure" .= config,"publish" .= publication,"defaults" .= options]
+  toJSON (EventEntries config authentication events) = object
+    ["kind" .= String "event","configure" .= config,"login" .= optionalValue authentication,"events" .= events]
 instance FromJSON contract => FromJSON (ConnectorEntries contract) where
   parseJSON value = withObject "connector entries" (\fields -> do
     kind <- fields .: "kind"
@@ -253,6 +291,8 @@ instance FromJSON contract => FromJSON (ConnectorEntries contract) where
           <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "methods") value
       "sink" -> exactObject "sink connector" ["kind","configure","publish","defaults"]
         (\entry -> SinkEntries <$> entry .: "configure" <*> entry .: "publish" <*> entry .: "defaults") value
+      "event" -> exactObject "event connector" ["kind","configure","login","events"]
+        (\entry -> EventEntries <$> entry .: "configure" <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "events") value
       _ -> fail "Unknown connector kind") value
 
 -- Defaults take an explicit empty request, shared by both sides of the boundary.
