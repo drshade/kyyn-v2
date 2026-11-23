@@ -6,6 +6,8 @@ module Kyyn.Domain.FlowInstance
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
 
+import Kyyn.Domain.FlowBundleId (FlowBundleId)
+import Kyyn.Types.KnowledgeBase (RecipeId)
 import Data.Aeson (Value)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
@@ -23,7 +25,7 @@ flowInstanceId value
 flowInstanceIdText :: FlowInstanceId -> Text
 flowInstanceIdText (FlowInstanceId value) = value
 
-data FlowOwner = Hosted | External deriving (Eq, Show)
+data FlowOwner = Hosted FlowBundleId RecipeId | External deriving (Eq, Show)
 data FlowOutcome = Completed Value | Failed [Diagnostic] | Cancelled deriving (Eq, Show)
 data ExecutionStatus = Runnable | Running | Waiting | Finished FlowOutcome deriving (Eq, Show)
 data CancelScope = ThisFlow | FlowAndDescendants deriving (Eq, Show)
@@ -32,7 +34,7 @@ data ReplyOrigin = ManualReply Text | ProviderReply Text Text deriving (Eq, Show
 -- The application validates and captures the execution description before start.
 -- This store preserves it verbatim; reading status never loads its guest or secrets.
 data FlowLaunch = FlowLaunch
-  { revision :: Text, request :: Value, captured :: Value, owner :: FlowOwner
+  { revision :: Text, request :: Value, owner :: FlowOwner
   } deriving (Eq, Show)
 data FlowInstance = FlowInstance
   { instanceId :: FlowInstanceId, parent :: Maybe FlowInstanceId

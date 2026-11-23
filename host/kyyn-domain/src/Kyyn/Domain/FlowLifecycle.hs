@@ -11,7 +11,7 @@ import Kyyn.Domain.FlowInstance
 
 begin :: FlowInstance -> Either FlowStoreProblem FlowInstance
 begin current
-  | current.launch.owner /= Hosted = Left NotHosted
+  | current.launch.owner == External = Left NotHosted
   | not (null current.blocked) = Left ExecutionBlocked
   | Finished{} <- current.status = Left AlreadyFinished
   | otherwise = Right current { status = Running }

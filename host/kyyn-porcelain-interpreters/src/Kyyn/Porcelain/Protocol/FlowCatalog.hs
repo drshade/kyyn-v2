@@ -9,6 +9,9 @@ import Data.List (nub, sort)
 import qualified Data.Text as Text
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (diagnosticValue, parseReport)
+import Kyyn.Domain.FlowBundleId (flowBundleId, flowBundleIdText)
+import Kyyn.Domain.Recipe (recipeId)
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Domain.FlowInstance
 
 catalogValue :: [FlowInstance] -> Value
@@ -22,8 +25,10 @@ instanceValue item = object
   ,"blocked" .= map diagnosticValue item.blocked,"cancelDescendants" .= item.cancelDescendants
   ,"waits" .= map waitValue item.waits,"deliveries" .= map deliveryValue item.deliveries]
 launchValue :: FlowLaunch -> Value
-launchValue item = object ["revision" .= item.revision,"request" .= item.request,"captured" .= item.captured,
-  "owner" .= (case item.owner of Hosted -> "hosted"; External -> "external" :: Text.Text)]
+launchValue item = object ["revision" .= item.revision,"request" .= item.request,
+  "owner" .= case item.owner of
+    Hosted bundle (RecipeId recipe) -> object ["tag" .= String "hosted","bundle" .= flowBundleIdText bundle,"recipe" .= recipe]
+    External -> object ["tag" .= String "external"]]
 statusValue :: ExecutionStatus -> Value
 statusValue Runnable = tag "runnable" Null
 statusValue Running = tag "running" Null
@@ -84,12 +89,17 @@ parseInstance = withObject "instance" $ \fields -> do
     <*> pure waits <*> pure deliveries
 parseLaunch :: Value -> Parser FlowLaunch
 parseLaunch = withObject "launch" $ \fields -> do
-  exact ["revision","request","captured","owner"] fields
-  owner <- fields .: "owner" >>= \name -> case name :: Text.Text of
-    "hosted" -> pure Hosted
-    "external" -> pure External
-    _ -> fail "Unknown execution owner"
-  FlowLaunch <$> fields .: "revision" <*> fields .: "request" <*> fields .: "captured" <*> pure owner
+  exact ["revision","request","owner"] fields
+  owner <- fields .: "owner" >>= withObject "execution owner" (\value -> do
+    name <- value .: "tag"
+    case name :: Text.Text of
+      "hosted" -> do
+        exact ["tag","bundle","recipe"] value
+        Hosted <$> (value .: "bundle" >>= either fail pure . flowBundleId)
+          <*> (value .: "recipe" >>= either fail pure . recipeId)
+      "external" -> exact ["tag"] value >> pure External
+      _ -> fail "Unknown execution owner")
+  FlowLaunch <$> fields .: "revision" <*> fields .: "request" <*> pure owner
 parseStatus :: Value -> Parser ExecutionStatus
 parseStatus value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("runnable",Null) -> pure Runnable

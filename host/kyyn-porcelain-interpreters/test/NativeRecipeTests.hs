@@ -19,7 +19,7 @@ import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, DispatchOf, Dispatch(..), runEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink)
+import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
@@ -35,7 +35,7 @@ import Kyyn.Domain.Secret (secretName)
 import Kyyn.Porcelain.Capability.FlowPreparation
 import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import qualified Kyyn.Domain.FlowInstance as Instance
-import Kyyn.Domain.FlowBundleId (flowBundleId, flowBundleIdText)
+import Kyyn.Domain.FlowBundleId (flowBundleIdText)
 import Kyyn.Porcelain.Capability.FlowStore
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
@@ -187,16 +187,18 @@ main = do
         store :: Eff '[FlowStore, DocumentPersistence, FileSystem, Failure, IOE] result -> IO (Either OperationalFailure result)
         store action = runEff . runFailure . runFileSystemIO scope . runDocumentPersistenceIO . runFlowStore kbForCapture $ action
     parent <- store (startPreparedInstance Nothing "parent-start" (PreparedFlow (R.RecipeId "parent") (String "1") capturedBundle)) >>= right >>= right
-    child <- store (startPreparedInstance (Just parent.instanceId) "child-start" (PreparedFlow (R.RecipeId "child") (String "2") capturedBundle)) >>= right >>= right
+    parentBundleId <- case parent.launch.owner of Instance.Hosted identity _ -> pure identity; _ -> fail "Parent is not hosted"
+    reopenedForChild <- store (readExecutionBundle parentBundleId) >>= right >>= right
+    child <- store (startPreparedInstance (Just parent.instanceId) "child-start" (PreparedFlow (R.RecipeId "child") (String "2") reopenedForChild)) >>= right >>= right
     outside <- store (startPreparedInstance (Just parent.instanceId) "undeclared-child"
       (PreparedFlow (R.RecipeId "parent") (String "1") capturedBundle)) >>= right
     case outside of Left Instance.InvalidTransition{} -> pure (); _ -> fail "Started a child outside the declared set"
     different <- store (startPreparedInstance (Just parent.instanceId) "changed-child"
       (PreparedFlow (R.RecipeId "child") (String "1") originalBundle)) >>= right
     case different of Left Instance.InvalidTransition{} -> pure (); _ -> fail "Started child against different captured configuration"
-    bundleId <- right (parseEither (withObject "bundle reference" (\fields -> fields .: "bundle" >>= either fail pure . flowBundleId)) parent.launch.captured)
-    childBundleId <- right (parseEither (withObject "bundle reference" (.: "bundle")) child.launch.captured)
-    unless (flowBundleIdText bundleId == childBundleId) (fail "Parent and child did not share the immutable bundle")
+    bundleId <- case parent.launch.owner of Instance.Hosted identity _ -> pure identity; _ -> fail "Parent is not hosted"
+    childBundleId <- case child.launch.owner of Instance.Hosted identity _ -> pure identity; _ -> fail "Child is not hosted"
+    unless (bundleId == childBundleId) (fail "Parent and child did not share the immutable bundle")
     fromDisk <- store (readExecutionBundle bundleId) >>= right >>= right
     unless (bundleValue fromDisk == savedBundle) (fail "Persisted bundle changed on reopen")
     let bundlePath = directory ++ "/.kyyn/flows/bundles/" ++ flowBundleIdText bundleId ++ ".json"
@@ -209,6 +211,13 @@ main = do
     missing <- store (readExecutionBundle bundleId) >>= right
     case missing of Left [Diagnostic _ "flow.build-unavailable" _ _] -> pure (); _ -> fail "Missing retained build was not refused"
     _ <- store (cancelInstance parent.instanceId Instance.FlowAndDescendants) >>= right >>= right
+    let otherOutput = directory ++ "/different-output"
+    createDirectoryIfMissing True (otherOutput ++ "/bin")
+    createFileLink baseProgram.executable (otherOutput ++ "/bin/kyyn-guest")
+    createDirectoryLink otherOutput retention
+    mismatch <- store (readExecutionBundle bundleId) >>= right
+    case mismatch of Left [Diagnostic _ "flow.build-mismatch" _ _] -> pure (); _ -> fail "Retargeted retention link was accepted"
+    removeDirectoryLink retention
     createDirectoryLink baseProgram.identity.outputPath retention
     -- Either catalog serialization must preserve a bundle used by a new start.
     raced <- newEmptyMVar

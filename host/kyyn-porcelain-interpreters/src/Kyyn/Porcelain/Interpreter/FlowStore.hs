@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables #-}
 module Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore) where
 
-import Data.Aeson (encode, eitherDecodeStrict', object, (.=), (.:), withObject)
+import Data.Aeson (encode, eitherDecodeStrict')
 import Control.Monad (forM_, void, when, unless)
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Lazy as Lazy
@@ -13,7 +13,7 @@ import Kyyn.Domain.FlowBundleId
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Git (revisionName)
-import Kyyn.Types.KnowledgeBase (RecipeId(..), InteractionBindings(..), ChildReference(..))
+import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow(..), FlowBundle(..), PreparedFlowEntry(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
@@ -77,13 +77,14 @@ runFlowStore kb = interpret $ \_ operation -> do
         case operation of
           ListInstances -> pure catalog
           ReadInstance identity -> pure (find ((== identity) . (.instanceId)) catalog)
-          StartInstance parent key launch -> start parent key launch (pure ())
+          StartInstance parent key launch -> case launch.owner of
+            Hosted{} -> pure (Left (InvalidTransition "Hosted instances require a prepared execution bundle"))
+            External -> start parent key launch (pure ())
           StartPreparedInstance parent key prepared -> do
             let bytes = Lazy.toStrict (encode (bundleValue prepared.bundle))
                 identity = identifyBundle bytes
-                RecipeId recipe = prepared.selected
                 launch = FlowLaunch (Text.pack (revisionName prepared.bundle.revision)) prepared.request
-                  (object ["bundle" .= flowBundleIdText identity,"recipe" .= recipe]) Hosted
+                  (Hosted identity prepared.selected)
             let authority = do
                   selected <- case [flow.declaration | flow <- prepared.bundle.closure, flow.declaration.recipe == prepared.selected] of
                     [definition] -> Right definition
@@ -92,10 +93,11 @@ runFlowStore kb = interpret $ \_ operation -> do
                     Nothing -> Right ()
                     Just parentId -> do
                       current <- maybe (Left MissingInstance) Right (find ((== parentId) . (.instanceId)) catalog)
-                      (parentBundle,parentRecipe) <- either (const (Left (InvalidTransition "Parent has no captured execution"))) Right
-                        (parseEither (withObject "parent capture" (\fields -> (,) <$> fields .: "bundle" <*> fields .: "recipe")) current.launch.captured)
-                      unless (parentBundle == flowBundleIdText identity) (Left (InvalidTransition "Child must use the parent's captured execution bundle"))
-                      parentDefinition <- case [flow.declaration | flow <- prepared.bundle.closure, flow.declaration.recipe == RecipeId parentRecipe] of
+                      (parentBundle,parentRecipe) <- case current.launch.owner of
+                        Hosted bundle recipe -> Right (bundle,recipe)
+                        External -> Left (InvalidTransition "Parent has no captured execution")
+                      unless (parentBundle == identity) (Left (InvalidTransition "Child must use the parent's captured execution bundle"))
+                      parentDefinition <- case [flow.declaration | flow <- prepared.bundle.closure, flow.declaration.recipe == parentRecipe] of
                         [definition] -> Right definition
                         _ -> Left (InvalidTransition "Parent is missing from its captured execution bundle")
                       let InteractionBindings allowed = parentDefinition.bindings
@@ -109,7 +111,7 @@ runFlowStore kb = interpret $ \_ operation -> do
                 case existing of
                   Nothing -> FileSystem.replaceBytes base path bytes
                   Just previous | previous == bytes -> pure ()
-                                | otherwise -> checked (Left "Execution bundle contents do not match their identity")
+                                | otherwise -> problemAt (scopePath base </> relativeName path) "Execution bundle contents do not match their identity"
           ReadExecutionBundle identity -> do
             path <- checked (relativePath (".kyyn/flows/bundles/" ++ flowBundleIdText identity ++ ".json"))
             stored <- FileSystem.readOptionalBytes base path
@@ -124,20 +126,22 @@ runFlowStore kb = interpret $ \_ operation -> do
                   executable <- checked (relativePath "bin/kyyn-guest")
                   size <- FileSystem.fileSize output executable
                   retainedSize <- FileSystem.fileSize retained executable
+                  resolved <- FileSystem.resolveDirectory retained
                   pure $ if size == Nothing || retainedSize == Nothing
                     then bundleProblem "flow.build-unavailable" "The captured guest build or its retention link is missing"
-                    else Right bundle
+                    else if resolved /= Just output
+                      then bundleProblem "flow.build-mismatch" "The retention link does not resolve to the captured guest output"
+                      else Right bundle
           ClearInstances requested -> case Lifecycle.clearFinished requested catalog of
             Left refused -> pure (Left refused)
             Right (removed,remaining) -> do
               persist remaining
               directory <- checked (directoryScope (scopePath base </> ".kyyn/flows/bundles"))
               candidates <- FileSystem.listDirectory directory
-              let referenced = [identity | item <- remaining,
-                    Right identity <- [parseEither (withObject "capture" (\fields -> fields .: "bundle")) item.launch.captured]]
+              let referenced = [identity | item <- remaining, Hosted identity _ <- [item.launch.owner]]
               forM_ (maybe [] id candidates) $ \candidate ->
                 case Text.stripSuffix ".json" (Text.pack (relativeName candidate)) >>= either (const Nothing) Just . flowBundleId . Text.unpack of
-                  Just identity | flowBundleIdText identity `notElem` referenced -> FileSystem.removeFile directory candidate
+                  Just identity | identity `notElem` referenced -> FileSystem.removeFile directory candidate
                   _ -> pure ()
               pure (Right removed)
           BeginAttempt identity -> commit (change identity Lifecycle.begin)
@@ -176,6 +180,8 @@ runFlowStore kb = interpret $ \_ operation -> do
               when (all ((/= identity) . (.instanceId)) catalog)
                 (void (raise (clearCurrent :: Eff (DocumentAccess : es) Bool)))
     bundleProblem code message = Left [errorDiagnostic code message]
+    problemAt :: Failure :> effects => FilePath -> String -> Eff effects b
+    problemAt path message = raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.InspectEntry path message))
     checked :: Failure :> effects => Either String b -> Eff effects b
     checked = either (\message -> raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.InspectEntry
       (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows/catalog/instances.json") message))) pure

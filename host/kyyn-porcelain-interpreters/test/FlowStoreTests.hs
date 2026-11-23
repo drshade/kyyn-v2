@@ -18,9 +18,20 @@ import System.IO.Temp (withSystemTempDirectory)
 import GHC.Clock (getMonotonicTimeNSec)
 import Text.Printf (printf)
 import System.Timeout (timeout)
+import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
+import Kyyn.Domain.CompiledEntry (compiledEntries)
+import Kyyn.Domain.Contract (checkContract)
+import Kyyn.Domain.Guest (checkGuest)
+import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
+import Kyyn.Domain.FlowBundleId (identifyBundle)
+import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..), InteractionBindings(..), ChildReference(..))
+import Kyyn.Types.Contract (Description(UnitDescription))
+import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
+import qualified Kyyn.Types.Guest as G
+import Kyyn.Porcelain.Capability.FlowPreparation
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.FlowInstance
-import Kyyn.Domain.Git (Repository(..), TreePath(..))
+import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
@@ -43,8 +54,8 @@ store scope = execute scope . runFlowStore (KnowledgeBase (Repository scope) Who
 main :: IO ()
 main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   scope <- right (directoryScope directory)
-  let launch = FlowLaunch "revision" (String "request") (object []) Hosted
-      start parent key = store scope (startInstance parent key launch) >>= right
+  let launch = FlowLaunch "revision" (object []) (Hosted (identifyBundle "fixture") (RecipeId "fixture"))
+      start parent key = store scope (startPreparedInstance parent key preparedFixture) >>= right
       update :: Eff (FlowStore : Host) (Either FlowStoreProblem a) -> IO a
       update op = store scope op >>= right
       readFlow identity = store scope (readInstance identity) >>= maybe (fail "Missing instance") pure
@@ -55,7 +66,9 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   child <- start (Just parent.instanceId) "child-occurrence"
   replay <- start (Just parent.instanceId) "child-occurrence"
   assert (replay.instanceId == child.instanceId) "Child start was not idempotent"
-  changed <- store scope (startInstance (Just parent.instanceId) "child-occurrence" launch { revision = "different" })
+  raw <- store scope (startInstance Nothing "raw-hosted" launch)
+  assert (case raw of Left InvalidTransition{} -> True; _ -> False) "Raw hosted start bypassed prepared authority"
+  changed <- store scope (startPreparedInstance (Just parent.instanceId) "child-occurrence" (PreparedFlow preparedFixture.selected Null preparedFixture.bundle))
   assert (changed == Left StartConflict) "Changed child execution was silently reused"
   _ <- update (finishInstance parent.instanceId (Completed Null))
   activeChild <- readFlow child.instanceId
@@ -129,7 +142,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   refused <- store scope (beginAttempt blocked.instanceId)
   assert (refused == Left ExecutionBlocked) "Blocked instance executed"
   _ <- update (cancelInstance blocked.instanceId ThisFlow)
-  external <- store scope (startInstance Nothing "external" (FlowLaunch "revision" Null Null External)) >>= right
+  external <- store scope (startInstance Nothing "external" (FlowLaunch "revision" Null External)) >>= right
   rejected <- store scope (beginAttempt external.instanceId)
   assert (rejected == Left NotHosted) "Worker dispatched an external instance"
   -- Both serializations of child publication versus cancellation are valid.
@@ -137,7 +150,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     allItems <- store scope listInstances
     racer <- start Nothing ("race-" <> Text.pack (show (length allItems)))
     (created,_) <- concurrently
-      (store scope (startInstance (Just racer.instanceId) "racing-child" launch))
+      (store scope (startPreparedInstance (Just racer.instanceId) "racing-child" preparedFixture))
       (update (cancelInstance racer.instanceId FlowAndDescendants))
     case created of
       Left CancelledAncestor -> pure ()
@@ -185,8 +198,8 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   assert (not swept) "Repeated clear leaked an orphan journal"
   collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
     . collisionDocuments . runFlowStore kb $ do
-      first <- startInstance Nothing "first" launch
-      second <- startInstance Nothing "second" launch
+      first <- startPreparedInstance Nothing "first" preparedFixture
+      second <- startPreparedInstance Nothing "second" preparedFixture
       pure (first,second)
   (firstResult,secondResult) <- right collision
   first <- right firstResult
@@ -224,3 +237,20 @@ collisionDocument operation = do
       State.put (document,count + 1)
       pure (DocumentStamp (if count < 2 then "00000001" else "00000002") "fixture")
     ClearCurrent -> error "Unexpected catalog deletion"
+
+-- Synthetic, checked description: this suite tests store transactions without
+-- invoking a compiler or guest. The native guest suite proves actual preparation.
+preparedFixture :: PreparedFlow
+preparedFixture = PreparedFlow (RecipeId "fixture") (object []) bundle
+  where
+    metadata = SchemaMetadata [] [] []
+    contract = either (error . show) id (checkContract UnitDescription metadata)
+    described = G.describeContract UnitDescription metadata []
+    guest = either (error . show) id (checkGuest (G.GuestDescription
+      [G.InteractiveEntry "$interactive.Flows.fixture" "Flows.fixture" (G.InteractiveContracts described described)] []))
+    program = CompiledProgram (BuildIdentity "fixture" "fixture" "fixture.drv" "/fixture") "/fixture/bin/kyyn-guest" "/fixture"
+    entry = case compiledEntries program guest of [selected] -> selected; _ -> error "Fixture entry missing"
+    declaration = FlowDeclaration (RecipeId "fixture") (FlowEntryRef "Flows.fixture")
+      (InteractionBindings [ChildReference (RecipeId "fixture") (FlowEntryRef "Flows.fixture")])
+    bundle = FlowBundle (either error id (gitRevision (replicate 40 'a'))) program guest
+      [PreparedFlowEntry declaration entry contract contract (object []) "fixture"] [] Nothing
