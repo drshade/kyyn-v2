@@ -30,7 +30,7 @@ frontier reached current = do
   pure current { status = Waiting, waits = retained ++ new }
   where
     attach (identity,description,kind) = case find ((== identity) . (.waitId)) current.waits of
-      Nothing -> Right (FlowWait identity description kind Open)
+      Nothing -> Right (FlowWait identity description kind Open Nothing)
       Just old | old.descriptor /= description || old.kind /= kind -> Left (InvalidTransition "Wait descriptor changed")
                | old.waitStatus /= Open -> Left (InvalidTransition "Reported wait is already closed or answered")
                | otherwise -> Right old
@@ -93,7 +93,7 @@ cancelTree identity scope catalog = do
 
 -- The delivery identity is supplied by ingress (provider event ID or fresh manual ID).
 -- Queuing is not fulfilment; terminal and unknown waits are retained as closed deliveries.
-enqueue :: Text -> Text -> ReplyOrigin -> Value -> FlowInstance
+enqueue :: Text -> Text -> DeliveryOrigin -> Value -> FlowInstance
   -> Either FlowStoreProblem (FlowInstance,FlowDelivery)
 enqueue delivery wait origin value current = do
   case (find ((== wait) . (.waitId)) current.waits,origin) of
@@ -153,6 +153,7 @@ deliverCompletions encode catalog = traverse notify catalog
     notify item = foldM attach item [wait | wait <- item.waits, wait.waitStatus == Open]
     attach item wait = case wait.kind of
       ReplyWait -> Right item
+      EventWait{} -> Right item
       ChildWait child _ -> case find ((== child) . (.instanceId)) catalog of
         Just selected | Finished outcome <- selected.status ->
           fst <$> enqueue ("internal-child-" <> wait.waitId) wait.waitId (ChildCompletion child) (encode outcome) item

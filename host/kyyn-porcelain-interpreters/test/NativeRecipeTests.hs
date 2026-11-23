@@ -383,14 +383,14 @@ main = do
       (fail "Suspended attempt lost its outcome or instance link")
     idle <- visit False hosted.instanceId
     unless (idle == NoWork) (fail "Waiting instance ran without a reply")
-    _ <- store (queueDelivery hosted.instanceId "bad" waitId (Instance.ManualReply "cli") (String "bad")) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "bad" waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "bad")) >>= right >>= right
     rejectedVisit <- visit False hosted.instanceId
     invalid <- inspect hosted.instanceId
     unless (rejectedVisit == NoWork && invalid.status == Instance.Waiting && invalid.attempts == [firstRun])
       (fail "Invalid reply woke or recorded an attempt")
-    _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ManualReply "first") (Number 9)) >>= right >>= right
-    _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ManualReply "second") (Number 9)) >>= right >>= right
-    _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ManualReply "third") (Number 10)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ReceivedFrom (Instance.ManualReply "first")) (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ReceivedFrom (Instance.ManualReply "second")) (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ReceivedFrom (Instance.ManualReply "third")) (Number 10)) >>= right >>= right
     broken <- visitWith RecordingFault False hosted.instanceId
     unless (case broken of Left _ -> True; _ -> False) (fail "Recording failure was swallowed")
     interruptedFlow <- inspect hosted.instanceId
@@ -408,7 +408,7 @@ main = do
     unless (map (.outcome) (drop 1 completedFlow.deliveries) == map Just [Instance.Accepted,Instance.Duplicate,Instance.Conflicting])
       (fail "Worker lost reply deduplication or conflict decisions")
     case completedFlow.waits of
-      [waitDescriptor] | waitDescriptor.waitStatus == Instance.Answered (Instance.ManualReply "first") (Number 9) -> pure ()
+      [waitDescriptor] | waitDescriptor.waitStatus == Instance.Answered (Instance.ReceivedFrom (Instance.ManualReply "first")) (Number 9) -> pure ()
       _ -> fail "Duplicate changed first reply provenance"
     secondRun <- case completedFlow.attempts of [_,_,attemptId] -> pure attemptId; _ -> fail "Missing resumed attempt"
     secondRecording <- recording secondRun

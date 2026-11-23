@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Surfaces.Flows (FlowValues(..), waitLabel, instanceValue, instanceLines, deliveryValue, deliveryOutcomeText, statusText) where
+module Kyyn.Surfaces.Flows (FlowValues(..), waitLabel, instanceValue, instanceLines, deliveryValue, deliveryOutcomeText, statusText, dispatchText) where
 
 import qualified Data.Aeson.KeyMap as Keys
 import Data.Foldable (toList)
@@ -41,8 +41,9 @@ instanceValue item interrupted descriptors input result problems = object
    "failure" .= [object ["code" .= problem.code,"message" .= problem.message] | Finished (Failed failures) <- [item.status], problem <- failures],
    "blocked" .= [object ["code" .= problem.code,"message" .= problem.message] | problem <- item.blocked],
    "waits" .= [object ["id" .= wait.waitId,"status" .= waitStatusText wait.waitStatus,
-      "descriptor" .= (case wait.kind of ReplyWait -> lookup wait.waitId descriptors; ChildWait{} -> Nothing),
-      "child" .= (case wait.kind of ChildWait child _ -> Just (flowInstanceIdText child); ReplyWait -> Nothing),"reply" .= case wait.waitStatus of
+      "descriptor" .= (case wait.kind of ChildWait{} -> Nothing; _ -> lookup wait.waitId descriptors),
+      "dispatch" .= fmap dispatchText wait.dispatch,
+      "child" .= (case wait.kind of ChildWait child _ -> Just (flowInstanceIdText child); _ -> Nothing),"reply" .= case wait.waitStatus of
         Answered origin value -> Just (object ["origin" .= originValue origin,"value" .= value]); _ -> Nothing]
       | wait <- item.waits],
    "deliveries" .= map deliveryValue item.deliveries,
@@ -57,8 +58,8 @@ instanceLines item interrupted descriptors input result problems =
   ["Inspection: " ++ Text.unpack problem.message | problem <- problems] ++
   ["Failed: " ++ Text.unpack problem.message | Finished (Failed failures) <- [item.status], problem <- failures] ++
   ["Blocked: " ++ Text.unpack diagnostic.message | diagnostic <- item.blocked] ++
-  [Text.unpack (waitLabel index descriptors wait) ++ " [" ++ Text.unpack wait.waitId ++ "]  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); ReplyWait -> "") | (index,wait) <- zip [1..] item.waits] ++
-  ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && wait.kind == ReplyWait) item.waits] ++
+  [Text.unpack (waitLabel index descriptors wait) ++ " [" ++ Text.unpack wait.waitId ++ "]  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); _ -> "") ++ maybe "" ((" · dispatch " ++) . Text.unpack . dispatchText) wait.dispatch | (index,wait) <- zip [1..] item.waits] ++
+  ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && (case wait.kind of ChildWait{} -> False; _ -> True)) item.waits] ++
   ["Reply " ++ Text.unpack wait.waitId ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | wait <- item.waits, Answered _ value <- [wait.waitStatus]] ++
   ["Attempt " ++ runIdText ident ++ ": /runs/" ++ runIdText ident | ident <- item.attempts]
 
@@ -76,10 +77,10 @@ waitStatusText Open = "open"
 waitStatusText Answered{} = "answered"
 waitStatusText Closed = "closed"
 
-originValue :: ReplyOrigin -> Value
+originValue :: DeliveryOrigin -> Value
 originValue (ChildCompletion child) = object ["kind" .= String "child","child" .= flowInstanceIdText child]
-originValue (ManualReply surface) = object ["kind" .= String "manual","surface" .= surface]
-originValue (ProviderReply binding event) = object ["kind" .= String "provider","binding" .= binding,"event" .= event]
+originValue (ReceivedFrom (ManualReply surface)) = object ["kind" .= String "manual","surface" .= surface]
+originValue (ReceivedFrom (ProviderReply binding event)) = object ["kind" .= String "provider","binding" .= binding,"event" .= event]
 
 deliveryValue :: FlowDelivery -> Value
 deliveryValue delivery = object ["id" .= delivery.deliveryId,"wait" .= delivery.waitId,
@@ -92,3 +93,9 @@ deliveryOutcomeText Duplicate = "duplicate"
 deliveryOutcomeText Conflicting = "conflicting"
 deliveryOutcomeText (Invalid _) = "invalid"
 deliveryOutcomeText ClosedWait = "closed"
+
+dispatchText :: DispatchState -> Text.Text
+dispatchText NotRequired = "not required"
+dispatchText Pending = "pending"
+dispatchText Started = "started"
+dispatchText Dispatched = "completed"

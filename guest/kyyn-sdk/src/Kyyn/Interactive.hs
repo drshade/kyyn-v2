@@ -1,7 +1,8 @@
 module Kyyn.Interactive
-  ( EventRef, EventBinding, event, withEvents, FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
+  ( awaitReply, ReceivedReply(..), ReplyOrigin(..), EventRef, EventBinding, event, withEvents, FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
 
-import Kyyn.Interactive.Event (EventRef, EventBinding(..), event)
+import Kyyn.Types.EventWait (ReceivedReply(..), ReplyOrigin(..))
+import Kyyn.Interactive.Event (EventRef, EventBinding(..), event, awaitReply)
 import Kyyn.Interactive.Control (FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped)
 import Kyyn.Types.FlowStatus (FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..))
 import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef, ChildFlow(..))

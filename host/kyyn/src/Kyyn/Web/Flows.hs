@@ -12,7 +12,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.RecipeRunId (runIdText)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Surfaces.Flows (FlowValues(..), statusText, deliveryOutcomeText, waitLabel)
+import Kyyn.Surfaces.Flows (FlowValues(..), statusText, deliveryOutcomeText, waitLabel, dispatchText)
 import Kyyn.Web.Inspection (pageDocument)
 
 flowLink :: FlowInstanceId -> Text.Text
@@ -41,8 +41,9 @@ flowPage item interrupted values children descriptions = document (recipe item) 
     details_ $ summary_ "Wait identity" >> code_ (toHtml wait.waitId)
     case wait.kind of
       ChildWait child _ -> p_ $ "Child outcome: " >> instanceLink child
-      ReplyWait -> do
+      _ -> do
         forM_ (lookup wait.waitId descriptions) $ \value -> details_ $ summary_ "Request and reply contract" >> json value
+    forM_ wait.dispatch $ \state -> p_ (toHtml ("Dispatch: " <> dispatchText state))
     case wait.waitStatus of
       Answered origin value -> do
         p_ $ "Received from: " >> originHtml origin
@@ -93,9 +94,9 @@ waitName :: WaitStatus -> Text.Text
 waitName Open = "Open"
 waitName Answered{} = "Answered"
 waitName Closed = "Closed"
-originHtml :: ReplyOrigin -> Html ()
-originHtml (ManualReply surface) = toHtml ("Manual · " <> surface)
-originHtml (ProviderReply binding event) = toHtml ("Provider · " <> binding <> " · " <> event)
+originHtml :: DeliveryOrigin -> Html ()
+originHtml (ReceivedFrom (ManualReply surface)) = toHtml ("Manual · " <> surface)
+originHtml (ReceivedFrom (ProviderReply binding event)) = toHtml ("Provider · " <> binding <> " · " <> event)
 originHtml (ChildCompletion child) = "Child · " >> instanceLink child
 json :: Value -> Html ()
 json value = pre_ (toHtml (Text.decodeUtf8 (Bytes.toStrict (encode value))))

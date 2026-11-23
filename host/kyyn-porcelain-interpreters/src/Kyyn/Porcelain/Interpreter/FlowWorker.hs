@@ -3,6 +3,11 @@ module Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker) where
 
 import Control.Monad (void, forM_)
 import Data.Aeson (toJSON)
+import Agentic.Aeson (fromAeson, toAeson)
+import qualified Kyyn.Types.EventWait as Event
+import Kyyn.Types.KnowledgeBase (InteractionBindings(..))
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventWait)
+import Kyyn.Porcelain.Capability.PluginPreparation (PreparedEvent(..))
 import Data.List (find)
 import Data.Maybe (isNothing)
 import qualified Data.Text as Text
@@ -13,7 +18,7 @@ import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..))
 import Kyyn.Domain.Contract (contractShape)
-import Kyyn.Domain.Diagnostic (errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import qualified Kyyn.Domain.RecipeRun as Run
 import qualified Kyyn.Domain.Failure as Failure
@@ -104,11 +109,26 @@ runFlowWorker kb = interpret $ \_ -> \case
         readInstance initial.instanceId >>= \case
           Just current | not (finished current) && null current.blocked -> case find ((== delivery.waitId) . (.waitId)) current.waits of
             Just pending | pending.waitStatus /= Closed -> do
-              answer <- invoke journal bundle entry (const (pure ()))
-                (G.FulfilFlow journal.namespace journal.revision pending.descriptor (encodeFlowValue delivery.value))
-              case either (Left . programDiagnostics) Right answer >>= protocol . parseFulfilment of
-                Left problems -> void (blockAttempt initial.instanceId problems)
-                Right resolution -> void (resolveDelivery initial.instanceId delivery.deliveryId resolution)
+              checked <- case pending.kind of
+                EventWait request -> case checkEventWait entry.declaration.bindings.events bundle.plugins request of
+                  Left problems -> pure (Left problems)
+                  Right (PreparedEvent _ _ _ _ reply _ _ _) -> do
+                    validated <- encodeValue (contractShape reply) delivery.value
+                    let source = case pending.waitStatus of Answered first _ -> first; _ -> delivery.origin
+                    pure $ case (validated,source) of
+                      (Left problems,_) -> Left problems
+                      (Right _,ReceivedFrom origin) -> Right (toAeson (Event.encodeReceivedReply fromAeson (Event.ReceivedReply origin delivery.value)))
+                      _ -> Left [errorDiagnostic "flow.reply-origin" "An event reply requires ingress provenance"]
+                _ -> pure (Right delivery.value)
+              case checked of
+                Left problems -> void (resolveDelivery initial.instanceId delivery.deliveryId
+                  (Invalid (Text.intercalate "; " (map (.message) problems))))
+                Right payload -> do
+                  answer <- invoke journal bundle entry (const (pure ()))
+                    (G.FulfilFlow journal.namespace journal.revision pending.descriptor (encodeFlowValue payload))
+                  case either (Left . programDiagnostics) Right answer >>= protocol . parseFulfilment of
+                    Left problems -> void (blockAttempt initial.instanceId problems)
+                    Right resolution -> void (resolveDelivery initial.instanceId delivery.deliveryId resolution)
             _ -> void (resolveDelivery initial.instanceId delivery.deliveryId ClosedWait)
           _ -> pure ()
       readInstance initial.instanceId >>= \case
@@ -142,8 +162,17 @@ runFlowWorker kb = interpret $ \_ -> \case
         Left (InvocationFailure problems) -> interrupted writer current problems
         Right value -> case protocol (parseProgress journal.namespace journal.revision value) of
           Left problems -> interrupted writer current problems
-          Right (FlowWaiting frontier) -> publish writer current
-            (Run.RunSuspended (fromIntegral (length frontier))) (reportFrontier current.instanceId frontier)
+          Right (FlowWaiting frontier) -> do
+            checks <- traverse (\(_,_,kind) -> case kind of
+              EventWait request -> case checkEventWait entry.declaration.bindings.events bundle.plugins request of
+                Left problems -> pure (Left problems)
+                Right (PreparedEvent _ _ _ input _ _ _ _) -> fmap (fmap (const ()))
+                  (encodeValue (contractShape input) (toAeson request.payload))
+              _ -> pure (Right ())) frontier
+            case sequence_ checks of
+              Left problems -> interrupted writer current problems
+              Right () -> publish writer current (Run.RunSuspended (fromIntegral (length frontier)))
+                (reportFrontier current.instanceId frontier)
           Right (FlowReturned output) -> encodeValue (contractShape entry.outputContract) output >>= \case
             Left problems -> interrupted writer current problems
             Right _ -> publish writer current Run.RunReturned (finishInstance current.instanceId (Completed output))

@@ -7,7 +7,10 @@ import Data.Aeson (Value)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (nub)
-import Kyyn.Types.ChildWait (ChildWaitRequest(..), classifyChildWait)
+import Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec)
+import Kyyn.Types.EventWait (decodeEventRequest)
+import qualified Agentic.Value as V
+import qualified Agentic.Codec as C
 import qualified Agentic.Wait as Wait
 import qualified Agentic.Journal as Journal
 import Agentic.Runtime (PendingWait(..))
@@ -35,9 +38,14 @@ parseProgress namespace revision value = do
       pending <- either (Left . Text.unpack) Right (Wait.pendingWaitFromValue wire)
       unless (pending.identity == Journal.JournalIdentity namespace revision)
         (Left "Wait belongs to another instance or revision")
-      kind <- either (Left . Text.unpack) Right (classifyChildWait pending.request) >>= \case
-        Nothing -> Right ReplyWait
-        Just (ChildWaitRequest identity output) -> ChildWait <$> flowInstanceId identity <*> pure output
+      kind <- case pending.request of
+        V.Object fields | Just tag <- lookup "kyynWait" fields -> case tag of
+          V.String "child" -> do
+            ChildWaitRequest identity output <- either (Left . Text.unpack) Right (C.decode childWaitCodec pending.request)
+            ChildWait <$> flowInstanceId identity <*> pure output
+          V.String "event" -> EventWait <$> either (Left . Text.unpack) Right (decodeEventRequest pending.request)
+          _ -> Left "Unknown Kyyn wait envelope"
+        _ -> Right ReplyWait
       pure (Journal.durableKeyText pending.key,encoded,kind)
 
 parseFulfilment :: Value -> Either String DeliveryOutcome
