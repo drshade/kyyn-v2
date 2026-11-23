@@ -7,8 +7,8 @@ title: 'Agentic judgements backed by Jev'
 
 ## Context
 
-[Issue #169](https://github.com/drshade/kyyn-v2/issues/169) replaces Kyyn's
-separate judgement authoring API with haskell-agentic's SystemOne interface.
+Judgement authoring uses haskell-agentic's SystemOne interface so it composes
+with the same agentic model as drafting and tool execution.
 Tools already execute Agentic workflows, as do closed recipes. A judgement-only
 workflow is an ordinary workflow, not a second kind of tool.
 

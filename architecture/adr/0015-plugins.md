@@ -337,9 +337,10 @@ plugin. Kyyn understands this shallow hierarchy, not the provider-specific field
 or behavior. Instances are configuration data, not separate plugin installations
 or connection-provider components.
 
-Connector types have two distinct purposes: **Sources** acquire evidence from the
-external world; **Sinks** mutate or update the external world. A plugin can supply
-both, with multiple configured instances of either kind. Kind is declared on the
+Connector types declare their purpose: **Sources** acquire captured evidence;
+**Sinks** deliver prepared outputs; **Live** connectors expose typed provider
+queries, actions and incoming events for interactive work. A plugin can supply
+any combination, with multiple configured instances. Kind is declared on the
 connector type and inherited by its instances, not another installation or
 permission lifecycle. Shared health/configuration helpers remain ordinary methods.
 A sink's declared operation input is the exact type a KB renderer must produce;
@@ -410,7 +411,7 @@ connectors = [SourceConnector
   }]
 ```
 
-`Connector` and its `SourceConnector` / `SinkConnector` constructors are exported
+`Connector` and its `SourceConnector` / `SinkConnector` / `LiveConnector` constructors are exported
 through `Kyyn.Plugin`. The connector name must match
 `[A-Z][A-Za-z0-9_]*` and be unique within the plugin; it becomes an alternative in
 the derived Dhall configuration union. Qualified names refer to Haskell declarations,
@@ -589,6 +590,29 @@ The [capability broker](0009-capabilities.md) installs the method's selected hos
 handlers; installing a package alone grants no caller an ambient all-plugin API.
 Grouping methods in one source package does not union their capability rows.
 These boundaries guide authoring and interpretation, not a claim of containment.
+
+### Live connector methods and events
+
+[ADR 0028](0028-agentic-workflows.md#live-plugin-capabilities-and-waiting) owns
+interactive invocation, routing and durable waiting. Live connector registration
+names query/action implementations and event adapters using the same qualified
+Haskell entry mechanism as other connectors. Checked signatures determine input,
+output, request and event contracts; configuration and optional login use ADR 0016.
+Live-only integrations do not need a fetch entry or an evidence payload type.
+
+Discovery distinguishes queries, actions and event contracts, and exposes the
+selected method's provider-effect and repeat-safety declarations. Generated typed
+proxies route through host-checked bindings. An action receives the stable operation
+key; its adapter owns any mapping to provider idempotency. A method must not claim
+repeat safety merely because the host supplies a key. Event adapters authenticate
+provider deliveries before routing a checked event identity and value to a wait;
+provider subscription and transport details remain plugin-owned. Credentials do
+not become event values or journal metadata.
+
+Captured source methods retain their existing evidence-only context. Live methods
+are explicit operations, not a hidden acquisition inside a captured read. Config,
+login and pure provider helpers can be shared across connector kinds without
+introducing another package or authentication framework.
 
 ### Microsoft Graph source family
 

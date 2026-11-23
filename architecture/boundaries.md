@@ -13,6 +13,7 @@ Use this map to find the owning decision, not as a second interface specificatio
 | How do sources, evidence and authentication interact? | [0014 — evidence](adr/0014-evidence.md), [0015 — plugins](adr/0015-plugins.md), [0016 — connections](adr/0016-connections.md) |
 | How are external outputs produced? | [0017 — outputs](adr/0017-outputs.md) |
 | How do authored tools and agentic flows compose? | [0008 — authoring](adr/0008-authoring.md), [0027 — judgements](adr/0027-judgement.md), [0028 — agentic workflows](adr/0028-agentic-workflows.md) |
+| Who owns interactive instances, waiting and child coordination? | [0028 — agentic workflows](adr/0028-agentic-workflows.md), [0025 — lifecycle](adr/0025-lifecycle.md) |
 | What do clients share and how do failures surface? | [0018 — surfaces](adr/0018-surfaces.md), [0019 — failures](adr/0019-failures.md), [0023 — interaction](adr/0023-interaction.md) |
 
 For actual effect rows and handlers, read the capability and interpreter modules

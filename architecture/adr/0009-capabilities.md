@@ -22,6 +22,9 @@ separate product permission taxonomy. Retain these explicit boundaries:
 - KB tools compose captured-evidence plugin reads and
   [model judgements](0027-judgement.md); they do not acquire evidence, invoke sinks
   or propose/accept roots.
+- Interactive recipes additionally compose declared live plugin methods, durable
+  waits, child management, selected KB reads and proposal preparation under
+  [ADR 0028](0028-agentic-workflows.md#interactive-flows-have-a-durable-lifetime).
 - Accepted-root publication is not a guest capability.
 - [ADR 0028](0028-agentic-workflows.md) defines model-turn requests in KB tools
   and explicit recipe flows, without adding them to evolution, validation,
@@ -40,12 +43,14 @@ Capability boundaries by program context (not a separate permission-role system)
 | Snapshot query/output renderer | Typed reads of one selected immutable snapshot; pure computation and query composition | Proposal writes, live providers, sink invocation |
 | Evolution entry point | [ADR 0010's transformation contract](0010-evolutions.md#pure-evolution-execution) | Accepted-root publication, nested proposal authoring, delivery |
 | KB tool | Typed plugin captured reads, model judgements and agentic model turns under ADRs 0027/0028 | Evidence acquisition, sinks, proposal/accepted-root writes |
+| Interactive recipe | Declared live queries/actions, waits and child management; selected KB reads and proposal preparation under ADR 0028 | Direct accepted-root writes |
+| Live plugin method/event adapter | Declared provider transport and instance authentication; checked input/output/event contracts | KB acceptance or implicit evidence publication |
 | Source acquisition method | HTTP/filesystem acquisition, secret read/write, prior evidence snapshot reads | Interactive login, KB acceptance, sink invocation |
 | Explicit connector login | HTTP, secret read/write, user instructions and cancellable waits | Evidence publication, KB acceptance |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
 | Sink connector method | Prepared typed input, separately typed invocation options and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
 
-A plugin can export source and sink connectors, but registration and host
+A plugin can export captured sources, sinks and live connectors, but registration and host
 dispatch use the declared capabilities of the selected method. Provider-read
 intent is declared by the plugin author, not proven by an HTTP verb or method
 label. The host checks supported methods, contracts and available capabilities;
@@ -471,8 +476,8 @@ guest capabilities or change the request protocol.
 
 ## Alternatives and consequences
 
-Reject arbitrary `IO`, a universal untyped host RPC escape hatch, or a durable
-continuation service. Also reject pretending capability omission is an OS
+Reject arbitrary `IO`, a universal untyped host RPC escape hatch, or serialisation of arbitrary Haskell continuations. Interactive resumption uses
+the explicit durable-operation boundary in ADR 0028. Also reject pretending capability omission is an OS
 sandbox. Host-authored adapters legitimately perform transport IO; authored
 programs do not. New capabilities require a real use case and a reviewed type,
 not speculative stubs for every possible integration.
