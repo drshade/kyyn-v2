@@ -15,7 +15,7 @@ import Kyyn.Domain.Path (scopePath, relativeName)
 import Kyyn.Plumbing.Capability.DocumentPersistence
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, renameFile)
-import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
+import System.FileLock (lockFile, tryLockFile, unlockFile, SharedExclusive(..))
 import System.FilePath ((</>), takeDirectory)
 import System.IO (hClose, hSetBinaryMode)
 import System.IO.Error (isDoesNotExistError)
@@ -23,14 +23,23 @@ import System.IO.Temp (withTempFile)
 import System.Random (randomIO)
 
 runDocumentPersistenceIO :: (IOE :> es, Failure :> es) => Eff (DocumentPersistence : es) a -> Eff es a
-runDocumentPersistenceIO = interpret $ \env (WithLockedDocument scope name action) ->
-  localLiftUnlift env SeqUnlift $ \liftLocal unlift -> do
-    let directory = scopePath scope
-    native Failure.EnsureDirectory directory (createDirectoryIfMissing True (takeDirectory directory))
-    Exception.bracket
-      (native Failure.InspectEntry directory (lockFile (directory ++ ".lock") Exclusive))
-      (native Failure.InspectEntry directory . unlockFile)
-      (const (unlift (interpret (\_ operation -> liftLocal (handleDocument directory (relativeName name) operation)) action)))
+runDocumentPersistenceIO = interpret $ \env -> \case
+  WithLockedDocument scope name action ->
+    localLiftUnlift env SeqUnlift $ \liftLocal unlift -> do
+      let directory = scopePath scope
+      native Failure.EnsureDirectory directory (createDirectoryIfMissing True (takeDirectory directory))
+      Exception.bracket
+        (native Failure.InspectEntry directory (lockFile (directory ++ ".lock") Exclusive))
+        (native Failure.InspectEntry directory . unlockFile)
+        (const (unlift (interpret (\_ operation -> liftLocal (handleDocument directory (relativeName name) operation)) action)))
+  TryLockedDocument scope name action ->
+    localLiftUnlift env SeqUnlift $ \liftLocal unlift -> do
+      let directory = scopePath scope
+      native Failure.EnsureDirectory directory (createDirectoryIfMissing True (takeDirectory directory))
+      Exception.bracket
+        (native Failure.InspectEntry directory (tryLockFile (directory ++ ".lock") Exclusive))
+        (mapM_ (native Failure.InspectEntry directory . unlockFile))
+        (traverse (const (unlift (interpret (\_ operation -> liftLocal (handleDocument directory (relativeName name) operation)) action))))
 
 handleDocument :: (IOE :> es, Failure :> es) => FilePath -> FilePath -> DocumentAccess m a -> Eff es a
 handleDocument directory name = \case

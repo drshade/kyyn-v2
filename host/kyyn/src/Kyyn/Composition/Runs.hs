@@ -38,3 +38,5 @@ dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppen
     status (Completed draft) = "completed → " ++ evolutionIdName draft
     status Failed = "failed"
     status Cancelled = "cancelled"
+    status (Suspended count) = "suspended · waiting on " ++ show count ++ " replies"
+    status Returned = "returned"

@@ -72,7 +72,7 @@ runFlowStore kb = interpret $ \_ operation -> do
                         if orphan || any ((== candidate) . (.instanceId)) catalog then fresh else pure candidate
                   identity <- fresh
                   beforeCommit
-                  let item = FlowInstance identity parent key launch Runnable [] False [] []
+                  let item = FlowInstance identity parent key launch Runnable [] False [] [] []
                   commit (Right (item,catalog ++ [item]))
         case operation of
           ListInstances -> pure catalog
@@ -144,6 +144,10 @@ runFlowStore kb = interpret $ \_ operation -> do
                   Just identity | identity `notElem` referenced -> FileSystem.removeFile directory candidate
                   _ -> pure ()
               pure (Right removed)
+          LinkAttempt identity attempt -> commit (change identity (\item -> case item.status of
+            Running -> Right item { attempts = if attempt `elem` item.attempts then item.attempts else item.attempts ++ [attempt] }
+            Finished{} -> Left AlreadyFinished
+            _ -> Left (InvalidTransition "Attempt recording requires a running instance")))
           BeginAttempt identity -> commit (change identity Lifecycle.begin)
           ReportFrontier identity reached -> commit (change identity (Lifecycle.frontier reached))
           FinishInstance identity outcome -> commit (change identity (Lifecycle.finish outcome))

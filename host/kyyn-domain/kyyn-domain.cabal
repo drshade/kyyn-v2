@@ -29,6 +29,7 @@ library
     Kyyn.Domain.FlowClosure
     Kyyn.Domain.FlowLifecycle
     Kyyn.Domain.RecipeRun
+    Kyyn.Domain.RecipeRunId
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021
   default-extensions: NoFieldSelectors

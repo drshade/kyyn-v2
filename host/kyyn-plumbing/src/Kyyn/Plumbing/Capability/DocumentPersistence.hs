@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.DocumentPersistence
   ( DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..)
-  , withLockedDocument, readCurrent, replaceCurrent, clearCurrent, freshStamp
+  , withLockedDocument, tryLockedDocument, readCurrent, replaceCurrent, clearCurrent, freshStamp
   ) where
 
 import Data.ByteString (ByteString)
@@ -16,6 +16,7 @@ data DocumentStamp = DocumentStamp
 
 -- | Hold the scope's exclusive lock throughout the action.
 data DocumentPersistence :: Effect where
+  TryLockedDocument :: DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a -> DocumentPersistence (Eff es) (Maybe a)
   WithLockedDocument :: DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a -> DocumentPersistence (Eff es) a
 type instance DispatchOf DocumentPersistence = Dynamic
 
@@ -38,3 +39,7 @@ clearCurrent :: DocumentAccess :> es => Eff es Bool
 clearCurrent = send ClearCurrent
 freshStamp :: DocumentAccess :> es => Eff es DocumentStamp
 freshStamp = send FreshStamp
+
+-- | Nothing means another process owns the writer lock; the action did not run.
+tryLockedDocument :: DocumentPersistence :> es => DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a -> Eff es (Maybe a)
+tryLockedDocument scope name action = send (TryLockedDocument scope name action)

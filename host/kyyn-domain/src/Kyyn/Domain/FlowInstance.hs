@@ -1,11 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot #-}
 module Kyyn.Domain.FlowInstance
   ( FlowInstanceId, flowInstanceId, flowInstanceIdText, FlowOwner(..)
-  , FlowOutcome(..), ExecutionStatus(..), CancelScope(..), ReplyOrigin(..)
+  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), ReplyOrigin(..)
   , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitStatus(..)
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
 
+import Kyyn.Domain.RecipeRunId (RecipeRunId)
 import Kyyn.Domain.FlowBundleId (FlowBundleId)
 import Kyyn.Types.KnowledgeBase (RecipeId)
 import Data.Aeson (Value)
@@ -26,6 +27,7 @@ flowInstanceIdText :: FlowInstanceId -> Text
 flowInstanceIdText (FlowInstanceId value) = value
 
 data FlowOwner = Hosted FlowBundleId RecipeId | External deriving (Eq, Show)
+data FlowProgress = FlowWaiting [(Text,Value)] | FlowReturned Value deriving (Eq, Show)
 data FlowOutcome = Completed Value | Failed [Diagnostic] | Cancelled deriving (Eq, Show)
 data ExecutionStatus = Runnable | Running | Waiting | Finished FlowOutcome deriving (Eq, Show)
 data CancelScope = ThisFlow | FlowAndDescendants deriving (Eq, Show)
@@ -40,7 +42,7 @@ data FlowInstance = FlowInstance
   { instanceId :: FlowInstanceId, parent :: Maybe FlowInstanceId
   , startKey :: Text, launch :: FlowLaunch, status :: ExecutionStatus
   , blocked :: [Diagnostic], cancelDescendants :: Bool, waits :: [FlowWait]
-  , deliveries :: [FlowDelivery]
+  , deliveries :: [FlowDelivery], attempts :: [RecipeRunId]
   } deriving (Eq, Show)
 data FlowWait = FlowWait
   { waitId :: Text, descriptor :: Value, waitStatus :: WaitStatus

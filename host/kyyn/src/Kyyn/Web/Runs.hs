@@ -85,6 +85,8 @@ status Interrupted = "Interrupted"
 status (Completed _) = "Completed"
 status Failed = "Failed"
 status Cancelled = "Cancelled"
+status (Suspended count) = "Suspended · waiting on " <> Text.pack (show count) <> " replies"
+status Returned = "Returned"
 document :: Text.Text -> Html () -> Html ()
 document title body = pageDocument Nothing Nothing title
   (link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"]) body

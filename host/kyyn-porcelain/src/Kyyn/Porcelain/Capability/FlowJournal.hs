@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, GADTs, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.FlowJournal
-  (FlowJournal(..), FlowJournalIdentity(..), lookupCompletion, saveCompletion) where
+  (FlowJournal(..), FlowJournalIdentity(..), FlowJournalProblem(..), lookupCompletion, saveCompletion) where
 
 import Data.Aeson (Value)
 import Data.Text (Text)
@@ -10,6 +10,9 @@ import Effectful.Dispatch.Dynamic (send)
 -- Fixed for the instance, including original request and execution revision.
 data FlowJournalIdentity = FlowJournalIdentity
   { namespace :: Text, revision :: Text, input :: Value }
+  deriving (Eq, Show)
+
+data FlowJournalProblem = JournalIdentityMismatch | JournalCompletionConflict | JournalCorrupt Text
   deriving (Eq, Show)
 
 data FlowJournal :: Effect where

@@ -17,8 +17,8 @@ import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as Bytes
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text as Text
-import Effectful (Eff, IOE, DispatchOf, Dispatch(..), runEff)
-import Effectful.Dispatch.Dynamic (interpret)
+import Effectful (Eff, IOE, DispatchOf, Dispatch(..), runEff, liftIO, (:>))
+import Effectful.Dispatch.Dynamic (interpret, interpose, localSeqUnlift)
 import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
@@ -26,7 +26,8 @@ import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
-import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
@@ -39,6 +40,9 @@ import Kyyn.Domain.FlowBundleId (flowBundleIdText)
 import Kyyn.Porcelain.Capability.FlowStore
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
+import qualified Kyyn.Domain.RecipeRun as Run
+import Kyyn.Porcelain.Capability.FlowWorker
+import Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
@@ -47,7 +51,7 @@ import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, executeRecordedRecipeProgram)
-import Kyyn.Porcelain.Capability.RecipeRunStore (withRecipeRun)
+import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
 import Kyyn.Domain.Contract (contractId, checkRootLayout)
@@ -145,7 +149,7 @@ main = do
               Left errors -> pure (Left errors)
               Right ready -> withRecipeRun (PreparedRecipeRun (KnowledgeBase (Repository scope) WholeTree)
                 (R.RecipeId "review") (FlowEntryRef "Flows.review") (either error id (gitRevision (replicate 40 'a')))
-                (entryProgram ready.entry).identity ready.graph ready.mermaid) (\writer -> executeRecipeFlow writer ready)
+                (entryProgram ready.entry).identity ready.graph ready.mermaid Nothing) (\writer -> executeRecipeFlow writer ready)
         pure (rendered,proposal,contracts)
     (rendered,proposal,contracts) <- right result
     states <- right contracts
@@ -252,7 +256,7 @@ main = do
               (,) <$> (fields .: "graph" >>= decodeFlowValue) <*> fields .: "mermaid")))
         withRecipeRun (PreparedRecipeRun (KnowledgeBase (Repository scope) WholeTree)
           (R.RecipeId "waitingOrdinary") (FlowEntryRef "Flows.waitingOrdinary")
-          (either error id (gitRevision (replicate 40 'a'))) program.identity graph mermaid) $ \writer ->
+          (either error id (gitRevision (replicate 40 'a'))) program.identity graph mermaid Nothing) $ \writer ->
             executeRecordedRecipeProgram writer ordinaryEntry plugins Nothing (toJSON (G.RunRecipe
               (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])))
     refused <- right ordinary
@@ -288,6 +292,92 @@ main = do
     unless (conflictBody == object ["tag" .= String "conflict"]) (fail "Conflict lost its refusal code")
     finished <- attempt False resume >>= taggedValue "finished"
     unless (finished == String "7") (fail ("Unexpected interactive result: " ++ show finished))
+    -- Full hosted lifecycle, reopening a new guest process for each visit.
+    let visit first selectedIdentity = visitWith False first selectedIdentity >>= right
+        visitWith broken first selectedIdentity = do
+          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+            . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
+            . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+            . (if first then capturedEvidence index else unexpected @EvidenceStore)
+            . runPluginRead . runDocumentPersistenceIO . runFlowStore kb
+            . runAppendJournalIO . runRecipeRunStore (const (pure ()))
+            . (if broken then failRunTerminal else id) . runFlowWorker kb $
+              visitInstance selectedIdentity
+          pure outcome
+        inspect selectedIdentity = store (readInstance selectedIdentity) >>= right >>= maybe (fail "Missing instance") pure
+        recording selectedIdentity = runEff (runFailure (runAppendJournalIO (runRecipeRunStore (const (pure ()))
+          (readRecipeRun kb selectedIdentity Nothing 1000)))) >>= right
+        clearRecording selectedIdentity = runEff (runFailure (runAppendJournalIO (runRecipeRunStore (const (pure ()))
+          (clearRecipeRun kb selectedIdentity)))) >>= right
+    hosted <- store (startPreparedInstance Nothing "worker" interactive) >>= right >>= right
+    held <- newEmptyMVar
+    releaseWriter <- newEmptyMVar
+    released <- newEmptyMVar
+    void (forkIO (runEff (runFailure (runFileSystemIO scope (runDocumentPersistenceIO
+      (runFlowJournal kb (FlowJournalIdentity (Instance.flowInstanceIdText hosted.instanceId) hosted.launch.revision hosted.launch.request)
+        (liftIO (putMVar held () >> takeMVar releaseWriter)))))) >>= putMVar released))
+    takeMVar held
+    busy <- visit False hosted.instanceId
+    notStarted <- inspect hosted.instanceId
+    unless (busy == WriterBusy && null notStarted.attempts && notStarted.status == Instance.Runnable)
+      (fail "Busy worker started or recorded an attempt")
+    putMVar releaseWriter ()
+    _ <- takeMVar released >>= right
+    firstVisit <- visit True hosted.instanceId
+    unless (firstVisit == Advanced) (fail "Worker did not reach waiting frontier")
+    waiting <- inspect hosted.instanceId
+    (waitId,firstRun) <- case (waiting.status,waiting.waits,waiting.attempts) of
+      (Instance.Waiting,[waitDescriptor],[attemptId]) -> pure (waitDescriptor.waitId,attemptId)
+      _ -> fail "Worker did not persist frontier and attempt link"
+    firstRecording <- recording firstRun
+    unless (firstRecording.summary.status == Run.Suspended 1 && firstRecording.summary.header.instanceId == Just hosted.instanceId)
+      (fail "Suspended attempt lost its outcome or instance link")
+    idle <- visit False hosted.instanceId
+    unless (idle == NoWork) (fail "Waiting instance ran without a reply")
+    _ <- store (queueDelivery hosted.instanceId "bad" waitId (Instance.ManualReply "cli") (String "bad")) >>= right >>= right
+    rejectedVisit <- visit False hosted.instanceId
+    invalid <- inspect hosted.instanceId
+    unless (rejectedVisit == NoWork && invalid.status == Instance.Waiting && invalid.attempts == [firstRun])
+      (fail "Invalid reply woke or recorded an attempt")
+    _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ManualReply "first") (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ManualReply "second") (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ManualReply "third") (Number 10)) >>= right >>= right
+    broken <- visitWith True False hosted.instanceId
+    unless (case broken of Left _ -> True; _ -> False) (fail "Recording failure was swallowed")
+    interruptedFlow <- inspect hosted.instanceId
+    unless (interruptedFlow.status == Instance.Running && length interruptedFlow.waits == 1)
+      (fail "Recording failure invented a terminal or removed the previous frontier")
+    secondVisit <- visit False hosted.instanceId
+    completedFlow <- inspect hosted.instanceId
+    unless (secondVisit == Advanced && completedFlow.status == Instance.Finished (Instance.Completed (String "9")))
+      (fail ("Worker did not resume from actual validated reply: " ++ show completedFlow))
+    unless (map (.outcome) (drop 1 completedFlow.deliveries) == map Just [Instance.Accepted,Instance.Duplicate,Instance.Conflicting])
+      (fail "Worker lost reply deduplication or conflict decisions")
+    case completedFlow.waits of
+      [waitDescriptor] | waitDescriptor.waitStatus == Instance.Answered (Instance.ManualReply "first") (Number 9) -> pure ()
+      _ -> fail "Duplicate changed first reply provenance"
+    secondRun <- case completedFlow.attempts of [_,_,attemptId] -> pure attemptId; _ -> fail "Missing resumed attempt"
+    secondRecording <- recording secondRun
+    unless (secondRecording.summary.status == Run.Returned && any
+        (\(Run.SequencedRunEvent _ event) -> case event.body of
+          Run.FlowObserved summary -> "restored" `Text.isInfixOf` Text.pack (show summary)
+          _ -> False) secondRecording.events) (fail "Resumed recording did not preserve Restored")
+    clearRecording firstRun
+    retained <- inspect hosted.instanceId
+    unless (retained.attempts == completedFlow.attempts) (fail "Clearing recording changed durable links")
+    _ <- store (clearInstances [hosted.instanceId]) >>= right >>= right
+    orphanRecording <- recording secondRun
+    unless (orphanRecording.summary.status == Run.Returned) (fail "Recording required a retained instance")
+    unavailable <- store (startPreparedInstance Nothing "worker-unavailable" interactive) >>= right >>= right
+    removeDirectoryLink retention
+    unavailableVisit <- visit False unavailable.instanceId
+    unavailableState <- inspect unavailable.instanceId
+    unless (unavailableVisit == Blocked && null unavailableState.attempts && not (null unavailableState.blocked))
+      (fail "Missing build started a recording or lost blocked diagnostic")
+    _ <- store (cancelInstance unavailable.instanceId Instance.ThisFlow) >>= right >>= right
+    cancelledVisit <- visit False unavailable.instanceId
+    unless (cancelledVisit == NoWork) (fail "Cancelled flow attempted execution")
+    createDirectoryLink baseProgram.identity.outputPath retention
   putStrLn "Native recipe execution and rendering use the described guest, private state and nested captured connector."
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
@@ -309,3 +399,15 @@ taggedValue :: Text.Text -> Value -> IO Value
 taggedValue tag (Object fields)
   | Keys.lookup "tag" fields == Just (String tag), Just value <- Keys.lookup "value" fields = pure value
 taggedValue tag value = fail ("Expected " ++ Text.unpack tag ++ ": " ++ show value)
+
+-- Fail only the attempt's final recording write, after the guest has restored
+-- and returned. The durable instance must remain resumable with its old frontier.
+failRunTerminal :: (RecipeRunStore :> es, Failure :> es) => Eff es a -> Eff es a
+failRunTerminal = interpose $ \env operation -> case operation of
+  AppendRunEvent _ Run.RunReturned -> raiseFailure (Failure.StorageUnavailable
+    (Failure.StorageDiagnostic Failure.WriteFile "fixture/events.jsonl" "injected recording failure"))
+  AppendRunEvent writer event -> appendRunEvent writer event
+  WithRecipeRun prepared use -> localSeqUnlift env $ \unlift -> withRecipeRun prepared (unlift . use)
+  ListRecipeRuns kb selected -> listRecipeRuns kb selected
+  ReadRecipeRun kb selected cursor limit -> readRecipeRun kb selected cursor limit
+  ClearRecipeRun kb selected -> clearRecipeRun kb selected

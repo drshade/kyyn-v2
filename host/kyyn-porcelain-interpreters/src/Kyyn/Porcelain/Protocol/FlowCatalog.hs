@@ -12,6 +12,7 @@ import Kyyn.Plumbing.Protocol.Validation (diagnosticValue, parseReport)
 import Kyyn.Domain.FlowBundleId (flowBundleId, flowBundleIdText)
 import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
+import Kyyn.Domain.RecipeRunId (recipeRunId, runIdText)
 import Kyyn.Domain.FlowInstance
 
 catalogValue :: [FlowInstance] -> Value
@@ -23,6 +24,7 @@ instanceValue item = object
   ["id" .= flowInstanceIdText item.instanceId,"parent" .= fmap flowInstanceIdText item.parent
   ,"startKey" .= item.startKey,"launch" .= launchValue item.launch,"status" .= statusValue item.status
   ,"blocked" .= map diagnosticValue item.blocked,"cancelDescendants" .= item.cancelDescendants
+  ,"attempts" .= map runIdText item.attempts
   ,"waits" .= map waitValue item.waits,"deliveries" .= map deliveryValue item.deliveries]
 launchValue :: FlowLaunch -> Value
 launchValue item = object ["revision" .= item.revision,"request" .= item.request,
@@ -77,16 +79,18 @@ parseCatalog = withObject "flow catalog" $ \fields -> do
         _ -> fail "Duplicate flow parent"
 parseInstance :: Value -> Parser FlowInstance
 parseInstance = withObject "instance" $ \fields -> do
-  exact ["id","parent","startKey","launch","status","blocked","cancelDescendants","waits","deliveries"] fields
+  exact ["id","parent","startKey","launch","status","blocked","cancelDescendants","waits","deliveries","attempts"] fields
   identity <- fields .: "id" >>= checkedId
   parent <- fields .: "parent" >>= traverse checkedId
   waits <- fields .: "waits" >>= traverse parseWait
   deliveries <- fields .: "deliveries" >>= traverse parseDelivery
+  attempts <- fields .: "attempts" >>= traverse (either fail pure . recipeRunId)
+  unique "attempt IDs" attempts
   unique "wait IDs" (map (.waitId) waits)
   unique "delivery IDs" (map (.deliveryId) deliveries)
   FlowInstance identity parent <$> fields .: "startKey" <*> (fields .: "launch" >>= parseLaunch)
     <*> (fields .: "status" >>= parseStatus) <*> (fields .: "blocked" >>= diagnostics) <*> fields .: "cancelDescendants"
-    <*> pure waits <*> pure deliveries
+    <*> pure waits <*> pure deliveries <*> pure attempts
 parseLaunch :: Value -> Parser FlowLaunch
 parseLaunch = withObject "launch" $ \fields -> do
   exact ["revision","request","owner"] fields

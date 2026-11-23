@@ -224,19 +224,22 @@ right = either (fail . show) pure
 -- The store must retry within its catalog transaction, not publish duplicate IDs.
 type CollisionRecord = (Maybe Bytes.ByteString,Int)
 collisionDocuments :: State.State CollisionRecord :> es => Eff (DocumentPersistence : es) a -> Eff es a
-collisionDocuments = interpret $ \env (WithLockedDocument _ _ action) ->
-  localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
-    unlift (interpret (\_ operation -> liftLocal (collisionDocument operation)) action)
-collisionDocument :: State.State CollisionRecord :> es => DocumentAccess m a -> Eff es a
-collisionDocument operation = do
-  (document,count) <- State.get @CollisionRecord
-  case operation of
-    ReadCurrent -> pure document
-    ReplaceCurrent bytes -> State.put (Just bytes,count)
-    FreshStamp -> do
-      State.put (document,count + 1)
-      pure (DocumentStamp (if count < 2 then "00000001" else "00000002") "fixture")
-    ClearCurrent -> error "Unexpected catalog deletion"
+collisionDocuments = interpret $ \env request -> case request of
+  TryLockedDocument{} -> error "Unexpected nonblocking lock in this fixture"
+  WithLockedDocument _ _ action ->
+    localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
+      unlift (interpret (\_ operation -> liftLocal (collisionDocument operation)) action)
+  where
+  collisionDocument :: State.State CollisionRecord :> es => DocumentAccess m a -> Eff es a
+  collisionDocument operation = do
+    (document,count) <- State.get @CollisionRecord
+    case operation of
+      ReadCurrent -> pure document
+      ReplaceCurrent bytes -> State.put (Just bytes,count)
+      FreshStamp -> do
+        State.put (document,count + 1)
+        pure (DocumentStamp (if count < 2 then "00000001" else "00000002") "fixture")
+      ClearCurrent -> error "Unexpected catalog deletion"
 
 -- Synthetic, checked description: this suite tests store transactions without
 -- invoking a compiler or guest. The native guest suite proves actual preparation.
