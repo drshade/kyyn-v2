@@ -31,9 +31,11 @@ credentials, private endpoints or reports.
 
 **Training:** two people, a dedicated session, a teaching segment inside an
 ordinary meeting, duplicate observer copies split across a page boundary, and
-unknown attendance. A tool proposes related person/session changes in one
+unknown attendance. The fixture distinguishes invitations, attendance and learning
+time, and records trainer identity, evidence basis and uncertainty independently.
+A tool proposes related person/session changes in one
 workspace. A schema evolution adds vendor delivery. Two views interpret the
-same facts differently without refetching them. Warnings and source limitations
+same facts differently without refetching or recurating them. Warnings and source limitations
 stay visible. A correction and deletion survive acceptance and reopen.
 
 **Reporting:** two business units, three months, realised/scheduled/forecast
@@ -79,6 +81,4 @@ required now. Transport simplicity must not erase these distinctions.
 
 Shared business calculations live in ordinary KB modules, not independent copies
 in each renderer. Anomalies and curation records are KB models, not mandatory
-kernel lifecycles. Domain models distinguish invitations, attendance and learning
-time, and represent trainer identity, evidence basis and uncertainty independently.
-Alternative reporting policies interpret the same curated facts without recuration.
+kernel lifecycles.
