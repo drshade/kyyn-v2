@@ -86,7 +86,7 @@ test-suite guest-protocol
   type: exitcode-stdio-1.0
   main-is: GuestProtocolTests.hs
   hs-source-dirs: test ../../host/kyyn-plumbing/src
-  other-modules: Kyyn.Plumbing.Protocol.Frame FlowObservationTests
+  other-modules: Kyyn.Plumbing.Protocol.Frame FlowObservationTests FlowWaitingTests
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
