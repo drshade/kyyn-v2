@@ -146,8 +146,10 @@ main = do
             . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . runDocumentPersistenceIO . runFlowJournal kb identity $
-              executeInteractiveRecipeProgram identity (const (pure ())) waitingEntry plugins Nothing (toJSON invocation)
-          right outcome >>= right >>= successValue
+              executeInteractiveRecipeProgram identity (\_ -> case invocation of
+                G.FulfilRecipe{} -> error "Fulfilment unexpectedly observed execution"
+                _ -> pure ()) waitingEntry plugins Nothing (toJSON invocation)
+          right outcome >>= right
     frontier <- attempt True resume >>= taggedValue "waiting"
     pending <- case frontier of
       Array values | [value] <- Foldable.toList values -> pure value
@@ -181,9 +183,6 @@ unexpected :: DispatchOf effect ~ Dynamic => Eff (effect : es) a -> Eff es a
 unexpected = interpret (\_ _ -> error "Unexpected external interaction in recipe fixture")
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
-
-successValue :: Value -> IO Value
-successValue = taggedValue "Right"
 
 taggedValue :: Text.Text -> Value -> IO Value
 taggedValue tag (Object fields)

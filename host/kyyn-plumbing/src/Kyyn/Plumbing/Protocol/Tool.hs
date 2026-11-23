@@ -67,7 +67,9 @@ encodeFlowValue :: Value -> Value
 encodeFlowValue = Wire.encodeWith valueCodec . fromAeson
 
 encodeJournalLookup :: Maybe Value -> Value
-encodeJournalLookup = Wire.encodeWith (Wire.optionalCodec valueCodec) . fmap fromAeson
+-- Keep the tagged value verbatim: converting through plain JSON loses distinctions
+-- such as an integral Double versus an Integer in a durable result.
+encodeJournalLookup = Wire.encodeWith (Wire.optionalCodec (Wire.Codec id Right))
 
 decodeJournal :: String -> Value -> Parser JournalCall
 decodeJournal operation = withObject "flow journal request" $ \fields -> do
@@ -75,7 +77,12 @@ decodeJournal operation = withObject "flow journal request" $ \fields -> do
   case operation of
     "initialise" -> exact ["namespace","revision"] >>
       InitialiseJournal <$> fields .: "namespace" <*> fields .: "revision"
-    "lookup" -> exact ["key"] >> LookupJournal <$> (fields .: "key" >>= decodeFlowValue)
-    "save" -> exact ["key","value"] >> SaveJournal <$> (fields .: "key" >>= decodeFlowValue)
-      <*> (fields .: "value" >>= decodeFlowValue)
+    "lookup" -> exact ["key"] >> LookupJournal <$> (fields .: "key" >>= checkedValue)
+    "save" -> exact ["key","value"] >> SaveJournal <$> (fields .: "key" >>= checkedValue)
+      <*> (fields .: "value" >>= checkedValue)
     _ -> fail "Unknown journal operation"
+
+checkedValue :: Value -> Parser Value
+checkedValue value = case Wire.decodeWith valueCodec value of
+  Left message -> fail message
+  Right _ -> pure value

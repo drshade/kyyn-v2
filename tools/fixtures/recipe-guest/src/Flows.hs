@@ -57,12 +57,16 @@ trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
 -- The connector must run only on the first attempt; the reply completes the proposal.
 waiting :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
 waiting = A.arr (\(RecipeInput _ () (State runs)) -> runs)
-  A.>>> A.durably integer integer (\_ runs -> do
+  A.>>> A.durably integer number (\_ runs -> do
     count <- ExceptT (Files.count files ())
-    pure (runs + count))
+    pure (fromInteger (runs + count)))
+  A.>>> A.arr round
   A.>>> A.await integer integer
   A.>>> A.arr (\reply -> RecipeProposal [] (State reply))
   where
+    number = C.primitive S.SNumber V.Number $ \value -> case value of
+      V.Number n -> Right n
+      _ -> Left "Expected floating-point result, not an integer"
     integer = C.primitive S.SInteger V.Integer $ \value -> case value of
       V.Integer n -> Right n
       _ -> Left "Expected integer reply"
