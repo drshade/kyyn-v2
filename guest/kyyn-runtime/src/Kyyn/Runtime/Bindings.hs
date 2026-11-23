@@ -54,4 +54,4 @@ interactiveFlow reference = do
   input <- compileWire (contract @input)
   output <- compileWire (contract @output)
   state <- recipeType @() "()"
-  pure (FlowDefinition (Recipe.RecipeDefinition (ClosedAgent Interactive (FlowEntryRef reference)) state) input output)
+  pure (FlowDefinition (FlowEntryRef reference) state input output)

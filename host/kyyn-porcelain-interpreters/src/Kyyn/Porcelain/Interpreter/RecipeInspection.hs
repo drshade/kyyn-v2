@@ -25,7 +25,7 @@ runRecipeInspection :: (GuestCompilation :> es, GuestInspection :> es, GuestExec
   => Eff (RecipeInspection : es) a -> Eff es a
 runRecipeInspection = interpret $ \_ (DescribeRecipe (SourceRoot contract code _ _) lifetime (FlowEntryRef name) format) -> runExceptT $ do
   source <- either (throwE . pure . errorDiagnostic "recipe.sources") pure
-    (guestSources (RecipeEntries [case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name]) (files code))
+    (guestSources (RecipeEntries [case lifetime of Ordinary -> ClosedFlow name; Interactive _ -> InteractiveFlow name]) (files code))
   program <- ExceptT (compileGuest source)
   description <- ExceptT (describeGuest program)
   (entry,invocation) <- case lifetime of
@@ -37,7 +37,7 @@ runRecipeInspection = interpret $ \_ (DescribeRecipe (SourceRoot contract code _
       unless (contractId root == contractId (rootSchema contract))
         (throwE [errorDiagnostic "recipe.root-type" "Recipe flow takes a different Root contract"])
       pure (selected,toJSON (G.RenderRecipe format))
-    Interactive -> case [selected | selected <- compiledEntries program description,
+    Interactive _ -> case [selected | selected <- compiledEntries program description,
         G.InteractiveEntry _ actual _ <- [entryDescription selected], actual == name] of
       [selected] -> pure (selected,toJSON (G.RenderFlow format))
       _ -> throwE [errorDiagnostic "recipe.description" "Guest did not describe the selected interactive flow"]

@@ -44,7 +44,7 @@ runEvolutionExecution = interpret $ \_ -> \case
       stored@(Stored.StoredSnapshot _ _ recipes) accepted) -> runExceptT $ do
     let reference (Stored.RecordedRecipe definition _) = case definition of
           Value.OpenRecipe _ _ name -> OpenState (Text.pack name)
-          Value.ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name
+          Value.ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive _ -> InteractiveFlow name
         references = [reference recipe | Fact _ recipe <- recipes]
     selected <- case kind of
       AdHoc -> pure Nothing

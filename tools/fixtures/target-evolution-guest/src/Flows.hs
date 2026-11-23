@@ -1,4 +1,4 @@
-module Flows (review, State(..), oldFlow, OldState(..), conversation) where
+module Flows (review, State(..), oldFlow, OldState(..), conversation, coordinator) where
 import GHC.Generics (Generic)
 import Agentic.Contract (Contract)
 import qualified Agentic as A
@@ -18,3 +18,6 @@ data OldState = OldState Integer
 
 conversation :: Flow Integer Bool
 conversation = A.arr (> 0)
+
+coordinator :: Flow () ()
+coordinator = A.arr id

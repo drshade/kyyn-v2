@@ -49,7 +49,7 @@ runWorkspaceApi = interpret $ \_ operation -> case operation of
     accepted <- ExceptT (Git.readTreeExcluding repository revision (Subtree path) [factsLocation,recipeStatesLocation])
     definitions <- ExceptT (readRootRecipes accepted)
     let reference (OpenRecipe _ _ name) = OpenState (Text.pack name)
-        reference (ClosedRecipe lifetime (FlowEntryRef name)) = case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name
+        reference (ClosedRecipe lifetime (FlowEntryRef name)) = case lifetime of Ordinary -> ClosedFlow name; Interactive _ -> InteractiveFlow name
     selected <- case kind of
       AdHoc -> pure Nothing
       RecipeBased (RecipeId name) -> case [reference recipe | Fact (FactId identity) recipe <- definitions, name == identity] of

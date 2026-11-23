@@ -103,7 +103,7 @@ executeStoredEvolution program guest targetCode reason selectedRecipe input = ru
     reference (OpenRecipe _ _ "()") = "$import.unit"
     reference (OpenRecipe _ _ name) = "$import.state.Target." <> Text.pack name
     reference (ClosedRecipe Ordinary (FlowEntryRef flow)) = "$import.flow." <> flow
-    reference (ClosedRecipe Interactive (FlowEntryRef flow)) = "$import.interactive." <> flow
+    reference (ClosedRecipe (Interactive _) (FlowEntryRef flow)) = "$import.interactive." <> flow
     snapshotOf (Root _ facts _ recipes) = do
       definitions <- ExceptT (encodeRootRecipes recipes)
       tree <- either bad pure (fileTree (files facts ++ files definitions))

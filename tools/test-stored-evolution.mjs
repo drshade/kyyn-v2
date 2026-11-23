@@ -39,8 +39,8 @@ try {
   write('root/facts/root.dhall','{=}');
   write('root/facts/items/index.dhall','["one"]');
   write('root/facts/items/one.dhall','{ id = "one", value = { amount = +7 } }');
-  const method = '< OpenAgent : { lifetime : < Ordinary | Interactive >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive >, flow : Text } >';
-  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { lifetime = < Ordinary | Interactive >.Ordinary, flow = ${methodValue.slice(12)} }` : `OpenAgent { lifetime = < Ordinary | Interactive >.Ordinary, instructions = "Obsolete", stateType = "${stateType}" }`} }`;
+  const method = '< OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, flow : Text } >';
+  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, flow = ${methodValue.slice(12)} }` : `OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, instructions = "Obsolete", stateType = "${stateType}" }`} }`;
   write('root/recipes.dhall', '[' + [definition('weekly','ClosedAgent "Flows.review"',''),
     definition('obsolete','ClosedAgent "Missing.obsolete"',''),definition('notAFlow','ClosedAgent "Flows.oldFlow"',''),
     definition('noContract','OpenAgent "Obsolete"','Flows.OldState')].join(',') + ']');
@@ -66,7 +66,7 @@ try {
   assert.equal(cli(['evolution','accept',draft.id]).accepted,true);
   assert.deepEqual(cli(['evolution','show',draft.id]).report,report);
   assert.deepEqual(cli(['root','fact','show','items','one']).value,{amount:'7',note:'migrated'});
-  assert.equal(cli(['root','recipe','list']).recipes.length,2);
+  assert.equal(cli(['root','recipe','list']).recipes.length,3);
   cli(['root','check']);
   const interactive = cli(['root','recipe','show','conversation']);
   assert.equal(interactive.recipe.lifetime.tag, 'Interactive');

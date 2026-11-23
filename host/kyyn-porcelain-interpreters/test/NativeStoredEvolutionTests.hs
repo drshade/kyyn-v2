@@ -64,7 +64,7 @@ main = do
         guest <- ExceptT (describeGuest program)
         ExceptT (executeStoredEvolution program guest code (Rationale "Native target migration" []) Nothing input)
     (Root _ _ _ recipes,steps) <- right result >>= right
-    unless (length recipes == 2 && length steps == 8) (fail "Wrong recipe or observation membership")
+    unless (length recipes == 3 && length steps == 8) (fail "Wrong recipe or observation membership")
     unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,Authored,Authored,Authored,TargetProjection])
       (fail "Lost the target projection boundary")
   putStrLn "Native stored evolution and independent target projection verification passed"

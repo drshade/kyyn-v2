@@ -26,7 +26,7 @@ inspectRecipeContracts (SourceRoot schema code _ _) definitions = runExceptT $ d
   if null definitions then pure [] else do
     let references = [case definition of
           OpenRecipe _ _ name -> OpenState (Text.pack name)
-          ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name | Fact _ definition <- definitions]
+          ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive _ -> InteractiveFlow name | Fact _ definition <- definitions]
     source <- either (throwE . pure . errorDiagnostic "recipe.sources") pure (guestSources (RecipeEntries (references ++ [OpenState "()" | any (\ref -> case ref of InteractiveFlow{} -> True; _ -> False) references])) (files code))
     program <- ExceptT (compileGuest source)
     description <- ExceptT (describeGuest program)
@@ -35,7 +35,7 @@ inspectRecipeContracts (SourceRoot schema code _ _) definitions = runExceptT $ d
           actual == "$state." <> Text.pack name] of
         [contract] -> pure (definition,name,contract)
         _ -> missing name
-      ClosedRecipe Interactive (FlowEntryRef reference) -> do
+      ClosedRecipe (Interactive _) (FlowEntryRef reference) -> do
         unless (any (\entry -> case entry of G.InteractiveEntry _ name _ -> name == reference; _ -> False)
           (checkedEntries description)) (missing (Text.unpack reference))
         case [selected.contract | G.ContractEntry "$state.()" selected <- checkedEntries description] of

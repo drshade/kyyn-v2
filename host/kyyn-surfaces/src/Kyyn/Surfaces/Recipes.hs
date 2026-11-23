@@ -8,7 +8,7 @@ import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (DescriptionFormat(..), RecipeDefinition(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (Lifetime, FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime, lifetimeName, FlowEntryRef(..))
 import Kyyn.Surfaces.Result (Response(..), success, workspaceResult)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, revisionName)
@@ -35,8 +35,8 @@ recipesResult :: [Fact RecipeDefinition] -> Response
 recipesResult recipes = success (object ["recipes" .= map recipeJson recipes])
   (if null recipes then ["No recipes declared."] else [Text.unpack name ++ " — " ++ summary method | Fact (FactId name) method <- recipes])
   where
-    summary (OpenRecipe lifetime _ _) = show lifetime ++ " open agent"
-    summary (ClosedRecipe lifetime _) = show lifetime ++ " closed flow"
+    summary (OpenRecipe lifetime _ _) = lifetimeName lifetime ++ " open agent"
+    summary (ClosedRecipe lifetime _) = lifetimeName lifetime ++ " closed flow"
 
 recipeResult :: Fact RecipeDefinition -> Response
 recipeResult recipe@(Fact (FactId name) payload) = success (recipeJson recipe) [Text.unpack name,recipeText payload]
@@ -49,5 +49,5 @@ recipePayloadJson (OpenRecipe lifetime instructions stateType) = object ["kind" 
 recipePayloadJson (ClosedRecipe lifetime (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"lifetime" .= lifetime,"flow" .= entry]
 
 recipeText :: RecipeDefinition -> String
-recipeText (OpenRecipe lifetime instructions stateType) = show lifetime ++ " open agent: " ++ Text.unpack instructions ++ "\nState type: " ++ stateType
-recipeText (ClosedRecipe lifetime (FlowEntryRef entry)) = show lifetime ++ " closed agent: " ++ Text.unpack entry
+recipeText (OpenRecipe lifetime instructions stateType) = lifetimeName lifetime ++ " open agent: " ++ Text.unpack instructions ++ "\nState type: " ++ stateType
+recipeText (ClosedRecipe lifetime (FlowEntryRef entry)) = lifetimeName lifetime ++ " closed agent: " ++ Text.unpack entry

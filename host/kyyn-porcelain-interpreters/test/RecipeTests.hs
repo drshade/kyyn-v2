@@ -1,12 +1,13 @@
 {-# LANGUAGE DataKinds, GADTs #-}
 module RecipeTests (recipeTests) where
 
-import Kyyn.Types.KnowledgeBase (Lifetime(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), FlowEntryRef(..))
 import Control.Monad (unless)
+import qualified Data.Text as Text
 import Data.ByteString (ByteString)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Recipe (RecipeDefinition(..), RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeDefinition(..), RecipeId(..), checkRecipeDefinitions)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
@@ -36,6 +37,17 @@ recipeTests = do
   check "Unknown recipe accepted" (case run (findRecipeAt kb at (RecipeId "missing")) of
     Left [Diagnostic _ "recipe.unknown" _ _] -> True
     _ -> False)
+  let child = Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.child"))
+      parent = Fact (FactId "parent") (ClosedRecipe
+        (Interactive (InteractionBindings [ChildReference (RecipeId "child") (FlowEntryRef "Flows.child")])) (FlowEntryRef "Flows.parent"))
+      refused definitions = case checkRecipeDefinitions definitions of
+        Left diagnostics -> let rendered = Text.pack (show diagnostics)
+                            in "parent" `Text.isInfixOf` rendered && "child" `Text.isInfixOf` rendered
+        Right _ -> False
+  check "Parent and child added together refused" (checkRecipeDefinitions [parent,child] == Right [parent,child])
+  check "Missing child accepted" (refused [parent])
+  check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
+  check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.other"))])
   putStrLn "Recipe discovery reads only selected Git recipe definitions without a compiler."
 
 repository :: Repository
@@ -49,4 +61,4 @@ recording selected = interpret $ \_ request -> case request of
   _ -> error "Recipe discovery performed a non-document Git operation"
 
 recipeData :: ByteString
-recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"
+recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text } } >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"

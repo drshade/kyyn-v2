@@ -37,7 +37,7 @@ data RecipeBinding where
 
 definitionBinding :: RecipeDefinition state -> RecipeBinding
 definitionBinding (RecipeDefinition method binding@(RecipeType name _ _ _)) = RecipeBinding
-  (case method of OpenAgent _ _ -> OpenState name; ClosedAgent Ordinary (FlowEntryRef flow) -> ClosedFlow flow; ClosedAgent Interactive (FlowEntryRef flow) -> InteractiveFlow flow) binding
+  (case method of OpenAgent _ _ -> OpenState name; ClosedAgent Ordinary (FlowEntryRef flow) -> ClosedFlow flow; ClosedAgent (Interactive _) (FlowEntryRef flow) -> InteractiveFlow flow) binding
 
 targetBinding :: forall root. Contract root
   => SchemaMetadata -> [RecipeBinding] -> Either ProjectionError (TargetBinding root)
@@ -53,7 +53,7 @@ targetBinding (SchemaMetadata _ _ collections) bindings = do
   where
     key (OpenAgent _ _) (Just name) = Right (OpenState name)
     key (ClosedAgent Ordinary (FlowEntryRef name)) Nothing = Right (ClosedFlow name)
-    key (ClosedAgent Interactive (FlowEntryRef name)) Nothing = Right (InteractiveFlow name)
+    key (ClosedAgent (Interactive _) (FlowEntryRef name)) Nothing = Right (InteractiveFlow name)
     key _ _ = failure "Invalid stored recipe definition"
     select reference = case [binding | binding@(RecipeBinding actual _) <- bindings, actual == reference] of
       [binding] -> Right binding

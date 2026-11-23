@@ -38,7 +38,7 @@ import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Secret (secretNameText)
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (Lifetime(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), lifetimeName, FlowEntryRef(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Domain.Path (relativeName, scopePath)
 import Kyyn.Domain.SnapshotReport
@@ -229,7 +229,7 @@ indexBody selected snapshot summaries = do
       h2_ "Recipes"
       ul_ $ forM_ recipes $ \(Fact (FactId name) recipe@(StoredRecipe _ _ contract _)) -> li_ $ do
         a_ [href_ (inspectionLink selected ["recipes",name])] (toHtml name)
-        toHtml (case recipeDefinition recipe of OpenRecipe lifetime _ _ -> Text.pack (" · " ++ show lifetime ++ " instructions"); ClosedRecipe lifetime _ -> Text.pack (" · " ++ show lifetime ++ " flow"))
+        toHtml (case recipeDefinition recipe of OpenRecipe lifetime _ _ -> Text.pack (" · " ++ lifetimeName lifetime ++ " instructions"); ClosedRecipe lifetime _ -> Text.pack (" · " ++ lifetimeName lifetime ++ " flow"))
         let ordinary = case recipeDefinition recipe of OpenRecipe lifetime _ _ -> lifetime == Ordinary; ClosedRecipe lifetime _ -> lifetime == Ordinary
         when ordinary $ do
           toHtml (" · State: " :: Text)
@@ -393,10 +393,10 @@ recipeBody :: Maybe EvolutionId -> RecordedRecipe -> Html ()
 recipeBody selected (RecordedRecipe definition (RecordedValue shape value)) = do
   case definition of
     OpenRecipe lifetime instructions stateType -> do
-      p_ (toHtml ("Lifetime: " <> Text.pack (show lifetime)))
+      p_ (toHtml ("Lifetime: " <> Text.pack (lifetimeName lifetime)))
       expandableText instructions
       p_ (toHtml ("State type: " <> Text.pack stateType))
-    ClosedRecipe lifetime (FlowEntryRef flow) -> p_ (toHtml (Text.pack (show lifetime) <> " flow: " <> flow))
+    ClosedRecipe lifetime (FlowEntryRef flow) -> p_ (toHtml (Text.pack (lifetimeName lifetime) <> " flow: " <> flow))
   h5_ "State"
   renderValue selected shape value
 
@@ -485,8 +485,8 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
             summary_ "Mermaid source"
             pre_ [id_ "flow-mermaid"] (toHtml diagram)
     case recipeDefinition recipe of
-      ClosedRecipe Interactive _ -> p_ "Progress belongs to each interactive instance."
-      OpenRecipe Interactive _ _ -> p_ "Progress belongs to each interactive instance."
+      ClosedRecipe (Interactive _) _ -> p_ "Progress belongs to each interactive instance."
+      OpenRecipe (Interactive _) _ _ -> p_ "Progress belongs to each interactive instance."
       _ -> do
         h2_ "State type"
         a_ [href_ (recipeTypeLink selected name (haskellType (rootType contract)))] (toHtml stateType)

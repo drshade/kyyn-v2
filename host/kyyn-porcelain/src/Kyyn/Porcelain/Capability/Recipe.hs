@@ -42,7 +42,7 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
   root@(Root _ _ _ recipes) <- ExceptT (loadRootAt repository revision (Subtree location))
   (entry,state) <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
     [StoredRecipe (ClosedAgent Ordinary value) _ _ state] -> pure (value,state)
-    [StoredRecipe (ClosedAgent Interactive _) _ _ _] -> failure "recipe.interactive" "Use flow start for this interactive recipe"
+    [StoredRecipe (ClosedAgent (Interactive _) _) _ _ _] -> failure "recipe.interactive" "Use flow start for this interactive recipe"
     [StoredRecipe (OpenAgent _ _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
     _ -> failure "recipe.unknown" ("No recipe named " ++ Text.unpack name)
   prepared <- ExceptT (prepareRecipeFlow root entry state request)
