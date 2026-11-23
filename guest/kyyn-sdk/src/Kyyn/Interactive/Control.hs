@@ -11,6 +11,7 @@ import Kyyn.Contract (CompiledContract(..), compileContract)
 import Kyyn.Types.KnowledgeBase (RecipeId)
 import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Data.Text (Text)
+import Type.Reflection (Typeable)
 import Kyyn.Interactive.Internal (FlowRef(..))
 import Kyyn.Types.FlowControl (FlowControl(..))
 import Kyyn.Types.Plugin (FetchError(..))
@@ -18,8 +19,8 @@ import Kyyn.Types.Program (Program, Member, inject, request)
 
 type role FlowHandle nominal
 newtype FlowHandle output = FlowHandle Text deriving (Eq, Show)
-instance Contract.Contract (FlowHandle output) where
-  contract = Contract.mapStructure FlowHandle (\(FlowHandle identity) -> identity) (Contract.contract @Text)
+instance Typeable output => Contract.Contract (FlowHandle output) where
+  contract = Contract.nominal (Contract.mapStructure FlowHandle (\(FlowHandle identity) -> identity) (Contract.contract @Text))
 
 handleCodec :: Codec.Codec (FlowHandle output)
 handleCodec = Codec.primitive (Schema.SString Nothing) (\(FlowHandle identity) -> Value.String identity)

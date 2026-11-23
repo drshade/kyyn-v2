@@ -72,7 +72,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
   createInteractiveRecipe (RecipeId "multiple") Flows.multiple
   createInteractiveRecipe (RecipeId "child") Child.review
   createInteractiveRecipe (RecipeId "parent") (withChildren [child (RecipeId "child") Child.review] Flows.parent)
-  createInteractiveRecipe (RecipeId "bad-reference") (withChildren [child (RecipeId "child") Child.review] Flows.badReference)
+  createInteractiveRecipe (RecipeId "badReference") (withChildren [child (RecipeId "child") Child.review] Flows.badReference)
   createInteractiveRecipe (RecipeId "self") (withChildren [child (RecipeId "self") Flows.self] Flows.self)))
 `);
  console.log('Declaring and accepting synthetic interactive recipes');
@@ -92,7 +92,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  runtime(['flow','cancel',fresh.id]);runtime(['flow','cancel',freshAgain.id]);
  const multiple=cli(['flow','start','multiple','--input','+1']).result;
  const parent=cli(['flow','start','parent','--input','+3']).result;
- const wrong=cli(['flow','start','bad-reference','--input','"bad"']).result;
+ const wrong=cli(['flow','start','badReference','--input','"bad"']).result;
  const self=cli(['flow','start','self','--input','+1']).result;
  const worker=background(['flow','worker']);
  await until(()=>show(started.id).status==='waiting');

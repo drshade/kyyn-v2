@@ -643,6 +643,53 @@ attempt does not imply a draft evolution. Clearing a recording leaves the flow's
 journal and attempt link intact, and clearing an instance leaves its recordings
 readable. Use `root recipe run` for ordinary proposal-producing recipes.
 
+#### Starting child flows
+
+An interactive parent starts only children declared by its accepted recipe. In
+flow source, `flowRef` takes the actual child flow as its type witness; it does
+not evaluate that flow:
+
+```haskell
+module Coordinator where
+
+import Kyyn.Agentic (Flow)
+import Kyyn.Interactive (FlowHandle, flowRef, startFlow)
+import Kyyn.Evolution (RecipeId(..))
+import qualified Conversations
+
+coordinate :: Flow Integer (FlowHandle Integer)
+coordinate = startFlow (flowRef (RecipeId "conversation") Conversations.conversation)
+```
+
+Declare both recipes and the permitted child in the evolution using generated
+definitions:
+
+```haskell
+import Kyyn.Interactive (createInteractiveRecipe, withChildren, child)
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Conversations as Conversations
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Coordinator as Coordinator
+
+-- Inside the evolution's edit:
+createInteractiveRecipe (RecipeId "conversation") Conversations.conversation
+createInteractiveRecipe (RecipeId "coordinate")
+  (withChildren [child (RecipeId "conversation") Conversations.conversation]
+    Coordinator.coordinate)
+```
+
+The parent receives a typed `FlowHandle Integer` and may finish while its child
+continues. Replaying the same start returns the existing child, including after
+an interruption between child publication and journal completion. The child uses
+the parent's captured source and configuration.
+
+For references that would otherwise create a Haskell module cycle,
+`flowRefTyped @Integer @Integer (RecipeId "conversation")` supplies explicit
+input/result witnesses. Both reference forms are checked against the captured
+child's contracts, and the actual guest codec validates its input before the
+child is published. An undeclared child, mismatched contract or invalid input
+returns a typed failure and ends the parent as Failed. The diagnostic identifies
+the recipes and the mismatched input or result side. Ordinary recipes and tools
+cannot start children through this capability.
+
 #### Model calls
 
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can

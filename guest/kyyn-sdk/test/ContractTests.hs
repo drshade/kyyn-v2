@@ -20,6 +20,7 @@ import qualified Data.Text as T
 import Data.Time (Day, fromGregorian, UTCTime(..), secondsToDiffTime)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
+import Kyyn.Interactive (FlowHandle)
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Blob (BlobRef(..))
@@ -62,6 +63,11 @@ roundTrip name value = do
 
 main :: IO ()
 main = do
+  integerHandle <- either (fail . show) pure (compileContract (contract @(FlowHandle Integer)))
+  textHandle <- either (fail . show) pure (compileContract (contract @(FlowHandle Text)))
+  plainText <- either (fail . show) pure (compileContract (contract @Text))
+  expect "FlowHandle preserves its result type and nominal identity"
+    (integerHandle.description /= textHandle.description && textHandle.description /= plainText.description)
   forM_ [(.description) <$> compileContract (contract @()),(.description) <$> compileContract (contract @Integer),
       (.description) <$> compileContract (contract @Text),(.description) <$> compileContract (contract @[Label]),
       (.description) <$> compileContract (contract @(Maybe Choice)),(.description) <$> compileContract (contract @(Box Integer))] $ \candidate -> do
