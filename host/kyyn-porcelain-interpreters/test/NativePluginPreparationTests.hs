@@ -17,6 +17,10 @@ import System.Directory (canonicalizePath)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
+import Kyyn.Types.Contract (fingerprint)
+import Kyyn.Types.KnowledgeBase (EventReference(EventReference))
+import Kyyn.Domain.Plugin (MethodName(..))
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings)
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), EvidenceProducer(..), FetchId(..), FetchSummary(..))
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex))
@@ -140,6 +144,16 @@ main = do
         [value] -> pure value
         _ -> fail "Missing configured event instance"
     let ConfiguredConnector _ _ eventConnector config = eventInstance
+    reference <- case eventConnector of
+      PreparedEventConnector {events = PreparedEvent (MethodName name) _ _ request reply _ _ _ : _} ->
+        pure (EventReference "local-file" "Updates" "updates" (Text.pack name) (fingerprint (contractId request)) (fingerprint (contractId reply)))
+      _ -> fail "No event contract to declare"
+    unless (checkEventBindings [reference] plugins == Right ()) (fail "Valid event declaration refused")
+    let EventReference p c i m request reply = reference
+    mapM_ (\invalid -> unless (isLeft (checkEventBindings [invalid] plugins)) (fail "Invalid event declaration accepted"))
+      [EventReference p c "missing" m request reply,EventReference p c i "missing" request reply,
+       EventReference p "OtherConnector" i m request reply,EventReference p c i m "wrong-request" reply,
+       EventReference p c i m request "wrong-reply"]
     unless (isLeft (sourceDetails eventConnector)) (fail "Event connector accepted as a source")
     refused <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runDelivery scope $ invokeSink eventInstance config config

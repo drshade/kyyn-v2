@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..)) where
+module Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..)) where
 
 import Data.Text (Text)
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, withObject, (.=), (.:))
@@ -9,8 +9,19 @@ import Kyyn.Types.Json (exactObject)
 newtype RecipeId = RecipeId Text deriving (Eq, Show)
 
 -- | Captured authority comes from the recipe declaration, never model output.
-data InteractionBindings = InteractionBindings { children :: [ChildReference] }
+data InteractionBindings = InteractionBindings { children :: [ChildReference], events :: [EventReference] }
   deriving (Eq, Show)
+data EventReference = EventReference
+  { plugin :: Text, connector :: Text, instanceName :: Text, method :: Text
+  , requestContract :: Text, replyContract :: Text }
+  deriving (Eq, Show)
+instance ToJSON EventReference where
+  toJSON (EventReference p c i m request reply) = object
+    ["plugin" .= p,"connector" .= c,"instance" .= i,"event" .= m,"requestContract" .= request,"replyContract" .= reply]
+instance FromJSON EventReference where
+  parseJSON = exactObject "event reference" ["plugin","connector","instance","event","requestContract","replyContract"] $ \fields ->
+    EventReference <$> fields .: "plugin" <*> fields .: "connector" <*> fields .: "instance"
+      <*> fields .: "event" <*> fields .: "requestContract" <*> fields .: "replyContract"
 data ChildReference = ChildReference RecipeId FlowEntryRef deriving (Eq, Show)
 instance ToJSON ChildReference where
   toJSON (ChildReference (RecipeId ident) (FlowEntryRef entry)) =
@@ -19,10 +30,10 @@ instance FromJSON ChildReference where
   parseJSON = exactObject "child flow reference" ["recipe","flow"] $ \fields ->
     ChildReference <$> (RecipeId <$> fields .: "recipe") <*> (FlowEntryRef <$> fields .: "flow")
 instance ToJSON InteractionBindings where
-  toJSON (InteractionBindings refs) = object ["children" .= refs]
+  toJSON (InteractionBindings refs selectedEvents) = object ["children" .= refs,"events" .= selectedEvents]
 instance FromJSON InteractionBindings where
-  parseJSON = exactObject "interactive bindings" ["children"] $ \fields ->
-    InteractionBindings <$> fields .: "children"
+  parseJSON = exactObject "interactive bindings" ["children","events"] $ \fields ->
+    InteractionBindings <$> fields .: "children" <*> fields .: "events"
 
 data Lifetime = Ordinary | Interactive InteractionBindings deriving (Eq, Show)
 instance ToJSON Lifetime where

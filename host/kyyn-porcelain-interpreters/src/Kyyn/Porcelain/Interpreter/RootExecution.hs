@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 
-import Control.Monad (unless, forM)
+import Control.Monad (forM_, unless, forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (toJSON)
 import qualified Data.Text as Text
@@ -11,7 +11,7 @@ import Kyyn.Domain.Contract (rootSchema, contractShape, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..))
-import Kyyn.Domain.Recipe (StoredRecipe(..), recipeDefinition)
+import Kyyn.Domain.Recipe (RecipeDefinition(..), StoredRecipe(..), recipeDefinition)
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.CompiledEntry (compiledEntries, entryDescription)
@@ -28,6 +28,8 @@ import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, checkRecipeValue)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePluginsFromGuest, validatePlugins)
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings)
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..))
 import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
 import Kyyn.Porcelain.Protocol.OutputBindings (prepareOutputs)
@@ -49,6 +51,8 @@ runRootExecution = interpret $ \_ -> \case
       [entry] -> pure entry
       _ -> throwE [errorDiagnostic "root.validator" "Guest did not describe the selected Root validator"]
     plugins <- ExceptT (preparePluginsFromGuest code program description)
+    forM_ [bindings | Fact _ recipe <- recipes, ClosedRecipe (Interactive bindings) _ <- [recipeDefinition recipe]] $ \bindings ->
+      ExceptT (pure (checkEventBindings bindings.events plugins))
     _ <- ExceptT (readModelConfiguration code)
     states <- ExceptT (inspectRecipeContracts (SourceRoot contract code definition [])
       [Fact identity (recipeDefinition recipe) | Fact identity recipe <- recipes])

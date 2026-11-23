@@ -24,7 +24,7 @@ flowClosure definitions selected = do
     visit seen ident@(RecipeId name)
       | name `elem` seen = Right (seen,[])
       | otherwise = case [definition | Fact (FactId actual) definition <- definitions, actual == name] of
-          [ClosedRecipe (Interactive configured@(InteractionBindings children)) source] -> do
+          [ClosedRecipe (Interactive configured@(InteractionBindings children _)) source] -> do
             (visited,descendants) <- visitChildren (name:seen) children
             pure (visited,FlowDeclaration ident source configured : descendants)
           [_] -> bad name "is not a closed interactive recipe"

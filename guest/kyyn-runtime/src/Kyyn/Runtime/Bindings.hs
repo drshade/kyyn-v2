@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
 -- Constructors used by compiler-generated modules, separate from the author SDK.
-module Kyyn.Runtime.Bindings (collection, contractCodec, recipeType, inferredRecipeType, closedRecipe, interactiveFlow, rejectEvolution) where
+module Kyyn.Runtime.Bindings (eventRef, collection, contractCodec, recipeType, inferredRecipeType, closedRecipe, interactiveFlow, rejectEvolution) where
 
 import Kyyn.Types.StoredShape (storedShape)
 import Data.Text (Text)
+import Kyyn.Interactive.Event (eventRef)
 import Kyyn.Interactive.Internal (FlowDefinition(..))
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact)
@@ -54,4 +55,4 @@ interactiveFlow reference = do
   input <- compileWire (contract @input)
   output <- compileWire (contract @output)
   state <- recipeType @() "()"
-  pure (FlowDefinition (FlowEntryRef reference) (InteractionBindings []) state input output)
+  pure (FlowDefinition (FlowEntryRef reference) (InteractionBindings [] []) state input output)

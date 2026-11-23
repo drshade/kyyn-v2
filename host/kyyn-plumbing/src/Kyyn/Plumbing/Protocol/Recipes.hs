@@ -16,7 +16,8 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 
 lifetimeShape :: Shape
-lifetimeShape = Union [("Ordinary",Nothing),("Interactive",Just (Record [("children",List (Record [("recipe",Scalar TextScalar),("flow",Scalar TextScalar)]))]))]
+lifetimeShape = Union [("Ordinary",Nothing),("Interactive",Just (Record [("children",List (Record [("recipe",Scalar TextScalar),("flow",Scalar TextScalar)])),
+  ("events",List (Record [(name,Scalar TextScalar) | name <- ["plugin","connector","instance","event","requestContract","replyContract"]]))]))]
 
 methodShape :: Shape
 methodShape = Union

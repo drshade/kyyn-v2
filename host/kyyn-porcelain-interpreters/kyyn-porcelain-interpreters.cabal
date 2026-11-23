@@ -9,7 +9,7 @@ library
   hs-source-dirs: src
   other-modules: Kyyn.Porcelain.Protocol.ModelConfiguration
     Kyyn.Porcelain.Protocol.CapturedBlobs
-    Kyyn.Porcelain.Protocol.PluginDescription
+    Kyyn.Porcelain.Protocol.EventBindings Kyyn.Porcelain.Protocol.PluginDescription
   exposed-modules: Kyyn.Porcelain.Interpreter.Inspection
     Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.PluginInstallation

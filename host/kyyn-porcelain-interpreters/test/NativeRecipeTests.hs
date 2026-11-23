@@ -167,7 +167,7 @@ main = do
         | identity == contractId state && value == object ["runs" .= String "5"] -> pure ()
       other -> fail ("Wrong native recipe result: " ++ show other)
     let declaration ident children = Fact (FactId ident) (R.ClosedRecipe
-          (Interactive (InteractionBindings children)) (FlowEntryRef "Flows.waiting"))
+          (Interactive (InteractionBindings children [])) (FlowEntryRef "Flows.waiting"))
         declarations = [declaration "parent" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")],
           declaration "child" [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]]
     preparedInteractive <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
@@ -438,7 +438,7 @@ main = do
     -- Crash precisely after child publication and before the durable completion
     -- is saved. A new guest process must recover the same child, then replay it.
     let parentDeclarations = [Fact (FactId "coordinator") (R.ClosedRecipe
-          (Interactive (InteractionBindings [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]))
+          (Interactive (InteractionBindings [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")] []))
           (FlowEntryRef "Flows.parentWaiting")), declaration "child" []]
     preparedParent <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
