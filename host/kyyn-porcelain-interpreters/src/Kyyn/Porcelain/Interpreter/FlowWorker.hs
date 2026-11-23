@@ -14,8 +14,7 @@ import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..))
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
-import Kyyn.Domain.Path (scopePath, directoryScope, relativePath)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import qualified Kyyn.Domain.RecipeRun as Run
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -33,11 +32,10 @@ import Kyyn.Porcelain.Capability.FlowJournal
 import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
-import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournalLocked)
+import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournalLocked, tryFlowWriterLock)
 import Kyyn.Porcelain.Interpreter.FlowControl (answerFlowControl)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, ProgramFailure(..), programDiagnostics)
 import qualified Kyyn.Types.Guest as G
-import System.FilePath ((</>))
 
 -- One visit advances at most one instance. A foreground loop owns polling;
 -- ingress and cancellation remain independent short catalog transactions.
@@ -98,12 +96,7 @@ runFlowWorker kb = interpret $ \_ -> \case
     journalDiagnostic (JournalCorrupt message) = errorDiagnostic "flow.journal-corrupt"
       ("The saved journal cannot be read: " ++ Text.unpack message)
     locked :: FlowInstanceId -> Eff (DocumentAccess : es) b -> Eff es (Maybe b)
-    locked identity action = do
-      base <- checked (knowledgeBaseScope kb)
-      directory <- checked (directoryScope (scopePath base </> ".kyyn/flows/journals" </> Text.unpack (flowInstanceIdText identity)))
-      file <- checked (relativePath "journal.json")
-      tryLockedDocument directory file action
-    checked = either (raiseFailure . Failure.StorageUnavailable . Failure.StorageDiagnostic Failure.InspectEntry ".kyyn/flows") pure
+    locked = tryFlowWriterLock kb
     work journal bundle entry initial = do
       -- Actual guest codecs validate queued values; accepted/duplicate provenance
       -- is resolved by the catalog, including a cancellation racing with fulfil.

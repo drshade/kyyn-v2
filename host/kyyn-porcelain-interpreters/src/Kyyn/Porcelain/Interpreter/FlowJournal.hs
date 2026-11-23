@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables, RankNTypes, TypeApplications #-}
-module Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal, runFlowJournalLocked) where
+module Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal, runFlowJournalLocked, tryFlowWriterLock) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, encode, eitherDecodeStrict', object, (.=), (.:), withObject)
@@ -13,6 +13,7 @@ import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (reinterpret)
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
+import Kyyn.Domain.FlowInstance (FlowInstanceId, flowInstanceIdText)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
 import Kyyn.Domain.Path (scopePath, directoryScope, relativePath)
 import qualified Kyyn.Domain.Failure as Failure
@@ -43,6 +44,18 @@ runFlowJournal kb expected action = do
     problem issue = raiseFailure (Failure.StorageUnavailable
       (Failure.StorageDiagnostic Failure.InspectEntry
         (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows/journals" </> Text.unpack expected.namespace </> "journal.json") (show issue)))
+
+-- Shared nonblocking lock for execution and read-only activity probes. A probe
+-- passes pure (), and never initializes a journal or evaluates guest code.
+tryFlowWriterLock :: (DocumentPersistence :> es, Failure :> es)
+  => KnowledgeBase -> FlowInstanceId -> Eff (DocumentAccess : es) a -> Eff es (Maybe a)
+tryFlowWriterLock kb identity action = do
+  base <- checked (knowledgeBaseScope kb)
+  directory <- checked (directoryScope (scopePath base </> ".kyyn/flows/journals" </> Text.unpack (flowInstanceIdText identity)))
+  file <- checked (relativePath "journal.json")
+  tryLockedDocument directory file action
+  where
+    checked = either (raiseFailure . Failure.StorageUnavailable . Failure.StorageDiagnostic Failure.InspectEntry ".kyyn/flows") pure
 
 -- The worker acquires a nonblocking writer lock, rechecks the catalog while
 -- holding it, then installs this interpreter. Inspection probes never call it.
