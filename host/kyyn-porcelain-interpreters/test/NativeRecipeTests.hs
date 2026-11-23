@@ -9,11 +9,12 @@ module Main (main) where
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
-import Control.Monad (unless, void)
-import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON)
+import Control.Monad (unless, void, when)
+import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON, encode)
 import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Foldable as Foldable
+import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as Bytes
 import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text as Text
@@ -42,6 +43,7 @@ import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
 import qualified Kyyn.Domain.RecipeRun as Run
 import Kyyn.Porcelain.Capability.FlowWorker
+import Kyyn.Porcelain.Interpreter.FlowControl (answerFlowControl)
 import Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker)
 import Kyyn.Porcelain.Capability.PluginRead
 import Kyyn.Types.Plugin (FetchError(..))
@@ -51,12 +53,13 @@ import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(..))
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue)
-import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, executeRecordedRecipeProgram)
+import Kyyn.Plumbing.Protocol.Frame (Frame, jsonFrame)
+import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue, FlowControlCall(..))
+import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, executeRecordedRecipeProgram, executeToolProgram)
 import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
-import Kyyn.Domain.Contract (contractId, checkRootLayout)
+import Kyyn.Domain.Contract (contractId, checkRootLayout, descriptionOf)
 import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), EvidenceProducer(..), FetchId(..), FetchSummary(..))
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex))
@@ -74,7 +77,7 @@ import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
 import Kyyn.Types.Wire (parseWire)
-import Kyyn.Plumbing.Capability.GuestExecution (executeEntry)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..), executeEntry)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestInspection (describeGuest)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -266,6 +269,20 @@ main = do
     refused <- right ordinary
     unless (case refused of Left errors -> any (Text.isInfixOf "AwaitWithoutJournal" . (.message)) errors; Right _ -> False)
       (fail "Ordinary recipe was silently promoted to interactive execution")
+    -- A forged control request must still be refused by the ordinary/tool
+    -- broker, even when an author bypasses the public startFlow combinator.
+    controlContract <- case interactive.bundle.closure of selected:_ -> pure selected; _ -> fail "Missing flow contract"
+    let forged = jsonFrame (Lazy.toStrict (encode (object
+          ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "flow-control","method" .= String "start",
+           "arguments" .= object ["namespace" .= String "forged","key" .= String "forged","child" .= String "child",
+             "inputContract" .= descriptionOf controlContract.inputContract,
+             "outputContract" .= descriptionOf controlContract.outputContract,"input" .= String "1"]])))
+    refusedControl <- runEff . runFailure . forgedControlGuest forged
+      . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead $
+        executeToolProgram waitingEntry [] Nothing [] (object [])
+    unless (case refusedControl of
+      Left problem -> "only available during hosted interactive" `Text.isInfixOf` (Failure.operationalDiagnostic problem).message
+      Right _ -> False) (fail "Ordinary broker accepted child control")
     let kb = KnowledgeBase (Repository scope) WholeTree
         initial = String "4"
         resume = G.ResumeFlow "interactive-test" "pinned-fixture" initial
@@ -278,7 +295,7 @@ main = do
             . runPluginRead . runDocumentPersistenceIO . runFlowJournal kb identity $
               executeInteractiveProgram identity (\_ -> case invocation of
                 G.FulfilFlow{} -> error "Fulfilment unexpectedly observed execution"
-                _ -> pure ()) waitingEntry plugins Nothing (toJSON invocation)
+                _ -> pure ()) (\_ -> error "Unexpected child control") waitingEntry plugins Nothing (toJSON invocation)
           right outcome >>= right
     frontier <- attempt True resume >>= taggedValue "waiting"
     pending <- case frontier of
@@ -415,11 +432,69 @@ main = do
     cancelledVisit <- visit False unavailable.instanceId
     unless (cancelledVisit == NoWork) (fail "Cancelled flow attempted execution")
     createDirectoryLink baseProgram.identity.outputPath retention
+    -- Crash precisely after child publication and before the durable completion
+    -- is saved. A new guest process must recover the same child, then replay it.
+    let parentDeclarations = [Fact (FactId "coordinator") (R.ClosedRecipe
+          (Interactive (InteractionBindings [ChildReference (R.RecipeId "child") (FlowEntryRef "Flows.waiting")]))
+          (FlowEntryRef "Flows.parentWaiting")), declaration "child" []]
+    preparedParent <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+      . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
+      . runPluginPreparation . runFlowPreparation $
+        prepareInteractiveFlow (either error id (gitRevision (replicate 40 'a'))) code parentDeclarations (R.RecipeId "coordinator") (Just "+1")
+    preparedChildStart <- right preparedParent >>= right
+    coordinator <- store (startPreparedInstance Nothing "crash-window" preparedChildStart) >>= right >>= right
+    coordinatorEntry <- case preparedChildStart.bundle.closure of
+      selected:_ -> pure selected.entry
+      _ -> fail "Missing coordinator entry"
+    let coordinatorIdentity = FlowJournalIdentity (Instance.flowInstanceIdText coordinator.instanceId) coordinator.launch.revision coordinator.launch.request
+        childAttempt crash restored = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runGuestExecution [("LC_ALL","C.UTF-8")]
+          . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead
+          . runDocumentPersistenceIO . runFlowStore kb . runFlowJournal kb coordinatorIdentity $
+            executeInteractiveProgram coordinatorIdentity (const (pure ())) (\call -> do
+              when restored (error "Restored start reached the host")
+              value <- answerFlowControl coordinator.instanceId preparedChildStart.bundle call
+              if crash then raiseFailure (Failure.StorageUnavailable
+                (Failure.StorageDiagnostic Failure.WriteFile "fixture/after-publication" "injected interruption before journal save"))
+                else pure value) coordinatorEntry [] Nothing
+                (toJSON (G.ResumeFlow coordinatorIdentity.namespace coordinatorIdentity.revision coordinatorIdentity.input))
+        children = filter ((== Just coordinator.instanceId) . (.parent)) <$> (store listInstances >>= right)
+    childContract <- case [entry | entry <- preparedChildStart.bundle.closure, entry.declaration.recipe == R.RecipeId "child"] of
+      [entry] -> pure entry
+      _ -> fail "Missing captured child contract"
+    let control inputDescription outputDescription inputValue = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runGuestExecution [("LC_ALL","C.UTF-8")] . runDocumentPersistenceIO . runFlowStore kb $
+            answerFlowControl coordinator.instanceId preparedChildStart.bundle
+              (StartChildCall coordinatorIdentity.namespace "invalid-child" (R.RecipeId "child") inputDescription outputDescription inputValue)
+    invalidChild <- control (descriptionOf childContract.inputContract) (descriptionOf childContract.outputContract) (String "not-an-integer") >>= right
+    case invalidChild of Object fields | Keys.lookup "tag" fields == Just (String "Left") -> pure (); _ -> fail "Invalid child input was not a typed refusal"
+    parentContract <- case preparedChildStart.bundle.closure of entry:_ -> pure entry; _ -> fail "Missing captured parent"
+    wrongOutput <- control (descriptionOf childContract.inputContract) (descriptionOf parentContract.outputContract) (String "1") >>= right
+    case wrongOutput of Object fields | Just (String message) <- Keys.lookup "value" fields,
+                                        "output contract mismatch" `Text.isInfixOf` message -> pure ()
+                        _ -> fail "Wrong output witness was not refused"
+    noChildren <- children
+    unless (null noChildren) (fail "Invalid child request published an instance")
+    interruptedStart <- childAttempt True False
+    case interruptedStart of Left _ -> pure (); Right _ -> fail "Publication interruption was not injected"
+    firstChildren <- children
+    publishedChild <- case firstChildren of [only] -> pure only; _ -> fail "Interruption did not leave exactly one published child"
+    recovered <- childAttempt False False >>= right >>= right >>= taggedValue "finished"
+    replayed <- childAttempt False True >>= right >>= right >>= taggedValue "finished"
+    afterReplay <- children
+    unless (recovered == String (Instance.flowInstanceIdText publishedChild.instanceId) && replayed == recovered && length afterReplay == 1)
+      (fail "Replay changed or duplicated the published child")
+    _ <- store (beginAttempt coordinator.instanceId) >>= right >>= right
+    _ <- store (finishInstance coordinator.instanceId (Instance.Completed recovered)) >>= right >>= right
+    _ <- visit True publishedChild.instanceId
+    childState <- inspect publishedChild.instanceId
+    unless (childState.status == Instance.Waiting) (fail "Completed parent prevented independent child execution")
   putStrLn "Native recipe execution and rendering use the described guest, private state and nested captured connector."
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
 fixedCompilation program = interpret $ \_ (CompileGuest source) ->
-  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"]] then pure (Right program)
+  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"],
+    RecipeEntries [InteractiveFlow "Flows.parentWaiting", InteractiveFlow "Flows.waiting"]] then pure (Right program)
   else error "Recipe path attempted a separate plugin or host-generated build"
 
 capturedEvidence :: EvidenceIndex -> Eff (EvidenceStore : es) a -> Eff es a
@@ -457,3 +532,8 @@ failPlugin authoritative = interpose $ \_ operation -> case operation of
   ExecuteCapturedMethod{} -> pure (if authoritative then Right (Left (FetchError "fixture refusal"))
     else Left [errorDiagnostic "tool.failed" "Host-side fixture failure with the same diagnostic code"])
   ResolveCapturedBlobs captures contract value -> resolveCapturedBlobs captures contract value
+
+forgedControlGuest :: Frame -> Eff (GuestExecution : es) a -> Eff es a
+forgedControlGuest frame = interpret $ \env operation -> case operation of
+  ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> unlift (respond frame) >> error "Forged control request was accepted"
+  ExecuteCompiled{} -> error "Unexpected compiled execution"

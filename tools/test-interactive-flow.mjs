@@ -27,7 +27,18 @@ import qualified Agentic.Schema as S
 import qualified Agentic.Value as V
 import Control.Monad.Trans.Except (throwE)
 import Kyyn.Agentic (Flow)
+import Kyyn.Interactive (FlowHandle, startFlow, flowRef, flowRefTyped)
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
+import Data.Text (Text)
+import qualified Child
 import Kyyn.Plugin (FetchError(..))
+parent :: Flow Integer (FlowHandle Integer)
+parent = startFlow (flowRef (RecipeId "child") Child.review)
+badReference :: Flow Text (FlowHandle Integer)
+badReference = startFlow (flowRefTyped @Text @Integer (RecipeId "child"))
+self :: Flow Integer Integer
+self = A.arr (\\n -> if n > 0 then Left (n-1) else Right 0)
+  A.>>> ((startFlow (flowRef (RecipeId "self") self) A.>>> A.arr (const 0)) A.||| A.arr id)
 conversation :: Flow Integer Integer
 conversation = A.durably integer integer (\\_ n -> pure (n + 1)) A.>>> A.await integer integer
 multiple :: Flow Integer Integer
@@ -37,16 +48,32 @@ refuse = A.act (\\_ -> throwE (FetchError "Authored fixture refusal"))
 integer :: C.Codec Integer
 integer = C.primitive S.SInteger V.Integer (\\value -> case value of V.Integer n -> Right n; _ -> Left "Expected an integer")
 `);
+ fs.writeFileSync(path.join(target,'src/Child.hs'),`module Child where
+import qualified Agentic as A
+import qualified Agentic.Codec as C
+import qualified Agentic.Schema as S
+import qualified Agentic.Value as V
+import Kyyn.Agentic (Flow)
+review :: Flow Integer Integer
+review = A.await integer integer
+integer :: C.Codec Integer
+integer = C.primitive S.SInteger V.Integer (\\value -> case value of V.Integer n -> Right n; _ -> Left "Expected an integer")
+`);
  fs.writeFileSync(path.join(setup.path,'change/Evolution.hs'),`module Evolution where
 import Kyyn.Workspace.Evolution
-import Kyyn.Interactive (createInteractiveRecipe)
+import Kyyn.Interactive (createInteractiveRecipe, withChildren, child)
 import qualified Kyyn.Workspace.Target.InteractiveFlows.Conversations as Flows
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Child as Child
 import qualified Schema
 evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" []) (do
   createInteractiveRecipe (RecipeId "conversation") Flows.conversation
   createInteractiveRecipe (RecipeId "refuse") Flows.refuse
-  createInteractiveRecipe (RecipeId "multiple") Flows.multiple))
+  createInteractiveRecipe (RecipeId "multiple") Flows.multiple
+  createInteractiveRecipe (RecipeId "child") Child.review
+  createInteractiveRecipe (RecipeId "parent") (withChildren [child (RecipeId "child") Child.review] Flows.parent)
+  createInteractiveRecipe (RecipeId "badReference") (withChildren [child (RecipeId "child") Child.review] Flows.badReference)
+  createInteractiveRecipe (RecipeId "self") (withChildren [child (RecipeId "self") Flows.self] Flows.self)))
 `);
  console.log('Declaring and accepting synthetic interactive recipes');
  cli(['evolution','check',setup.id]);cli(['evolution','ready',setup.id]);cli(['evolution','accept',setup.id]);
@@ -64,6 +91,9 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  assert.notEqual(fresh.id,freshAgain.id);
  runtime(['flow','cancel',fresh.id]);runtime(['flow','cancel',freshAgain.id]);
  const multiple=cli(['flow','start','multiple','--input','+1']).result;
+ const parent=cli(['flow','start','parent','--input','+3']).result;
+ const wrong=cli(['flow','start','badReference','--input','"bad"']).result;
+ const self=cli(['flow','start','self','--input','+1']).result;
  const worker=background(['flow','worker']);
  await until(()=>show(started.id).status==='waiting');
  await until(()=>show(cancelled.id).status==='waiting');
@@ -74,6 +104,19 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  for(const wait of open)assert.ok(ambiguous.diagnostics[0].message.includes(wait.id));
  runtime(['flow','cancel',multiple.id]);
  assert.equal(runtime(['flow','await',failed.id],1).result.status,'failed');
+ await until(()=>show(parent.id).status==='completed');
+ await until(()=>show(wrong.id).status==='failed');
+ const instances=()=>runtime(['flow','list']).result.instances;
+ await until(()=>instances().some(x=>x.parent===parent.id&&x.status==='waiting'));
+ const child=instances().find(x=>x.parent===parent.id);
+ assert.equal(JSON.parse(show(parent.id).result.trim()),child.id);
+ assert.equal(child.owner.bundle,parent.owner.bundle);
+ assert.equal(instances().filter(x=>x.parent===wrong.id).length,0,'Mismatched reference published a child');
+ assert.ok(show(wrong.id).failure[0].message.includes('input contract mismatch'));
+ runtime(['flow','fulfil',child.id,'--reply','11']);
+ await until(()=>show(child.id).status==='completed');
+ await until(()=>instances().some(x=>x.parent===self.id&&x.status==='completed'));
+ assert.equal(instances().filter(x=>x.parent===self.id).length,1,'Self-reference started an unbounded tree');
  const waiting=show(started.id),wait=waiting.waits.find(x=>x.status==='open');
  assert.equal(wait.descriptor.request,2);assert.equal(waiting.attempts.length,1);
  assert.equal(waiting.attempts[0].path,'/runs/'+waiting.attempts[0].id);
@@ -115,7 +158,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  fs.writeFileSync(bundle,captured);
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);
- runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,'--descendants']);
+ runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,'--descendants']);
  assert.deepEqual(runtime(['flow','list']).result.instances,[]);
  assert.equal(runtime(['run','show',completed.attempts[1].id]).result.status,'returned','Clearing flow hid its recording');
  assert.equal(invoke('git',['-C',kb,'rev-parse','HEAD']).trim(),brokenRevision,'Runtime changed accepted knowledge');

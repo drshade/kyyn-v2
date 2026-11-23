@@ -1,7 +1,8 @@
 module Kyyn.Interactive
-  ( FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, flowRef, childFlow, withChildren ) where
+  ( FlowHandle, startFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
 
-import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef(..), ChildFlow(..))
+import Kyyn.Interactive.Control (FlowHandle, startFlow, flowRef, flowRefTyped)
+import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef, ChildFlow(..))
 import Kyyn.Recipe.Internal (RecipeDefinition(..), KnowledgeBase)
 import Kyyn.Evolution.KnowledgeBase (createRecipe)
 import Kyyn.Edit (Edit)
@@ -17,15 +18,10 @@ interactiveRecipe (FlowDefinition entry bindings state _ _) =
 createInteractiveRecipe :: RecipeId -> FlowDefinition input output -> Edit (KnowledgeBase root) ()
 createInteractiveRecipe ident definition = createRecipe ident (interactiveRecipe definition) ()
 
--- | Typed witness for an identified recipe. Evolution checking verifies that
--- the target declares this ID with the same interactive source definition.
-flowRef :: RecipeId -> FlowDefinition input output -> FlowRef input output
-flowRef ident (FlowDefinition entry _ _ input output) =
-  FlowRef (ChildReference ident entry) input output
-
--- | Existential child declaration; use the original FlowRef at typed call sites.
-childFlow :: FlowRef input output -> ChildFlow
-childFlow (FlowRef reference _ _) = ChildFlow reference
+-- | Declare a child by recipe identity and its generated source definition.
+-- Evolution checking verifies the ID is interactive and still names that source.
+child :: RecipeId -> FlowDefinition input output -> ChildFlow
+child ident (FlowDefinition entry _ _ _ _) = ChildFlow (ChildReference ident entry)
 
 -- | Declare the children this flow may start. References are resolved against
 -- the complete evolution target, so parent and child may be added together.

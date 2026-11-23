@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), decodeToolFrame, decodeFlowValue, encodeFlowValue, encodeJournalLookup) where
+module Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), FlowControlCall(..), decodeToolFrame, decodeFlowValue, encodeFlowValue, encodeJournalLookup) where
 
 import Control.Monad (unless)
 import Agentic.Aeson (toAeson, fromAeson)
@@ -11,6 +11,8 @@ import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import Data.List (sort)
 import Kyyn.Domain.Plugin
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
+import Kyyn.Types.Contract (Description)
 import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
@@ -25,6 +27,9 @@ data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName V
   | ToolModel Agentic.Conversation
   | ToolFlowObserved Value
   | ToolJournal JournalCall
+  | ToolFlowControl FlowControlCall
+
+data FlowControlCall = StartChildCall Text Text RecipeId Description Description Value
 
 data JournalCall = InitialiseJournal Text Text | LookupJournal Value | SaveJournal Value Value
 
@@ -37,6 +42,8 @@ decodeToolFrame = decodeFrameWith $ \capability operation arguments ->
   then ToolModel <$> Model.decodeRequest arguments
   else if capability == "flow" && operation == "observe"
   then ToolFlowObserved <$> decodeFlowValue arguments
+  else if capability == "flow-control"
+  then ToolFlowControl <$> decodeControl operation arguments
   else if capability == "flow-journal"
   then ToolJournal <$> decodeJournal operation arguments
   else decodePlugin capability operation arguments
@@ -86,3 +93,10 @@ checkedValue :: Value -> Parser Value
 checkedValue value = case Wire.decodeWith valueCodec value of
   Left message -> fail message
   Right _ -> pure value
+
+decodeControl :: String -> Value -> Parser FlowControlCall
+decodeControl operation = withObject "interactive control" $ \fields -> case operation of
+  "start" -> do
+    unless (sort (Keys.keys fields) == ["child","input","inputContract","key","namespace","outputContract"]) (fail "Unexpected child start fields")
+    StartChildCall <$> fields .: "namespace" <*> fields .: "key" <*> (RecipeId <$> fields .: "child") <*> fields .: "inputContract" <*> fields .: "outputContract" <*> fields .: "input"
+  _ -> fail "Unknown interactive control operation"
