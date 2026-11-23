@@ -22,7 +22,7 @@ try {
  const target=path.join(draft.path,'target');
  const plugin=path.join(target,'plugins/packages/event-fixture/source/src/Events.hs');
  let source=fs.readFileSync(plugin,'utf8');
- source=source.replace('pure (Right (Cursor config))','error "Dispatch must not run in the wait-only slice"')
+ source=source
    .replace('pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply question)] (Cursor config)))','error "Polling must not run in the wait-only slice"');
  fs.writeFileSync(plugin,source);
  fs.writeFileSync(path.join(target,'src/Conversations.hs'),`{-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
@@ -89,7 +89,7 @@ evolution = prepare (pure ()) (edit (Rationale "Synthetic event waits" []) $ do
  const malformed=cli(['flow','start','badRequest']).result;
  pass();
  assert.equal(show(conversation.id).status,'waiting');
- assert.equal(show(conversation.id).waits[0].dispatch,'pending');
+ assert.equal(show(conversation.id).waits[0].dispatch,'completed');
  assert.equal(show(pollOnly.id).waits[0].dispatch,'not required');
  assert.equal(show(unauthorized.id).retryRequired,true);
  assert.deepEqual(show(unauthorized.id).waits,[],'Mixed unauthorized frontier partially published');
@@ -109,7 +109,7 @@ evolution = prepare (pure ()) (edit (Rationale "Synthetic event waits" []) $ do
  assert.equal(completed.status,'completed');assert.match(completed.result,/cli:Confirmed/);
  assert.deepEqual(completed.deliveries.map(x=>x.outcome),['invalid','accepted','duplicate','conflicting']);
  assert.equal(completed.waits[0].reply.origin.surface,'cli');
- assert.equal(completed.waits[0].dispatch,'pending','Manual fulfil changed dispatch state');
+ assert.equal(completed.waits[0].dispatch,'completed','Manual fulfil changed dispatch state');
  runtime(['flow','fulfil',pollOnly.id,'--reply','{"answer":"Manual too"}']);pass();
  assert.equal(show(pollOnly.id).status,'completed');
  const fix=cli(['evolution','new','authorize-mixed']).result;
@@ -128,7 +128,7 @@ evolution = prepare (pure ()) (edit (Rationale "Authorize mixed event wait" []) 
  web=spawn(executable,['--kb',kb,'web','serve','--port','0'],{cwd:temporary,env});
  let errors='';web.stderr.on('data',x=>errors+=x);
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});
- const html=await (await fetch(base+'/flows/'+authorized.id)).text();assert.match(html,/Dispatch: pending/);
+ const html=await (await fetch(base+'/flows/'+authorized.id)).text();assert.match(html,/Dispatch: completed/);
  const done=await (await fetch(base+'/flows/'+conversation.id)).text();assert.match(done,/Manual · cli/);
  assert.equal(show(conversation.id).waits[0].id,wait.id);
  console.log('Typed event waits, payload validation, atomic refusal, pinned retry, manual provenance and dispatch display passed.');

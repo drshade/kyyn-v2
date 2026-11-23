@@ -7,6 +7,10 @@
 module Main (main) where
 
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference))
+import Kyyn.Porcelain.Capability.FlowEvents (dispatchEvents)
+import Kyyn.Porcelain.Capability.PluginEvent (PluginEvent(..))
+import Kyyn.Porcelain.Interpreter.FlowEvents (runFlowEvents)
+import Kyyn.Types.Plugin (RepeatSafety(..))
 import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
@@ -36,6 +40,7 @@ import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
 import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
 import Kyyn.Domain.Secret (secretName)
 import Kyyn.Porcelain.Capability.FlowPreparation
+import qualified Kyyn.Porcelain.Capability.FlowPreparation as FlowPreparation
 import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import qualified Kyyn.Domain.FlowInstance as Instance
 import Kyyn.Domain.FlowBundleId (flowBundleIdText)
@@ -89,6 +94,7 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore(..))
 import Kyyn.Porcelain.Capability.PluginPreparation
+import qualified Kyyn.Porcelain.Capability.PluginPreparation as PluginPreparation
 import Kyyn.Porcelain.Capability.RootStore (readRootDefinition, materializeRoot)
 import Kyyn.Porcelain.Capability.RecipeExecution (PreparedRecipe(..), prepareRecipeFlow, executeRecipeFlow)
 import Kyyn.Porcelain.Capability.RecipeInspection (describeRecipe)
@@ -373,6 +379,65 @@ main = do
           [Fact (FactId "event") (R.ClosedRecipe (Interactive (InteractionBindings [] [eventReference])) (FlowEntryRef "Flows.eventWaiting"))]
           (R.RecipeId "event") (Just "\"Question\"")
     eventReady <- right eventPrepared >>= right
+    let adapterPass safety fault selectedIdentity = runEff . runFailure . runFileSystemIO scope
+          . runDhallHandling . runDocumentPersistenceIO . runFlowStore kb
+          . dispatchMetadata safety fault . syntheticDispatch fault selectedIdentity . runFlowEvents kb $
+            dispatchEvents selectedIdentity
+        newEvent key = do
+          item <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
+          _ <- visit False item.instanceId
+          waitingItem <- inspect item.instanceId
+          case waitingItem.waits of
+            [selectedWait] -> pure (item.instanceId,selectedWait.waitId)
+            _ -> fail "Expected one event wait"
+        adapterState selectedIdentity = do
+          item <- inspect selectedIdentity
+          case item.waits of
+            [selectedWait] -> maybe (fail "Missing adapter") pure selectedWait.adapter
+            _ -> fail "Expected one adapter"
+    Foldable.forM_ [SafeToRepeat,RequireExplicitRetry] $ \safety ->
+      Foldable.forM_ ["fetch","operational","cursor","commit"] $ \fault -> do
+        (dispatchIdentity,_) <- newEvent (Text.pack (show safety ++ fault))
+        outcome <- adapterPass safety fault dispatchIdentity >>= right
+        unless (outcome == Blocked) (fail "Dispatch failure did not block")
+        adapter <- adapterState dispatchIdentity
+        unless (not (null adapter.dispatchProblems) && adapter.dispatch == Instance.Started)
+          (fail "Dispatch failure was not durable")
+        unless (any ((== "flow.dispatch-uncertain") . (.code)) adapter.dispatchProblems == (safety == RequireExplicitRetry))
+          (fail "Post-start failure lost uncertainty warning")
+        noSpin <- adapterPass safety "forbidden" dispatchIdentity >>= right
+        unless (noSpin == NoWork) (fail "Dispatch block was retried automatically")
+        _ <- store (retryInstance dispatchIdentity) >>= right >>= right
+        success <- adapterPass safety "success" dispatchIdentity >>= right
+        unless (success == Advanced) (adapterState dispatchIdentity >>= \adapterSnapshot -> fail ("Dispatch-only retry did not succeed: " ++ show (safety,fault,success,adapterSnapshot)))
+        done <- adapterState dispatchIdentity
+        unless (done.dispatch == Instance.DispatchCompleted && done.cursor == Just (String "10"))
+          (fail "Successful dispatch did not retain cursor")
+        again <- adapterPass safety "forbidden" dispatchIdentity >>= right
+        unless (again == NoWork) (fail "Completed dispatch repeated")
+        _ <- store (cancelInstance dispatchIdentity Instance.ThisFlow) >>= right >>= right
+        pure ()
+    Foldable.forM_ [SafeToRepeat,RequireExplicitRetry] $ \safety -> do
+      (dispatchIdentity,key) <- newEvent (Text.pack ("interrupted-" ++ show safety))
+      _ <- store (beginDispatch dispatchIdentity key) >>= right >>= right
+      _ <- store (blockAttempt dispatchIdentity [errorDiagnostic "fixture" "unrelated attempt failure"]) >>= right >>= right
+      blockedPass <- adapterPass safety "forbidden" dispatchIdentity >>= right
+      unless (blockedPass == NoWork) (fail "Attempt-blocked instance dispatched")
+      _ <- store (retryInstance dispatchIdentity) >>= right >>= right
+      interrupted <- adapterState dispatchIdentity
+      unless (interrupted.dispatch == Instance.Started) (fail "Unreported started reset during unrelated retry")
+      resumed <- adapterPass safety (if safety == SafeToRepeat then "success" else "forbidden") dispatchIdentity >>= right
+      unless (resumed == if safety == SafeToRepeat then Advanced else Blocked) (fail "Interrupted dispatch ignored repeat safety")
+      _ <- store (cancelInstance dispatchIdentity Instance.ThisFlow) >>= right >>= right
+      pure ()
+    Foldable.forM_ ["cancel","manual"] $ \fault -> do
+      (dispatchIdentity,_) <- newEvent (Text.pack ("during-" ++ fault))
+      dispatchResult <- adapterPass SafeToRepeat fault dispatchIdentity >>= right
+      unless (dispatchResult == Advanced) (fail "In-flight dispatchResult was lost")
+      saved <- adapterState dispatchIdentity
+      unless (saved.cursor == Just (String "10")) (fail "Closed wait discarded dispatch cursor")
+      ignored <- adapterPass SafeToRepeat "forbidden" dispatchIdentity >>= right
+      unless (ignored == NoWork) (fail "Closed wait invoked adapter")
     Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply eventReference (EventIdentity "provider-event")),
       ("provider-first",Instance.ProviderReply eventReference (EventIdentity "provider-event"),Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
       eventHosted <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
@@ -638,3 +703,46 @@ forgedControlGuest :: Frame -> Eff (GuestExecution : es) a -> Eff es a
 forgedControlGuest frame = interpret $ \env operation -> case operation of
   ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> unlift (respond frame) >> error "Forged control request was accepted"
   ExecuteCompiled{} -> error "Unexpected compiled execution"
+
+-- Override only provider metadata/faults: native preparation and the durable
+-- store remain real. No external provider or poll is available in this harness.
+dispatchMetadata :: FlowStore :> es => RepeatSafety -> String -> Eff es a -> Eff es a
+dispatchMetadata safety fault = interpose $ \_ operation -> case operation of
+  ReadExecutionBundle identity -> fmap (fmap (\bundle -> bundle {FlowPreparation.plugins = map plugin bundle.plugins})) (readExecutionBundle identity)
+  CompleteDispatch _ _ _ | fault == "commit" -> pure (Left (Instance.InvalidTransition "injected completion failure"))
+  ReadInstance identity -> readInstance identity
+  BeginDispatch identity key -> beginDispatch identity key
+  CompleteDispatch identity key value -> completeDispatch identity key value
+  BlockDispatch identity key problems -> blockDispatch identity key problems
+  CancelInstance identity extent -> cancelInstance identity extent
+  QueueDelivery identity (Just delivery) key origin value -> queueDelivery identity delivery key origin value
+  QueueDelivery identity Nothing key origin value -> queueNewDelivery identity key origin value
+  ResolveDelivery identity delivery outcome -> resolveDelivery identity delivery outcome
+  _ -> error "Unexpected adapter store operation"
+  where
+    plugin (PreparedPlugin (PreparedPackage name identity connectors) instances) =
+      PreparedPlugin (PreparedPackage name identity (map connector connectors)) (map configured instances)
+    configured (ConfiguredConnector name binding selected config) = ConfiguredConnector name binding (connector selected) config
+    connector selected@PreparedEventConnector{} = selected {PluginPreparation.events = map eventMethod selected.events}
+    connector selected = selected
+    eventMethod (PreparedEvent name label interval input reply cursor poll dispatch) =
+      PreparedEvent name label interval input reply cursor poll (fmap (\(entry,_) -> (entry,safety)) dispatch)
+
+syntheticDispatch :: (FlowStore :> es, Failure :> es, IOE :> es)
+  => String -> Instance.FlowInstanceId -> Eff (PluginEvent : es) a -> Eff es a
+syntheticDispatch fault identity = interpret $ \_ (DispatchEvent _ _ waitIdentity payload) -> do
+  current <- readInstance identity >>= maybe (error "Missing dispatch instance") pure
+  selected <- case current.waits of [value] -> pure value; _ -> error "Missing dispatch wait"
+  liftIO $ unless (waitIdentity == Instance.flowInstanceIdText identity <> ":" <> selected.waitId && payload == String "Question")
+    (fail "Dispatch changed stable identity or request")
+  case fault of
+    "forbidden" -> error "Unexpected adapter invocation"
+    "fetch" -> pure (Left [errorDiagnostic "flow.dispatch-failed" "provider rejected request"])
+    "operational" -> raiseFailure (Failure.RuntimeUnavailable (Failure.ProcessDiagnostic Failure.ReadOutput "injected failure"))
+    "cursor" -> pure (Right (String "invalid cursor"))
+    "cancel" -> cancelInstance identity Instance.ThisFlow >> pure (Right (String "10"))
+    "manual" -> do
+      _ <- queueDelivery identity "during-dispatch" selected.waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "Answer")
+      _ <- resolveDelivery identity "during-dispatch" Instance.Accepted
+      pure (Right (String "10"))
+    _ -> pure (Right (String "10"))

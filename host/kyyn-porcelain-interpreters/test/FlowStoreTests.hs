@@ -14,6 +14,10 @@ import qualified Data.ByteString as Bytes
 import qualified Effectful.State.Static.Local as State
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import Data.Aeson (Value(..), object)
+import Data.Aeson.Types (parseEither)
+import qualified Kyyn.Domain.FlowLifecycle as Lifecycle
+import qualified Kyyn.Domain.FlowDispatch as Dispatch
+import Kyyn.Porcelain.Protocol.FlowCatalog (catalogValue, parseCatalog)
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, runEff, liftIO, (:>), UnliftStrategy(..))
 import System.IO.Temp (withSystemTempDirectory)
@@ -314,6 +318,36 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   swept <- execute scope (entryExists scope journalPath)
   assert (not swept) "Clear retained the released journal"
 
+  -- A nullable cursor is still a present cursor. Exercise the persisted codec,
+  -- and preserve unreported Started when retrying an unrelated attempt block.
+  let eventReference = EventReference "plugin" "connector" "instance" "event"
+      pendingEvent = orphan { status = Waiting, retryRequired = False, blocked = [],
+        waits = [FlowWait "event" Null (EventWait eventReference) Open
+          (Just (EventAdapter Pending Nothing []))] }
+      eventState item = case item.waits of
+        [event] -> maybe (error "Missing event adapter") id event.adapter
+        _ -> error "Missing event wait"
+  (didStart, startedEvent) <- right (Dispatch.beginDispatch "event" pendingEvent)
+  assert didStart "Pending event did not start"
+  completedEvent <- right (Dispatch.completeDispatch "event" Null startedEvent)
+  decoded <- right (parseEither parseCatalog (catalogValue [completedEvent]))
+  assert (decoded == [completedEvent] && (eventState completedEvent).cursor == Just Null)
+    "JSON null cursor lost presence in catalog round-trip"
+  retryUnreported <- right (Lifecycle.retry startedEvent {retryRequired = True})
+  assert ((eventState retryUnreported).dispatch == Started)
+    "Retry of unrelated attempt block reset an unreported dispatch"
+  dispatchBlocked <- right (Dispatch.blockDispatch "event" [errorDiagnostic "fixture" "dispatch failed"] startedEvent)
+  retryReported <- right (Lifecycle.retry dispatchBlocked)
+  assert ((eventState retryReported).dispatch == Pending && null (eventState retryReported).dispatchProblems)
+    "Dispatch-only block did not permit retry"
+  completedAgain <- right (Dispatch.beginDispatch "event" completedEvent)
+  assert (not (fst completedAgain)) "Completed dispatch was eligible for repetition"
+  attemptBlocked <- right (Dispatch.beginDispatch "event" pendingEvent {retryRequired = True})
+  assert (not (fst attemptBlocked)) "Attempt-blocked flow began dispatch"
+  cancelledResult <- right (Dispatch.completeDispatch "event" Null startedEvent {status = Finished Cancelled})
+  assert ((eventState cancelledResult).cursor == Just Null && cancelledResult.status == Finished Cancelled)
+    "Cancellation discarded an in-flight dispatch result"
+
   -- Adapter ownership also excludes retry and clear, but never cancellation.
   adapting <- start Nothing "clear-active-adapter"
   adapterEntered <- newEmptyMVar
@@ -330,6 +364,9 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     _ <- Async.wait adapterWorker
     pure ()
   _ <- update (clearInstances [adapting.instanceId])
+  let adapterPath = either error id (relativePath (".kyyn/flows/adapters/" ++ Text.unpack (flowInstanceIdText adapting.instanceId)))
+  adapterDirectory <- execute scope (entryExists scope adapterPath)
+  assert (not adapterDirectory) "Adapter ownership created a per-instance data directory"
   collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
     . collisionDocuments . runFlowStore kb $ do
       first <- startPreparedInstance Nothing "first" preparedFixture

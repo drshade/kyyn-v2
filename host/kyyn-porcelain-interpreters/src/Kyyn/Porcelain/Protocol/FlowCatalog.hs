@@ -50,7 +50,7 @@ kindValue ReplyWait = tag "reply" Null
 kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanceIdText child,"outputContract" .= output])
 kindValue (EventWait reference) = tag "event" (toJSON reference)
 adapterValue :: EventAdapter -> Value
-adapterValue state = object ["dispatch" .= dispatchValue state.dispatch,"cursor" .= state.cursor,
+adapterValue state = object ["dispatch" .= dispatchValue state.dispatch,"cursor" .= fmap (\value -> object ["value" .= value]) state.cursor,
   "blocked" .= map diagnosticValue state.dispatchProblems]
 dispatchValue :: DispatchState -> Text.Text
 dispatchValue NotRequired = "notRequired"
@@ -146,7 +146,7 @@ parseWait = withObject "wait" $ \fields -> do
       "notRequired" -> pure NotRequired; "pending" -> pure Pending
       "started" -> pure Started; "completed" -> pure DispatchCompleted
       _ -> fail "Invalid dispatch state"
-    cursor <- entry .: "cursor"
+    cursor <- entry .: "cursor" >>= traverse (withObject "cursor" (\stored -> exact ["value"] stored >> stored .: "value"))
     unless ((phase == DispatchCompleted) == (cursor /= Nothing)) (fail "Dispatch cursor does not match phase")
     EventAdapter phase cursor <$> (entry .: "blocked" >>= diagnostics)))
   unless (case kind of EventWait{} -> adapter /= Nothing; _ -> adapter == Nothing)

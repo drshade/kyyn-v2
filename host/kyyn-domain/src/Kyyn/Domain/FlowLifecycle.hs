@@ -64,7 +64,7 @@ retry current = case current.status of
   where
     reset wait = wait { adapter = fmap (\state -> state
       { dispatchProblems = [], dispatch = case state.dispatch of
-          Started -> Pending
+          Started | not (null state.dispatchProblems) -> Pending
           other -> other }) wait.adapter }
 
 parentAllowsStart :: Maybe FlowInstanceId -> [FlowInstance] -> Either FlowStoreProblem ()

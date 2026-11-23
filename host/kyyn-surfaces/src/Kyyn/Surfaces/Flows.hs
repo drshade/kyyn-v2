@@ -61,7 +61,7 @@ instanceLines item interrupted descriptors input result problems =
   ["Inspection: " ++ Text.unpack problem.message | problem <- problems] ++
   ["Failed: " ++ Text.unpack problem.message | Finished (Failed failures) <- [item.status], problem <- failures] ++
   ["Blocked: " ++ Text.unpack diagnostic.message | diagnostic <- item.blocked] ++
-  [Text.unpack (waitLabel index descriptors wait) ++ " [" ++ Text.unpack wait.waitId ++ "]  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); _ -> "") ++ maybe "" ((" · dispatch " ++) . Text.unpack . dispatchText . (.dispatch)) wait.adapter | (index,wait) <- zip [1..] item.waits] ++
+  [Text.unpack (waitLabel index descriptors wait) ++ " [" ++ Text.unpack wait.waitId ++ "]  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); _ -> "") ++ maybe "" (\adapter -> " · dispatch " ++ Text.unpack (dispatchText adapter.dispatch) ++ if null adapter.dispatchProblems then "" else " (blocked)") wait.adapter | (index,wait) <- zip [1..] item.waits] ++
   ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && (case wait.kind of ChildWait{} -> False; _ -> True)) item.waits] ++
   ["Dispatch blocked [" ++ Text.unpack wait.waitId ++ "]: " ++ Text.unpack problem.message |
     wait <- item.waits, adapter <- maybe [] pure wait.adapter, problem <- adapter.dispatchProblems] ++

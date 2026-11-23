@@ -66,8 +66,7 @@ runFlowEvents kb = interpret $ \_ (DispatchEvents identity) -> readInstance iden
                         Nothing -> block identity key [errorDiagnostic "flow.dispatch" "Pending event has no captured dispatch entry"]
                         Just (program,safety)
                           | Just state <- wait.adapter, state.dispatch == Started, safety == RequireExplicitRetry ->
-                              block identity key [errorDiagnostic "flow.dispatch-uncertain"
-                                "The provider may already have received this request. flow retry sends it again; confirm that repeating it is appropriate."]
+                              blockAfterStart safety identity key []
                           | otherwise -> encodeValue (contractShape input) (toAeson request.payload) >>= \case
                               Left problems -> block identity key problems
                               Right _ -> do
@@ -77,19 +76,23 @@ runFlowEvents kb = interpret $ \_ (DispatchEvents identity) -> readInstance iden
                                 case started of
                                   Right True -> catchError @Failure.OperationalFailure
                                     (dispatchEvent program config (flowInstanceIdText identity <> ":" <> key) (toAeson request.payload) >>= \case
-                                      Left problems -> block identity key problems
+                                      Left problems -> blockAfterStart safety identity key problems
                                       Right value -> encodeValue (contractShape cursor) value >>= \case
-                                        Left problems -> block identity key problems
+                                        Left problems -> blockAfterStart safety identity key problems
                                         Right _ -> completeDispatch identity key value >>= \case
                                           Right () -> pure Advanced
-                                          Left problem -> block identity key [errorDiagnostic "flow.dispatch" (show problem)])
-                                    (\_ problem -> block identity key [Failure.operationalDiagnostic problem])
+                                          Left problem -> blockAfterStart safety identity key [errorDiagnostic "flow.dispatch" (show problem)])
+                                    (\_ problem -> blockAfterStart safety identity key [Failure.operationalDiagnostic problem])
                                   Right False -> pure NoWork
                                   Left problem -> block identity key [errorDiagnostic "flow.dispatch" (show problem)]
                 _ -> block identity key [errorDiagnostic "flow.dispatch" "Captured recipe is missing"]
             External -> pure NoWork
         _ -> pure NoWork
       _ -> pure NoWork
+    blockAfterStart safety identity key problems = block identity key
+      (problems ++ [errorDiagnostic "flow.dispatch-uncertain"
+        "The provider may already have received this request. flow retry sends it again; confirm that repeating it is appropriate."
+        | safety == RequireExplicitRetry])
     block identity key problems = blockDispatch identity key problems >>= \case
       Left _ -> pure Blocked
       Right () -> pure Blocked

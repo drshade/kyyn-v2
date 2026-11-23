@@ -213,7 +213,11 @@ adapter owner has gone away is uncertain: `SafeToRepeat` permits another attempt
 with the same identity; `RequireExplicitRetry` produces a sticky block naming the
 wait until `flow retry` authorises another dispatch. A returned `FetchError` is a
 reported dispatch failure and also requires explicit retry, regardless of repeat
-safety. Neither local persistence nor a stable identity implies exactly-once
+safety. Every block after `Started` for `RequireExplicitRetry` warns that the
+provider may already have received the request and retry sends it again. Retry
+resets only reported dispatch blocks; an unreported `Started` remains for the
+adapter pass to classify, even when retry clears an unrelated attempt block.
+Neither local persistence nor a stable identity implies exactly-once
 provider delivery. Child completion and bare manual waits require no dispatch.
 
 Only open event waits are dispatched or polled. Polling additionally requires a
@@ -259,7 +263,9 @@ acquires all selected journal locks nonblockingly in stable instance-ID order.
 If any lock is busy, it refuses without removing anything. It revalidates terminal
 status and tree constraints under the catalog lock, removes the catalog entries,
 and removes their journals while still owning the journal locks. Adapter and
-journal locks are never held together.
+journal locks are never held together. Lock files retain their inodes after clear:
+unlinking them could let a contender holding an old inode race a new lock owner.
+Adapter ownership itself creates no per-instance data directory.
 
 Two invariants make the probe sufficient: an adapter pass reloads the instance
 after acquiring its lock and before every call, starting nothing for a finished

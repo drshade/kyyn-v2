@@ -670,9 +670,25 @@ If one wait names an undeclared event, the whole new frontier is refused and the
 attempt blocks. `flow retry` reuses the same captured declaration: accepting a
 corrected recipe requires starting a new instance, not retrying the old one.
 
-Event waits show `dispatch: pending` when their connector declares a dispatch, or
-`dispatch: not required` otherwise. Both kinds are fulfilled using `flow fulfil`; `pending` means the provider
-request has not been sent. Manual fulfilment preserves dispatch state. Bare upstream waits and child-completion waits remain distinct.
+The worker dispatches pending event requests. Dispatch state is `not required`
+for events without a dispatch entry, `pending` before invocation, `started`
+once an invocation is durably recorded, and `completed` after its validated
+cursor is saved. A reported dispatch failure blocks only that wait; other waits
+and manual replies remain usable. `flow show` displays the per-wait diagnostics.
+
+`flow retry` clears recorded dispatch blocks as well as the attempt block.
+For a `RequireExplicitRetry` event, a failure after dispatch starts warns that
+the provider may already have received the request and retry sends it again.
+An interrupted, unreported `started` call retains that state on retry: the next
+worker pass either repeats it with the same identity (`SafeToRepeat`) or records
+the uncertainty warning (`RequireExplicitRetry`), requiring another explicit retry.
+
+Manual `flow fulfil` works in any dispatch state and preserves adapter results,
+including a result returned after a manual reply. Bare upstream waits and
+child-completion waits remain distinct. Event cursors are stored in the local
+catalog and visible in CLI/web inspection; plugin authors must never put
+credentials in them. Use named secrets for authentication.
+
 
 #### Starting child flows
 
