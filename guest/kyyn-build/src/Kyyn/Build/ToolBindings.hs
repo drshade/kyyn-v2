@@ -73,11 +73,13 @@ writeToolBindings generated roots plugins = do
       "import Kyyn.Types.Guest (ConnectorIdentity(..), CapturedMethodIdentity(..))",
       "import Kyyn.Runtime.ToolEntry", "import Kyyn.Runtime.Transport (Transport)",
       "import Kyyn.Runtime.Flow (exchangeObservation)",
+      "import Kyyn.Runtime.FlowJournal (exchangeJournal)",
       "import Kyyn.Runtime.Judgement (exchangeJudgement)", "import Kyyn.Runtime.Model (exchangeModel)",
       "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
       "dispatch transport requestId (Calls.JudgementCall request) = exchangeJudgement transport requestId request",
       "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request",
-      "dispatch transport requestId (Calls.ObserveFlow summary) = exchangeObservation transport requestId summary"] ++
+      "dispatch transport requestId (Calls.ObserveFlow summary) = exchangeObservation transport requestId summary",
+      "dispatch transport requestId (Calls.JournalCall call) = exchangeJournal transport requestId call"] ++
      concat [["dispatch transport requestId (Calls.ListEvidence_" ++ tag index ++ " (ConnectorInstance name)) =",
        "  exchangeEvidenceList transport requestId " ++ identity plugin connector ++ " name",
        "dispatch transport requestId (Calls.ReadEvidence_" ++ tag index ++ " (ConnectorInstance name) key) =",
@@ -105,7 +107,7 @@ proxyModule plugin connector = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then 
 
 agenticModule :: String
 agenticModule = unlines
-  ["module KyynFlowRuntime (Step, Flow, interpret, interpretObserved, liftTool) where",
+  ["module KyynFlowRuntime (Step, Flow, interpret, interpretObserved, runtimeObserved, liftTool) where",
    "import qualified Agentic as A", "import qualified Agentic.Runtime as A",
    "import Agentic.Runtime (Runtime(..))",
    "import Kyyn.Runtime.Flow (programScope)",
@@ -117,8 +119,9 @@ agenticModule = unlines
    "interpret :: Flow input output -> input -> Tool (Either FetchError output)",
    "interpret flow input = runExceptT (A.interpret runtime flow input)",
    "interpretObserved :: Flow input output -> input -> Tool (Either FetchError output)",
-   "interpretObserved flow input = runExceptT (A.interpret runtime",
-   "  { observe = lift . request . Calls.ObserveFlow . A.summarise } flow input)",
+   "interpretObserved flow input = runExceptT (A.interpret runtimeObserved flow input)",
+   "runtimeObserved :: A.Runtime Step",
+   "runtimeObserved = runtime { observe = lift . request . Calls.ObserveFlow . A.summarise }",
    "runtime :: A.Runtime Step",
    "runtime = (A.runtimeWith (throwE . FetchError . Text.pack . show))",
    "  { scope = A.exceptTScope programScope",

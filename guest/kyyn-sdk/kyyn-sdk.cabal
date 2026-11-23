@@ -37,6 +37,7 @@ library runtime
   exposed-modules: Kyyn.Runtime.Contract Kyyn.Runtime.Guest Kyyn.Runtime.Bindings
     Kyyn.Runtime.AgenticContract
     Kyyn.Runtime.Flow
+    Kyyn.Runtime.FlowJournal
     Kyyn.Runtime.Concurrent
     Kyyn.Runtime.Evolution
     Kyyn.Runtime.Snapshot

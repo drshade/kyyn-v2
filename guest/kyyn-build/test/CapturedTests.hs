@@ -12,6 +12,7 @@ import Language.Haskell.TH (mkName, recover)
 import Kyyn.Build.Captured
 import Kyyn.Types.Plugin (ConnectorInstance(..), FetchError(..))
 import Kyyn.Types.Evidence (EvidenceId(..))
+import Kyyn.Types.FlowJournal (JournalRequest(..))
 import Kyyn.Types.PluginHost (Waiting(..))
 import Kyyn.Types.Program ((:+:)(..), interpretProgram)
 import qualified CapturedProvider
@@ -37,6 +38,9 @@ handleFull (InLeft (WaitSeconds _)) = pure ()
 handleFull (InRight (JudgementCall _)) = pure (Left "unavailable")
 handleFull (InRight (ModelCall _)) = pure (Left "unavailable")
 handleFull (InRight (ObserveFlow _)) = pure ()
+handleFull (InRight (JournalCall (InitialiseJournal _))) = pure ()
+handleFull (InRight (JournalCall (LookupJournal _))) = pure Nothing
+handleFull (InRight (JournalCall (SaveJournal _ _))) = pure ()
 handleFull (InRight (ListEvidence_AllFiles _)) = pure (Right [])
 handleFull (InRight (ReadEvidence_AllFiles _ _)) = pure (Right Nothing)
 handleFull (InRight (ReadFullContent _ key)) = pure (Left (FetchError key))

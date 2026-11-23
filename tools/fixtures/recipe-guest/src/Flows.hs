@@ -1,9 +1,12 @@
-module Flows (review, recursive, invalidRecursive, trace) where
+module Flows (review, recursive, invalidRecursive, trace, waiting) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Agentic.Contract (Contract)
 import qualified Agentic as A
+import qualified Agentic.Codec as C
+import qualified Agentic.Schema as S
+import qualified Agentic.Value as V
 import Control.Monad.Trans.Except (ExceptT(..))
 import Kyyn.Agentic (Flow)
 import Kyyn.Connectors (files)
@@ -50,3 +53,16 @@ trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
   A.>>> A.arr (const ("input" :: Text))
   A.>>> (A.draftWith [A.tool "helper" "Nested helper" (A.draft "inner" :: Flow Text Text)] "outer" :: Flow Text Text)
   A.>>> A.arr (const (RecipeProposal [] (State 1)))
+
+-- The connector must run only on the first attempt; the reply completes the proposal.
+waiting :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
+waiting = A.arr (\(RecipeInput _ () (State runs)) -> runs)
+  A.>>> A.durably integer integer (\_ runs -> do
+    count <- ExceptT (Files.count files ())
+    pure (runs + count))
+  A.>>> A.await integer integer
+  A.>>> A.arr (\reply -> RecipeProposal [] (State reply))
+  where
+    integer = C.primitive S.SInteger V.Integer $ \value -> case value of
+      V.Integer n -> Right n
+      _ -> Left "Expected integer reply"
