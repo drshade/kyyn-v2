@@ -17,7 +17,7 @@ import Kyyn.Domain.Recipe (RecipeId(..), recipeId)
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Domain.Evolution (evolutionId, evolutionIdName)
 import Kyyn.Domain.Diagnostic
-import Kyyn.Plumbing.Protocol.Validation (parseReport)
+import Kyyn.Plumbing.Protocol.Validation (parseReport, diagnosticValue)
 
 headerValue :: RecipeRunHeader -> Value
 headerValue h = let RecipeId recipe = h.recipe; FlowEntryRef flow = h.flow in object
@@ -37,7 +37,7 @@ eventValue :: RunEvent -> Value
 eventValue (RunEvent elapsed body) = object ["elapsedNanos" .= show elapsed,"body" .= case body of
   FlowObserved summary -> object ["kind" .= String "flow","summary" .= summary]
   RunCompleted draft -> object ["kind" .= String "completed","draft" .= evolutionIdName draft]
-  RunFailed diagnostics -> object ["kind" .= String "failed","diagnostics" .= map diagnostic diagnostics]
+  RunFailed diagnostics -> object ["kind" .= String "failed","diagnostics" .= map diagnosticValue diagnostics]
   RunCancelled -> object ["kind" .= String "cancelled"]]
 parseEvent :: Value -> Parser RunEvent
 parseEvent = exact "run event" ["elapsedNanos","body"] $ \o ->
@@ -76,16 +76,6 @@ none :: Value
 none = object ["tag" .= String "None"]
 some :: Value -> Value
 some value = object ["tag" .= String "Some","value" .= value]
-diagnostic :: Diagnostic -> Value
-diagnostic (Diagnostic severity code message location) = object
-  ["severity" .= object ["tag" .= show severity],"code" .= code,"message" .= message,
-   "location" .= maybe none (some . place) location]
-  where
-    place (FactLocation collection identity field) = object ["tag" .= String "Fact","value" .= object
-      ["collection" .= collection,"factId" .= identity,"field" .= maybe none (some . String) field]]
-    place (SourceLocation file line column) = object ["tag" .= String "Source","value" .= object
-      ["file" .= file,"line" .= show line,"column" .= show column]]
-    place (ExampleLocation name) = object ["tag" .= String "Example","value" .= name]
 
 natural :: Value -> Parser Natural
 natural = withText "canonical natural" $ \text -> case reads (Text.unpack text) of
