@@ -6,11 +6,13 @@ module Main (main) where
 
 import Control.Concurrent.Async (concurrently, withAsync)
 import Control.Concurrent.MVar
-import Control.Monad (unless, replicateM_)
+import Control.Monad (unless, replicateM_, forM_)
 import Data.Aeson (Value(..), object)
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, runEff, liftIO)
 import System.IO.Temp (withSystemTempDirectory)
+import GHC.Clock (getMonotonicTimeNSec)
+import Text.Printf (printf)
 import System.Timeout (timeout)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.FlowInstance
@@ -24,7 +26,7 @@ import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.FlowStore
-import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(FlowJournalIdentity))
+import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(FlowJournalIdentity), saveCompletion)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 
@@ -121,6 +123,13 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
       Left CancelledAncestor -> pure ()
       Right item -> readFlow item.instanceId >>= \actual -> assert (actual.status == Finished Cancelled) "Racing child escaped cancellation"
       other -> fail ("Unexpected race result: " ++ show other)
+  -- A concrete baseline for the deliberately simple whole-journal replacement.
+  -- 500 synthetic 1 KiB results; no timing assertion or provider latency.
+  started <- getMonotonicTimeNSec
+  execute scope (runFlowJournal kb (FlowJournalIdentity "size-baseline" "revision" Null)
+    (forM_ [1..500 :: Int] (\n -> saveCompletion (String (Text.pack (show n))) (String (Text.replicate 1024 "x")))))
+  ended <- getMonotonicTimeNSec
+  printf "500 journal completions (1 KiB results): %.3f seconds\n" (fromIntegral (ended - started) / 1e9 :: Double)
   putStrLn "Flow catalog restart, independent ingress, partial replies and cancellation races pass."
 
 assert :: Bool -> String -> IO ()
