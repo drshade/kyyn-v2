@@ -61,7 +61,7 @@ checkRecipeDefinitions definitions = do
   mapM_ (\(Fact (FactId name) definition) -> do
     _ <- checked (recipeId (Text.unpack name))
     case definition of
-      OpenRecipe (Interactive _) _ _ -> bad "Interactive open recipes require an external execution declaration; this authoring path currently registers closed interactive flows"
+      OpenRecipe (Interactive _) _ _ -> bad "Interactive open recipes are not supported"
       OpenRecipe _ _ "()" -> pure ()
       OpenRecipe _ _ stateType -> checked (qualifiedTypeName stateType) >> pure ()
       ClosedRecipe _ (FlowEntryRef entry) -> checked (bindingModule (Text.unpack entry)) >> pure ()) definitions

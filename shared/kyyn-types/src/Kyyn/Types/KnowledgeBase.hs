@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Types.KnowledgeBase (Lifetime(..), lifetimeName, InteractionBindings(..), ChildReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..)) where
+module Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..)) where
 
 import Data.Text (Text)
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, withObject, (.=), (.:))
@@ -46,7 +46,3 @@ data Recipe
 
 -- | The qualified name of an authored flow, for example Tasks.reconcile.
 newtype FlowEntryRef = FlowEntryRef Text deriving (Eq, Show)
-
-lifetimeName :: Lifetime -> String
-lifetimeName Ordinary = "Ordinary"
-lifetimeName (Interactive _) = "Interactive"

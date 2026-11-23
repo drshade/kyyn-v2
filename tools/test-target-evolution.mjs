@@ -45,17 +45,18 @@ assert.deepEqual(interactive.value.definition, {tag: 'ClosedAgent', value: {life
 assert.deepEqual(interactive.value.state, {});
 const parent = result.value.after.recipes.find(r => r.id === 'coordinator');
 assert.deepEqual(parent.value.definition.value.lifetime.value.children, [{recipe: 'conversation', flow: 'Flows.conversation'}]);
-assert.deepEqual(result.value.steps.map(s => s.origin), ['authored', 'authored', 'authored', 'authored', 'authored', 'authored', 'authored', 'target-projection']);
+assert.deepEqual(result.value.steps.map(s => s.origin), ['authored', 'authored', 'authored', 'authored', 'authored', 'authored', 'target-projection', 'authored']);
 assert.deepEqual(result.value.steps[0].before, snapshot);
 for (let i = 1; i < result.value.steps.length; i++) assert.deepEqual(result.value.steps[i].before, result.value.steps[i-1].after);
-assert.equal(result.value.steps.at(-1).rationale.explanation, 'Fixture migration');
-const projection = result.value.steps.at(-1);
+const projection = result.value.steps.find(s => s.origin === 'target-projection');
+assert.equal(projection.rationale.explanation, 'Fixture migration');
 const verified = await invoke({operation: 'invoke', entry: '$evolution.project',
   argument: {snapshot: projection.before, explanation: 'Fixture migration'}});
 assert.equal(verified.tag, 'Succeeded');
 assert.equal(verified.value.steps.length, 1);
 assert.deepEqual(verified.value.steps[0].after, projection.after);
-assert.deepEqual(verified.value.after, result.value.after);
+assert.deepEqual(verified.value.after.facts, result.value.after.facts);
+assert.equal(verified.value.after.recipes.length, 1); // creation follows projection in the target edit
 const invalid = structuredClone(snapshot);
 invalid.collections[0][1][0][1].shape = record({id: text, value: record({wrong: integer})});
 invalid.collections[0][1][0][1].value.value = {wrong: '7'};

@@ -11,7 +11,7 @@ import Kyyn.Optics (Lens')
 import Kyyn.Edit.Internal (Collection(..))
 import Kyyn.Evolution (RecipeType, RecipeDefinition)
 import qualified Kyyn.Recipe.Internal as Recipe
-import Kyyn.Types.KnowledgeBase (Lifetime(..), Recipe(ClosedAgent), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), Recipe(ClosedAgent), FlowEntryRef(..))
 import qualified Kyyn.Types.Contract as D
 import Kyyn.Recipe (RecipeEvolution, recipeEdit)
 import Kyyn.Edit (refuse)
@@ -54,4 +54,4 @@ interactiveFlow reference = do
   input <- compileWire (contract @input)
   output <- compileWire (contract @output)
   state <- recipeType @() "()"
-  pure (FlowDefinition (FlowEntryRef reference) state input output)
+  pure (FlowDefinition (FlowEntryRef reference) (InteractionBindings []) state input output)

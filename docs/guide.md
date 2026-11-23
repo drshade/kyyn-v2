@@ -526,32 +526,6 @@ A successful closed run creates a draft with a saved proposal and
 new evidence. Inspect the proposal through the normal review path. Describing a
 closed recipe shows its flow structure without executing its actions.
 
-Interactive closed flows use the same recipe collection, with a separate lifetime
-and their own checked request/result types. In an evolution, import generated
-source definitions and register them with unit declaration state:
-
-```haskell
-import Kyyn.Interactive (interactiveRecipe, withChildren, childFlow, flowRef)
-import qualified Kyyn.Workspace.Target.InteractiveFlows.Flows as Flows
-
--- Within a target edit; these definitions may be created together.
-createRecipe (RecipeId "review") (interactiveRecipe Flows.review) ()
-createRecipe (RecipeId "coordinator")
-  (withChildren [childFlow (flowRef (RecipeId "review") Flows.review)] Flows.coordinator) ()
-```
-
-Generated `FlowDefinition input output` handles describe source functions.
-A `FlowRef input output` additionally identifies a recipe: evolution checking
-requires that the target recipe exists, is interactive, and selects the same
-source definition. Removing or retargeting a referenced child therefore fails
-checking and names both recipes. The declaration's child set is persisted;
-instance start will capture that authority at its execution revision.
-
-`root recipe list`, `show` and `describe` expose these declarations. Ordinary
-`root recipe run` refuses them: interactive execution needs the separate instance
-worker, whose CLI is not available yet. Interactive open declarations are also
-not yet supported. Unit declaration state is bookkeeping; it is not a checkpoint.
-
 Executing a closed recipe automatically saves a local recording in `.kyyn/runs/`.
 The CLI prints its run ID as execution starts and returns that ID alongside the
 draft evolution on success. Preparation errors do not create recordings.

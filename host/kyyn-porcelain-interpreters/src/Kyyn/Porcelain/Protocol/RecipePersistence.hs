@@ -4,6 +4,7 @@ module Kyyn.Porcelain.Protocol.RecipePersistence
   , encodeStoredRecipes, decodeStoredRecipes, encodeRecipeContracts, decodeRecipeContracts ) where
 
 import Control.Monad (unless)
+import Data.Bifunctor (first)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (object, (.=), (.:), withObject, toJSON)
 import Data.Aeson.Types (parseEither, parseJSON)
@@ -33,11 +34,14 @@ encodeRecipes values = case checkRecipeDefinitions values of
 decodeRecipes :: DhallHandling :> es => Maybe ByteString -> Eff es (Either [Diagnostic] [Fact RecipeDefinition])
 decodeRecipes Nothing = pure (Right [])
 decodeRecipes (Just bytes) = case Text.decodeUtf8' bytes of
-  Left problem -> pure (failure (show problem))
+  Left problem -> pure (first contextual (failure (show problem)))
   Right source -> do
     decoded <- decodeValue recipesShape source
-    pure $ decoded >>= either failure checkRecipeDefinitions . parseEither parseRecipes
-  where failure = Left . pure . errorDiagnostic "recipe.invalid-data"
+    pure $ first contextual (decoded >>= either failure checkRecipeDefinitions . parseEither parseRecipes)
+  where
+    failure = Left . pure . errorDiagnostic "recipe.invalid-data"
+    contextual = map (\(Diagnostic severity code message location) ->
+      Diagnostic severity code ("recipes.dhall: " <> message) location)
 
 encodeStoredRecipes :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] FileTree)

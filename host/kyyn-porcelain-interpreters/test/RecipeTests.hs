@@ -17,6 +17,7 @@ import Kyyn.Plumbing.Capability.Git (Git(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Porcelain.Capability.Recipe (findRecipeAt)
+import Kyyn.Porcelain.Protocol.RecipePersistence (decodeRecipes)
 import Kyyn.Porcelain.Capability.RecipeStore
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Interpreter.RecipeStore (runRecipeStore)
@@ -37,6 +38,11 @@ recipeTests = do
   check "Unknown recipe accepted" (case run (findRecipeAt kb at (RecipeId "missing")) of
     Left [Diagnostic _ "recipe.unknown" _ _] -> True
     _ -> False)
+  let old = "let Recipe = < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > in [{ id = \"old\", value = Recipe.ClosedAgent { flow = \"Flows.old\" } }]"
+  check "Missing lifetime error lacks path and field" (case run (decodeRecipes (Just old)) of
+    Left diagnostics -> let rendered = Text.pack (show diagnostics)
+                        in "recipes.dhall" `Text.isInfixOf` rendered && "lifetime" `Text.isInfixOf` rendered
+    Right _ -> False)
   let child = Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.child"))
       parent = Fact (FactId "parent") (ClosedRecipe
         (Interactive (InteractionBindings [ChildReference (RecipeId "child") (FlowEntryRef "Flows.child")])) (FlowEntryRef "Flows.parent"))
@@ -45,6 +51,12 @@ recipeTests = do
                             in "parent" `Text.isInfixOf` rendered && "child" `Text.isInfixOf` rendered
         Right _ -> False
   check "Parent and child added together refused" (checkRecipeDefinitions [parent,child] == Right [parent,child])
+  let duplicateParent = Fact (FactId "parent") (ClosedRecipe
+        (Interactive (InteractionBindings (replicate 2 (ChildReference (RecipeId "child") (FlowEntryRef "Flows.child"))))) (FlowEntryRef "Flows.parent"))
+      self = Fact (FactId "self") (ClosedRecipe
+        (Interactive (InteractionBindings [ChildReference (RecipeId "self") (FlowEntryRef "Flows.self")])) (FlowEntryRef "Flows.self"))
+  check "Duplicate child accepted" (case checkRecipeDefinitions [duplicateParent,child] of Left _ -> True; Right _ -> False)
+  check "Self reference refused" (checkRecipeDefinitions [self] == Right [self])
   check "Missing child accepted" (refused [parent])
   check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
   check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.other"))])
