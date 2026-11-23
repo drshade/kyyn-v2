@@ -12,16 +12,15 @@ newtype RecipeId = RecipeId Text deriving (Eq, Show)
 data InteractionBindings = InteractionBindings { children :: [ChildReference], events :: [EventReference] }
   deriving (Eq, Show)
 data EventReference = EventReference
-  { plugin :: Text, connector :: Text, instanceName :: Text, method :: Text
-  , requestContract :: Text, replyContract :: Text }
+  { plugin :: Text, connector :: Text, instanceName :: Text, method :: Text }
   deriving (Eq, Show)
 instance ToJSON EventReference where
-  toJSON (EventReference p c i m request reply) = object
-    ["plugin" .= p,"connector" .= c,"instance" .= i,"event" .= m,"requestContract" .= request,"replyContract" .= reply]
+  toJSON (EventReference p c i m) = object
+    ["plugin" .= p,"connector" .= c,"instance" .= i,"event" .= m]
 instance FromJSON EventReference where
-  parseJSON = exactObject "event reference" ["plugin","connector","instance","event","requestContract","replyContract"] $ \fields ->
+  parseJSON = exactObject "event reference" ["plugin","connector","instance","event"] $ \fields ->
     EventReference <$> fields .: "plugin" <*> fields .: "connector" <*> fields .: "instance"
-      <*> fields .: "event" <*> fields .: "requestContract" <*> fields .: "replyContract"
+      <*> fields .: "event"
 data ChildReference = ChildReference RecipeId FlowEntryRef deriving (Eq, Show)
 instance ToJSON ChildReference where
   toJSON (ChildReference (RecipeId ident) (FlowEntryRef entry)) =

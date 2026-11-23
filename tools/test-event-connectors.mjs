@@ -59,10 +59,16 @@ evolution = prepare (pure ()) (edit (Rationale "Declare the event conversation" 
  const changed=cli(['evolution','new','contract-drift']).result;
  const source=path.join(changed.path,'target/plugins/packages/event-fixture/source/src/Events.hs');
  fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('question :: Text','question :: Text, revision :: Integer').replace('makeRequest = Request','makeRequest text = Request text 0').replace('(Request question)','(Request question _)'));
- assert.match(JSON.stringify(cli(['evolution','check',changed.id],1)),/request contract differs/);
+ cli(['evolution','check',changed.id]);
+ cli(['evolution','ready',changed.id]);
+ cli(['evolution','accept',changed.id]);
  cli(['plugin','connector','login','event-fixture','updates']);
  const refused=cli(['evidence','fetch','event-fixture','updates'],1);
  assert.match(JSON.stringify(refused),/source connector/);
+ const unsupported=cli(['evolution','new','unsupported-event']).result;
+ const unsupportedSource=path.join(unsupported.path,'target/plugins/packages/event-fixture/source/src/Events.hs');
+ fs.writeFileSync(unsupportedSource,fs.readFileSync(unsupportedSource,'utf8').replace('answer :: Text','answer :: Text, next :: Maybe Reply').replace('(Reply question)','(Reply question Nothing)').replace('(Reply text)','(Reply text _)'));
+ assert.match(JSON.stringify(cli(['plugin','connector','schema','show','event-fixture','--evolution',unsupported.id],1)),/recursive|Recursive/);
  web=spawn(executable,['--kb',kb,'web','serve','--port','0'],{cwd:temporary,env});
  let errors='';web.stderr.on('data',x=>errors+=x);
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});

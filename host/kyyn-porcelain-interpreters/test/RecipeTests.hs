@@ -57,7 +57,7 @@ recipeTests = do
       self = Fact (FactId "self") (ClosedRecipe
         (Interactive (InteractionBindings [ChildReference (RecipeId "self") (FlowEntryRef "Flows.self")] [])) (FlowEntryRef "Flows.self"))
   check "Duplicate child accepted" (case checkRecipeDefinitions [duplicateParent,child] of Left _ -> True; Right _ -> False)
-  let eventRef = EventReference "fixture" "Updates" "updates" "question" "request" "reply"
+  let eventRef = EventReference "fixture" "Updates" "updates" "question"
       duplicateEvents = Fact (FactId "events") (ClosedRecipe (Interactive (InteractionBindings [] [eventRef,eventRef])) (FlowEntryRef "Flows.events"))
   check "Duplicate event declarations accepted" (case checkRecipeDefinitions [duplicateEvents] of
     Left diagnostics -> "duplicate event declarations" `Text.isInfixOf` Text.pack (show diagnostics)
@@ -86,4 +86,4 @@ recording selected = interpret $ \_ request -> case request of
   _ -> error "Recipe discovery performed a non-document Git operation"
 
 recipeData :: ByteString
-recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text, requestContract : Text, replyContract : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text, requestContract : Text, replyContract : Text } } >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text, requestContract : Text, replyContract : Text } } >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"
+recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive : { children : List { recipe : Text, flow : Text }, events : List { plugin : Text, connector : Text, instance : Text, event : Text } } >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"

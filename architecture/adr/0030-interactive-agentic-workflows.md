@@ -177,7 +177,8 @@ request by this binding, not by schema shape, labels or question text. The worke
 rejects bindings outside the instance's captured declarations when a wait is
 published: the attempt blocks with an instance/event diagnostic, with no provider
 dispatch or reply wait recorded. Preparation rejects missing or duplicate declared
-events and disagreements with checked request/reply contracts. It does not execute
+events; the compiler checks authored uses against the current plugin types. The
+published wait is checked against its captured request/reply contracts. Preparation does not execute
 an arbitrary flow to discover every event a later data-dependent branch may use.
 No separate openWait operation or explicit send before await is required.
 The persistence envelope reserves the top-level `kyynWait` field: `"event"`

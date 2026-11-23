@@ -71,7 +71,7 @@ checkRecipeDefinitions definitions = do
     checkChildren (Fact (FactId parent) (ClosedRecipe (Interactive (InteractionBindings refs selectedEvents)) _)) = do
       unless (length refs == length (nub refs)) (bad ("Recipe " <> Text.unpack parent <> ": duplicate child declarations"))
       mapM_ (checkChild parent) refs
-      let identities = [(p,i,m) | EventReference p _ i m _ _ <- selectedEvents]
+      let identities = [(p,i,m) | EventReference p _ i m <- selectedEvents]
       unless (length identities == length (nub identities)) (bad ("Recipe " <> Text.unpack parent <> ": duplicate event declarations"))
     checkChildren _ = pure ()
     checkChild parent (ChildReference (RecipeId child) expected) =

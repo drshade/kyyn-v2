@@ -15,7 +15,7 @@ main = do
   let base = FlowDefinition (FlowEntryRef "Flows.parent") (InteractionBindings [] [])
         (error "state must not be forced") (error "input must not be forced") (error "output must not be forced") :: FlowDefinition () ()
       reference = eventRef "fixture" "Updates" "question" poll (ConnectorInstance "updates" :: ConnectorInstance ())
-      EventRef expected _ _ = reference
+      EventRef expected _ = reference
       childRef = child (RecipeId "child") base
       bindings (FlowDefinition _ selected _ _ _) = selected
       left = bindings (withChildren [childRef] (withEvents [event reference] base))
