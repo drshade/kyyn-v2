@@ -14,19 +14,19 @@ function cli(args,status=0){console.error(args.join(' '));const r=spawnSync(exec
 try {
  cli(['kb','init']);
  const draft=cli(['evolution','new','events']).result;
- const config=cli(['plugin','install','--evolution',draft.id,'--from',path.join(repo,'tools/fixtures/captured-plugin')]).result.configuration;
- fs.writeFileSync(path.join(kb,config.path),'[ { name = "updates", binding = "updates", connector = < Files : Integer | Options : Integer | State : Integer | StateOptions : Integer | Updates : Integer | Writer : Integer >.Updates +10 } ]');
+ const config=cli(['plugin','install','--evolution',draft.id,'--from',path.join(repo,'tools/fixtures/event-plugin')]).result.configuration;
+ fs.writeFileSync(path.join(kb,config.path),'[ { name = "updates", binding = "updates", connector = < Updates : Integer >.Updates +10 } ]');
  cli(config.schemaCommand.slice('kyyn-v2 '.length).split(' '));
  cli(config.checkCommand.slice('kyyn-v2 '.length).split(' '));
  cli(['evolution','ready',draft.id]);
  cli(['evolution','accept',draft.id]);
- cli(['plugin','connector','login','local-file','updates']);
- const refused=cli(['evidence','fetch','local-file','updates'],1);
+ cli(['plugin','connector','login','event-fixture','updates']);
+ const refused=cli(['evidence','fetch','event-fixture','updates'],1);
  assert.match(JSON.stringify(refused),/source connector/);
  web=spawn(executable,['--kb',kb,'web','serve','--port','0'],{cwd:temporary,env});
  let errors='';web.stderr.on('data',x=>errors+=x);
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});
- const response=await fetch(base+'/plugins/local-file');assert.equal(response.status,200);
+ const response=await fetch(base+'/plugins/event-fixture');assert.equal(response.status,200);
  const html=await response.text();assert.match(html,/Event connector/);assert.match(html,/Binding: updates/);
  const links=[...html.matchAll(/href="([^"]+)"/g)].map(x=>x[1]).filter(x=>decodeURIComponent(x).includes('/types/Updates/event:'));
  assert.equal(new Set(links).size,6,'Each event request, reply and cursor has a type link');
