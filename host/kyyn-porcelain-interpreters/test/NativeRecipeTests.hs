@@ -484,11 +484,36 @@ main = do
     afterReplay <- children
     unless (recovered == String (Instance.flowInstanceIdText publishedChild.instanceId) && replayed == recovered && length afterReplay == 1)
       (fail "Replay changed or duplicated the published child")
+    let controlChild call = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runGuestExecution [("LC_ALL","C.UTF-8")] . runDocumentPersistenceIO . runFlowStore kb $
+            answerFlowControl coordinator.instanceId preparedChildStart.bundle call
+        expectRefused label action = do
+          value <- action >>= right
+          case value of
+            Object fields | Keys.lookup "tag" fields == Just (String "Left") -> pure ()
+            _ -> fail label
+    expectRefused "Inspection accepted a self handle" (controlChild
+      (InspectChildCall (Instance.flowInstanceIdText coordinator.instanceId) (descriptionOf childContract.outputContract)))
+    expectRefused "Inspection accepted a wrong output witness" (controlChild
+      (InspectChildCall (Instance.flowInstanceIdText publishedChild.instanceId) (descriptionOf parentContract.outputContract)))
+    expectRefused "Cancellation accepted a wrong output witness" (controlChild
+      (CancelChildCall (Instance.flowInstanceIdText publishedChild.instanceId) (descriptionOf parentContract.outputContract) True))
+    unchangedChild <- inspect publishedChild.instanceId
+    unless (unchangedChild.status == Instance.Runnable) (fail "Refused cancellation changed the child")
     _ <- store (beginAttempt coordinator.instanceId) >>= right >>= right
     _ <- store (finishInstance coordinator.instanceId (Instance.Completed recovered)) >>= right >>= right
     _ <- visit True publishedChild.instanceId
     childState <- inspect publishedChild.instanceId
     unless (childState.status == Instance.Waiting) (fail "Completed parent prevented independent child execution")
+    cancelledChild <- controlChild (CancelChildCall (Instance.flowInstanceIdText publishedChild.instanceId)
+      (descriptionOf childContract.outputContract) False) >>= right
+    unless (cancelledChild == object ["tag" .= String "Right","value" .= object []]) (fail "Valid child cancellation was refused")
+    _ <- store (clearInstances [publishedChild.instanceId]) >>= right >>= right
+    clearedInspection <- controlChild (InspectChildCall (Instance.flowInstanceIdText publishedChild.instanceId)
+      (descriptionOf childContract.outputContract)) >>= right
+    case clearedInspection of
+      Object fields | Just (String message) <- Keys.lookup "value" fields, "cleared" `Text.isInfixOf` message -> pure ()
+      _ -> fail "Cleared child inspection lost its distinct typed refusal"
   putStrLn "Native recipe execution and rendering use the described guest, private state and nested captured connector."
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a

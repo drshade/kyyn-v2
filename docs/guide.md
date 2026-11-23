@@ -690,6 +690,23 @@ returns a typed failure and ends the parent as Failed. The diagnostic identifies
 the recipes and the mismatched input or result side. Ordinary recipes and tools
 cannot start children through this capability.
 
+`inspectFlow` reads a child's typed status: `Runnable`, `Running`, `Waiting`, or
+`Finished` with `Completed result`, `Failed diagnostics`, or `Cancelled`. The
+status also contains its outstanding wait IDs. Inspection is durable: replay
+restores the earlier observation; a later step or authored loop iteration takes
+a new snapshot.
+
+`cancelFlow ThisFlow` cancels the selected child. `cancelFlow FlowAndDescendants`
+also cancels its subtree, including descendants of an already finished child,
+while preserving terminal outcomes. Cancellation is durable and does not undo an
+external action already in flight.
+
+Both operations accept a typed handle and check its expected result contract on
+the host. Only strict descendants of the calling instance are permitted: self,
+ancestors, siblings and unrelated roots are refused. A cleared child produces a
+distinct missing/cleared diagnostic. A refused inspection or cancellation is a
+typed failure and ends the calling flow as Failed.
+
 #### Model calls
 
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can

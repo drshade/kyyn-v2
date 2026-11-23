@@ -80,6 +80,12 @@ runFlowStore kb = interpret $ \_ operation -> do
                   commit (Right (item,catalog ++ [item]))
         case operation of
           ListInstances -> pure catalog
+          ReadDescendant caller target -> pure (Lifecycle.requireDescendant caller target catalog)
+          CancelDescendant caller target selected -> commit $ do
+            _ <- Lifecycle.requireDescendant caller target catalog
+            next <- Lifecycle.cancelTree target selected catalog
+            item <- maybe (Left MissingInstance) Right (find ((== target) . (.instanceId)) next)
+            pure (item,next)
           ReadInstance identity -> pure (find ((== identity) . (.instanceId)) catalog)
           StartInstance parent key launch -> case launch.owner of
             Hosted{} -> pure (Left (InvalidTransition "Hosted instances require a prepared execution bundle"))

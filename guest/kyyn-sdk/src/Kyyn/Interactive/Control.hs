@@ -1,5 +1,5 @@
 {-# LANGUAGE RoleAnnotations, FlexibleContexts, ScopedTypeVariables, TypeApplications, OverloadedRecordDot, OverloadedStrings #-}
-module Kyyn.Interactive.Control (FlowHandle, flowRef, flowRefTyped, startFlow) where
+module Kyyn.Interactive.Control (FlowHandle, flowRef, flowRefTyped, startFlow, inspectFlow, cancelFlow) where
 
 import qualified Agentic as A
 import qualified Agentic.Contract as Contract
@@ -13,6 +13,7 @@ import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Data.Text (Text)
 import Type.Reflection (Typeable)
 import Kyyn.Interactive.Internal (FlowRef(..))
+import Kyyn.Types.FlowStatus (FlowStatus, CancelScope, statusCodec)
 import Kyyn.Types.FlowControl (FlowControl(..))
 import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Types.Program (Program, Member, inject, request)
@@ -47,3 +48,28 @@ startFlow (FlowRef reference contracts) = case contracts of
     Nothing -> throwE (FetchError "startFlow requires hosted interactive execution")
     Just durable -> FlowHandle <$> ExceptT (request (inject
       (StartChild durable reference input.description output.description (input.codec.encode value))))
+
+-- Inspection is a durable observation. A fresh status check is a new occurrence.
+inspectFlow :: forall output calls. (Contract.Contract output, Member FlowControl calls)
+  => A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) (FlowStatus output)
+inspectFlow = case compileContract (Contract.contract @output) of
+  Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
+  Right output -> A.durably handleCodec (statusCodec output.codec) $ \key (FlowHandle identity) -> do
+    requireHosted key
+    status <- ExceptT (request (inject (InspectChild identity output.description)))
+    either (throwE . FetchError) pure (traverse output.codec.decode status)
+
+cancelFlow :: forall output calls. (Contract.Contract output, Member FlowControl calls)
+  => CancelScope -> A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) ()
+cancelFlow scope = case compileContract (Contract.contract @output) of
+  Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
+  Right output -> A.durably handleCodec unitCodec $ \key (FlowHandle identity) -> do
+    requireHosted key
+    ExceptT (request (inject (CancelChild identity output.description scope)))
+  where
+    unitCodec = Codec.primitive (Schema.SObject []) (const (Value.Object []))
+      (\value -> case value of Value.Object [] -> Right (); _ -> Left "Expected unit")
+
+requireHosted :: Monad m => Maybe key -> ExceptT FetchError m ()
+requireHosted Nothing = throwE (FetchError "Child control requires hosted interactive execution")
+requireHosted (Just _) = pure ()

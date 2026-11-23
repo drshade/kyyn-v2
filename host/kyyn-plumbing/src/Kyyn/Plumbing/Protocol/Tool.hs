@@ -30,6 +30,7 @@ data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName V
   | ToolFlowControl FlowControlCall
 
 data FlowControlCall = StartChildCall Text Text RecipeId Description Description Value
+  | InspectChildCall Text Description | CancelChildCall Text Description Bool
 
 data JournalCall = InitialiseJournal Text Text | LookupJournal Value | SaveJournal Value Value
 
@@ -99,4 +100,10 @@ decodeControl operation = withObject "interactive control" $ \fields -> case ope
   "start" -> do
     unless (sort (Keys.keys fields) == ["child","input","inputContract","key","namespace","outputContract"]) (fail "Unexpected child start fields")
     StartChildCall <$> fields .: "namespace" <*> fields .: "key" <*> (RecipeId <$> fields .: "child") <*> fields .: "inputContract" <*> fields .: "outputContract" <*> fields .: "input"
+  "inspect" -> do
+    unless (sort (Keys.keys fields) == ["id","outputContract"]) (fail "Unexpected child inspection fields")
+    InspectChildCall <$> fields .: "id" <*> fields .: "outputContract"
+  "cancel" -> do
+    unless (sort (Keys.keys fields) == ["descendants","id","outputContract"]) (fail "Unexpected child cancellation fields")
+    CancelChildCall <$> fields .: "id" <*> fields .: "outputContract" <*> fields .: "descendants"
   _ -> fail "Unknown interactive control operation"

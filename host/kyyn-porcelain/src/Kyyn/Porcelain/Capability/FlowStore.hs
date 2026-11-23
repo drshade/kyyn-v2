@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.FlowStore
-  ( FlowStore(..), startInstance, listInstances, readInstance, beginAttempt
+  ( FlowStore(..), readDescendant, cancelDescendant, startInstance, listInstances, readInstance, beginAttempt
   , reportFrontier, finishInstance, blockInstance, cancelInstance
   , queueDelivery, queueNewDelivery, resolveDelivery, startPreparedInstance, startNewPreparedInstance, readExecutionBundle, readBundleDescription, clearInstances, linkAttempt, blockAttempt, retryInstance
   ) where
@@ -23,6 +23,8 @@ data FlowStore :: Effect where
   ReadExecutionBundle :: FlowBundleId -> FlowStore m (Either [Diagnostic] FlowBundle)
   ClearInstances :: [FlowInstanceId] -> FlowStore m (Either FlowStoreProblem [FlowInstanceId])
   ListInstances :: FlowStore m [FlowInstance]
+  ReadDescendant :: FlowInstanceId -> FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  CancelDescendant :: FlowInstanceId -> FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
   ReadInstance :: FlowInstanceId -> FlowStore m (Maybe FlowInstance)
   -- Caller holds the per-instance attempt/journal lock for these worker operations.
   LinkAttempt :: FlowInstanceId -> RecipeRunId -> FlowStore m (Either FlowStoreProblem FlowInstance)
@@ -83,3 +85,8 @@ queueNewDelivery identity wait origin = send . QueueDelivery identity Nothing wa
 
 readBundleDescription :: FlowStore :> es => FlowBundleId -> Eff es (Either [Diagnostic] FlowBundle)
 readBundleDescription = send . ReadBundleDescription
+
+readDescendant :: FlowStore :> es => FlowInstanceId -> FlowInstanceId -> Eff es (Either FlowStoreProblem FlowInstance)
+readDescendant caller = send . ReadDescendant caller
+cancelDescendant :: FlowStore :> es => FlowInstanceId -> FlowInstanceId -> CancelScope -> Eff es (Either FlowStoreProblem FlowInstance)
+cancelDescendant caller target = send . CancelDescendant caller target
