@@ -18,6 +18,7 @@ library
     Kyyn.Recipe,
     Kyyn.Plugin,
     Kyyn.Plugin.Host,
+    Kyyn.Plugin.Event,
     Kyyn.Plugin.Sink
   default-language: Haskell2010
   build-depends: base >=4.22 && <4.23, kyyn-sdk:internal
@@ -26,7 +27,7 @@ library internal
   hs-source-dirs: src
   exposed-modules: Kyyn.Contract Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe Kyyn.Interactive
-    Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Sink
+    Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Event Kyyn.Plugin.Sink
      Kyyn.Contract.Scalars Kyyn.Contract.Wire Kyyn.Evolution.Stored Kyyn.Evolution.Target Kyyn.Evolution.Preparation Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Evolution Kyyn.Interactive.Internal Kyyn.Interactive.Control Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
@@ -50,6 +51,7 @@ library runtime
     Kyyn.Runtime.Model
     Kyyn.Runtime.ModelWire
     Kyyn.Runtime.Plugin
+    Kyyn.Runtime.Event
     Kyyn.Runtime.PluginHost
     Kyyn.Runtime.PluginRegistration
     Kyyn.Runtime.Probability
@@ -89,7 +91,7 @@ test-suite guest-protocol
   type: exitcode-stdio-1.0
   main-is: GuestProtocolTests.hs
   hs-source-dirs: test ../../host/kyyn-plumbing/src
-  other-modules: Kyyn.Plumbing.Protocol.Frame FlowObservationTests FlowWaitingTests
+  other-modules: Kyyn.Plumbing.Protocol.Frame FlowObservationTests FlowWaitingTests EventTests
   default-language: GHC2021
   default-extensions: OverloadedStrings
   ghc-options: -Wall -Werror
