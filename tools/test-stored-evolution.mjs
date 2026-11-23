@@ -81,7 +81,7 @@ try {
   cli(['root','check']);
   const interactive = cli(['root','recipe','show','conversation']);
   assert.equal(interactive.recipe.lifetime.tag, 'Interactive');
-  cli(['root','recipe','describe','conversation','--format','tree']);
+  cli(['root','recipe','describe','conversation']);
   cli(['root','recipe','run','conversation'], 1);
   const removed = cli(['evolution','new','remove referenced child']);
   fs.writeFileSync(path.join(removed.path,'change/Evolution.hs'), `module Evolution where
