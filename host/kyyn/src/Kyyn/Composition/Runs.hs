@@ -23,7 +23,7 @@ dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppen
     Cli.ListRuns selected -> do
       listing <- listRecipeRuns kb selected
       pure (success (object ["runs" .= map listValue listing.runs,"unavailable" .= map diagnosticValue listing.unavailable])
-        ((if null listing.runs then ["No readable recipe runs recorded."] else map describe listing.runs) ++
+        ((if null listing.runs then [if null listing.unavailable then "No recipe runs recorded." else "No readable recipe runs recorded."] else map describe listing.runs) ++
           ["Recording unavailable: " ++ Text.unpack problem.message | problem <- listing.unavailable]))
     Cli.ShowRun identity -> do
       page <- readRecipeRun kb identity Nothing 0

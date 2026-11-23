@@ -58,6 +58,10 @@ runFlowStore kb = interpret $ \_ operation -> do
               current <- maybe (Left MissingInstance) Right (find ((== identity) . (.instanceId)) catalog)
               updated <- f current
               pure (updated,replace updated catalog)
+            freshKey existing = do
+              stamp <- freshStamp
+              let key = Text.pack ("auto-" ++ stamp.identity)
+              if key `elem` existing then freshKey existing else pure key
             start parent key launch beforeCommit = case find (\item -> item.parent == parent && item.startKey == key) catalog of
               Just old | old.launch == launch -> pure (Right old)
                        | otherwise -> pure (Left StartConflict)
@@ -80,7 +84,8 @@ runFlowStore kb = interpret $ \_ operation -> do
           StartInstance parent key launch -> case launch.owner of
             Hosted{} -> pure (Left (InvalidTransition "Hosted instances require a prepared execution bundle"))
             External -> start parent key launch (pure ())
-          StartPreparedInstance parent key prepared -> do
+          StartPreparedInstance parent requestedKey prepared -> do
+            key <- maybe (freshKey [item.startKey | item <- catalog, item.parent == parent]) pure requestedKey
             let bytes = Lazy.toStrict (encode (bundleValue prepared.bundle))
                 identity = identifyBundle bytes
                 launch = FlowLaunch (Text.pack (revisionName prepared.bundle.revision)) prepared.request
@@ -112,14 +117,9 @@ runFlowStore kb = interpret $ \_ operation -> do
                   Nothing -> FileSystem.replaceBytes base path bytes
                   Just previous | previous == bytes -> pure ()
                                 | otherwise -> problemAt (scopePath base </> relativeName path) "Execution bundle contents do not match their identity"
-          ReadExecutionBundle identity -> do
-            path <- checked (relativePath (".kyyn/flows/bundles/" ++ flowBundleIdText identity ++ ".json"))
-            stored <- FileSystem.readOptionalBytes base path
-            case stored of
-              Nothing -> pure (bundleProblem "flow.bundle-missing" "Captured execution bundle is missing")
-              Just bytes | identifyBundle bytes /= identity -> pure (bundleProblem "flow.bundle-identity" "Captured execution bundle identity differs from its contents")
-              Just bytes -> case eitherDecodeStrict' bytes >>= parseEither parseBundle of
-                Left message -> pure (bundleProblem "flow.bundle-invalid" message)
+          ReadBundleDescription identity -> loadBundle base identity
+          ReadExecutionBundle identity -> loadBundle base identity >>= \case
+                Left problems -> pure (Left problems)
                 Right bundle -> do
                   output <- checked (directoryScope bundle.program.identity.outputPath)
                   retained <- checked (directoryScope bundle.program.retentionRoot)
@@ -158,11 +158,23 @@ runFlowStore kb = interpret $ \_ operation -> do
             next <- Lifecycle.cancelTree identity selected catalog
             item <- maybe (Left MissingInstance) Right (find ((== identity) . (.instanceId)) next)
             pure (item,next)
-          QueueDelivery identity delivery wait origin value -> commit $ do
-            current <- maybe (Left MissingInstance) Right (find ((== identity) . (.instanceId)) catalog)
-            (updated,received) <- Lifecycle.enqueue delivery wait origin value current
-            pure (received,replace updated catalog)
+          QueueDelivery identity requestedKey wait origin value -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Left MissingInstance)
+            Just current -> do
+              delivery <- maybe (freshKey (map (.deliveryId) current.deliveries)) pure requestedKey
+              commit $ do
+                (updated,received) <- Lifecycle.enqueue delivery wait origin value current
+                pure (received,replace updated catalog)
           ResolveDelivery identity delivery outcome -> commit (change identity (Lifecycle.resolve delivery outcome))
+    loadBundle base identity = do
+      path <- checked (relativePath (".kyyn/flows/bundles/" ++ flowBundleIdText identity ++ ".json"))
+      stored <- FileSystem.readOptionalBytes base path
+      case stored of
+        Nothing -> pure (bundleProblem "flow.bundle-missing" "Captured execution bundle is missing")
+        Just bytes | identifyBundle bytes /= identity -> pure (bundleProblem "flow.bundle-identity" "Captured execution bundle identity differs from its contents")
+        Just bytes -> case eitherDecodeStrict' bytes >>= parseEither parseBundle of
+          Left message -> pure (bundleProblem "flow.bundle-invalid" message)
+          Right bundle -> pure (Right bundle)
     -- Lock order matches the worker: journal first, then the short catalog lock.
     -- Recheck catalog membership under that lock before deleting an orphan.
     sweepJournals = do
