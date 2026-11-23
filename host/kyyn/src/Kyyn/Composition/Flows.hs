@@ -5,7 +5,6 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (forM, when)
 import Data.List (nub)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
-import Data.Aeson.Types (parseEither)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, liftIO, (:>))
@@ -36,7 +35,7 @@ import Kyyn.Plumbing.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementIO)
 import Kyyn.Plumbing.Interpreter.ModelTurn (runModelTurnIO)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
-import Kyyn.Plumbing.Protocol.Tool (decodeFlowValue)
+import Kyyn.Plumbing.Protocol.Interactive (describeWait)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.Flow (startFlowAt, flowProblem)
 import Kyyn.Porcelain.Capability.FlowStore
@@ -160,7 +159,7 @@ presentValues stopped item values = success
 
 descriptors :: FlowInstance -> [(Text.Text,Value)]
 descriptors item = [(wait.waitId,either (\message -> object ["unavailable" .= message]) id
-  (parseEither decodeFlowValue wait.descriptor)) | wait <- item.waits]
+  (describeWait wait)) | wait <- item.waits]
 
 selectWait :: Maybe String -> FlowInstance -> Either Diagnostic Text.Text
 selectWait (Just selected) _ = Right (Text.pack selected)

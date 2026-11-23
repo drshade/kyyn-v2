@@ -1,22 +1,26 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-module Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment) where
+module Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment, describeWait) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value)
+import Data.Aeson (Value(..), toJSON)
+import Data.Aeson.Types (parseEither)
+import qualified Data.Aeson.KeyMap as Keys
+import Agentic.Aeson (toAeson)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (nub)
 import Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec)
-import Kyyn.Types.EventWait (decodeEventRequest)
+import Kyyn.Types.EventWait (EventWaitRequest(..), decodeEventRequest)
 import Agentic.Codec (Codec(..))
 import qualified Agentic.Value as V
 import qualified Agentic.Wait as Wait
 import qualified Agentic.Journal as Journal
 import Agentic.Runtime (PendingWait(..))
+import Kyyn.Plumbing.Protocol.Tool (decodeFlowValue)
 import qualified Kyyn.Runtime.Json as Wire
 import Kyyn.Runtime.ModelWire (valueCodec)
-import Kyyn.Domain.FlowInstance (FlowProgress(..), DeliveryOutcome(..), WaitKind(..), flowInstanceId)
+import Kyyn.Domain.FlowInstance (FlowProgress(..), DeliveryOutcome(..), WaitKind(..), FlowWait(..), flowInstanceId)
 
 -- Preserve descriptors in their original tagged transport form. Upstream owns
 -- their identity/key/schema validation and canonical durable-key text.
@@ -64,3 +68,17 @@ parseFulfilment value = do
         ("nonCanonical",Just text) -> Invalid <$> Wire.decodeWith Wire.textCodec text
         _ -> Left "Invalid fulfilment refusal"
     _ -> Left "Invalid fulfilment outcome"
+
+-- Display payload contracts for manual ingress, not the host-owned provenance
+-- envelope. The persisted upstream descriptor remains unchanged for fulfilment.
+describeWait :: FlowWait -> Either String Value
+describeWait wait = do
+  value <- parseEither decodeFlowValue wait.descriptor
+  pure $ case (wait.kind,value) of
+    (EventWait request,Object fields) -> Object
+      (Keys.insert "event" (toJSON request.binding)
+        (Keys.insert "request" (toAeson request.payload)
+          (Keys.insert "requestContract" (toJSON request.requestContract)
+            (Keys.insert "replyContract" (toJSON request.replyContract)
+              (Keys.delete "requestSchema" (Keys.delete "replySchema" fields))))))
+    _ -> value

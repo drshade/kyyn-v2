@@ -20,7 +20,7 @@ import Kyyn.Types.Contract (Description)
 import Kyyn.Types.KnowledgeBase (EventReference)
 
 -- Ingress supplies provenance; a submitted reply never chooses it.
-data ReplyOrigin = ManualReply Text | ProviderReply Text Text deriving (Eq, Show, Generic)
+data ReplyOrigin = ManualReply Text | ProviderReply { providerBinding :: Text, eventIdentity :: Text } deriving (Eq, Show, Generic)
 instance Contract ReplyOrigin
 
 data ReceivedReply reply = ReceivedReply { origin :: ReplyOrigin, value :: reply }
