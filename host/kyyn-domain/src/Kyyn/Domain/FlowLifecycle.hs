@@ -18,22 +18,25 @@ begin current
   | otherwise = Right current { status = Running }
 
 -- A successful frontier is authoritative; a failed attempt never calls this.
-frontier :: [(Text,Value,WaitKind)] -> FlowInstance -> Either FlowStoreProblem FlowInstance
+frontier :: [(Text,Value,WaitKind,Maybe DispatchState)] -> FlowInstance -> Either FlowStoreProblem FlowInstance
 frontier _ current | Finished{} <- current.status = Left AlreadyFinished
 frontier reached current = do
   unless (current.status == Running) (Left (InvalidTransition "Frontier requires a running attempt"))
-  unless (length (nub ([identity | (identity,_,_) <- reached])) == length reached && not (null reached))
+  unless (length (nub ([identity | (identity,_,_,_) <- reached])) == length reached && not (null reached))
     (Left (InvalidTransition "Waiting frontier must be nonempty with unique wait IDs"))
   new <- traverse attach reached
-  let close old = if old.waitId `elem` [identity | (identity,_,_) <- reached] then old else closeWait old
-      retained = [close old | old <- current.waits, old.waitId `notElem` [identity | (identity,_,_) <- reached]]
+  let close old = if old.waitId `elem` [identity | (identity,_,_,_) <- reached] then old else closeWait old
+      retained = [close old | old <- current.waits, old.waitId `notElem` [identity | (identity,_,_,_) <- reached]]
   pure current { status = Waiting, waits = retained ++ new }
   where
-    attach (identity,description,kind) = case find ((== identity) . (.waitId)) current.waits of
-      Nothing -> Right (FlowWait identity description kind Open Nothing)
-      Just old | old.descriptor /= description || old.kind /= kind -> Left (InvalidTransition "Wait descriptor changed")
-               | old.waitStatus /= Open -> Left (InvalidTransition "Reported wait is already closed or answered")
-               | otherwise -> Right old
+    attach (identity,description,kind,initialDispatch) = do
+      unless (case kind of EventWait{} -> initialDispatch /= Nothing; _ -> initialDispatch == Nothing)
+        (Left (InvalidTransition "Dispatch state must belong to an event wait"))
+      case find ((== identity) . (.waitId)) current.waits of
+        Nothing -> Right (FlowWait identity description kind Open initialDispatch)
+        Just old | old.descriptor /= description || old.kind /= kind -> Left (InvalidTransition "Wait descriptor changed")
+                 | old.waitStatus /= Open -> Left (InvalidTransition "Reported wait is already closed or answered")
+                 | otherwise -> Right old
 
 finish :: FlowOutcome -> FlowInstance -> Either FlowStoreProblem FlowInstance
 finish outcome current = case current.status of

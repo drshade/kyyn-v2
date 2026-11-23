@@ -48,7 +48,7 @@ conversation :: Flow () Text
 conversation = A.arr (const (Events.makeRequest "Update please")) A.>>> awaitReply reference
   A.>>> A.arr (\\(ReceivedReply source reply) -> case source of
     ManualReply surface -> surface <> ":" <> Events.replyText reply
-    ProviderReply binding identity -> binding <> ":" <> identity <> ":" <> Events.replyText reply)
+    ProviderReply binding (EventIdentity identity) -> binding.instanceName <> ":" <> identity <> ":" <> Events.replyText reply)
 pollOnly :: Flow () Text
 pollOnly = A.arr (const (Events.makeRequest "Update please")) A.>>> awaitReply (Updates.updates Connectors.updates)
   A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)

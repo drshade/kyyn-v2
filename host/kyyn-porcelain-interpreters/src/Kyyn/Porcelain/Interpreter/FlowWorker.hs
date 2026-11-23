@@ -6,7 +6,7 @@ import Data.Aeson (toJSON)
 import Agentic.Aeson (fromAeson, toAeson)
 import qualified Kyyn.Types.EventWait as Event
 import Kyyn.Types.KnowledgeBase (InteractionBindings(..))
-import Kyyn.Porcelain.Protocol.EventBindings (checkEventWait)
+import Kyyn.Porcelain.Protocol.EventBindings (checkEventWait, resolveEventBinding)
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedEvent(..))
 import Data.List (find)
 import Data.Maybe (isNothing)
@@ -28,7 +28,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
-import Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment)
+import Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment, eventWaitRequest)
 import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue)
 import Kyyn.Porcelain.Capability.FlowWorker
 import Kyyn.Porcelain.Capability.FlowStore
@@ -110,7 +110,7 @@ runFlowWorker kb = interpret $ \_ -> \case
           Just current | not (finished current) && null current.blocked -> case find ((== delivery.waitId) . (.waitId)) current.waits of
             Just pending | pending.waitStatus /= Closed -> do
               checked <- case pending.kind of
-                EventWait request -> case checkEventWait entry.declaration.bindings.events bundle.plugins request of
+                EventWait reference -> case resolveEventBinding reference bundle.plugins of
                   Left problems -> pure (Left problems)
                   Right (PreparedEvent _ _ _ _ reply _ _ _) -> do
                     validated <- encodeValue (contractShape reply) delivery.value
@@ -163,10 +163,10 @@ runFlowWorker kb = interpret $ \_ -> \case
         Right value -> case protocol (parseProgress journal.namespace journal.revision value) of
           Left problems -> interrupted writer current problems
           Right (FlowWaiting frontier) -> do
-            checks <- traverse (\(_,_,kind) -> case kind of
-              EventWait request -> case checkEventWait entry.declaration.bindings.events bundle.plugins request of
+            checks <- traverse (\(_,descriptor,kind) -> case kind of
+              EventWait _ -> case protocol (eventWaitRequest descriptor) >>= (\request -> (,) request <$> checkEventWait entry.declaration.bindings.events bundle.plugins request) of
                 Left problems -> pure (Left problems)
-                Right (PreparedEvent _ _ _ input _ _ _ _) -> fmap (fmap (const ()))
+                Right (request,PreparedEvent _ _ _ input _ _ _ _) -> fmap (fmap (const ()))
                   (encodeValue (contractShape input) (toAeson request.payload))
               _ -> pure (Right ())) frontier
             case sequence_ checks of

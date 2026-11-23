@@ -11,7 +11,8 @@ import Lucid
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.RecipeRunId (runIdText)
-import Kyyn.Types.KnowledgeBase (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..), EventReference(..))
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Kyyn.Surfaces.Flows (FlowValues(..), statusText, deliveryOutcomeText, waitLabel, dispatchText)
 import Kyyn.Web.Inspection (pageDocument)
 
@@ -96,7 +97,7 @@ waitName Answered{} = "Answered"
 waitName Closed = "Closed"
 originHtml :: DeliveryOrigin -> Html ()
 originHtml (ReceivedFrom (ManualReply surface)) = toHtml ("Manual · " <> surface)
-originHtml (ReceivedFrom (ProviderReply binding event)) = toHtml ("Provider · " <> binding <> " · " <> event)
+originHtml (ReceivedFrom (ProviderReply binding (EventIdentity event))) = toHtml ("Provider · " <> binding.plugin <> "/" <> binding.instanceName <> "/" <> binding.method <> " · " <> event)
 originHtml (ChildCompletion child) = "Child · " >> instanceLink child
 json :: Value -> Html ()
 json value = pre_ (toHtml (Text.decodeUtf8 (Bytes.toStrict (encode value))))

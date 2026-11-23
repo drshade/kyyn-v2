@@ -4,6 +4,8 @@
 {-# LANGUAGE DataKinds, GADTs, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
+import Kyyn.Types.EventIdentity (EventIdentity(..))
+import Kyyn.Types.KnowledgeBase (EventReference(..))
 import Control.Concurrent.Async (concurrently, withAsync, cancel)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar
@@ -89,7 +91,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   duplicate <- update (resolveDelivery child.instanceId "duplicate" Accepted)
   assert (duplicate.status == Waiting && any ((== Just Duplicate) . (.outcome)) duplicate.deliveries)
     "Duplicate reply woke an already waiting instance"
-  _ <- update (queueDelivery child.instanceId "new-origin" "one" (ReceivedFrom (ProviderReply "adapter" "another-event")) (Number 7))
+  _ <- update (queueDelivery child.instanceId "new-origin" "one" (ReceivedFrom (ProviderReply (EventReference "fixture" "Updates" "updates" "question") (EventIdentity "another-event"))) (Number 7))
   newOrigin <- update (resolveDelivery child.instanceId "new-origin" Accepted)
   assert (newOrigin.status == Waiting && length [() | d <- newOrigin.deliveries, d.outcome == Just Duplicate] == 2)
     "Same reply from another origin remained unresolved"
@@ -153,7 +155,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     when finishedFirst (void complete)
     _ <- update (beginAttempt waiter.instanceId)
     _ <- update (reportFrontier waiter.instanceId [("child-wait",String "child descriptor",ChildWait childTarget.instanceId UnitDescription)])
-    forM_ [ReceivedFrom (ManualReply "cli"),ReceivedFrom (ProviderReply "fixture" "event")] $ \origin -> do
+    forM_ [ReceivedFrom (ManualReply "cli"),ReceivedFrom (ProviderReply (EventReference "fixture" "Updates" "updates" "question") (EventIdentity "event"))] $ \origin -> do
       refused <- store scope (queueDelivery waiter.instanceId "fake" "child-wait" origin (object []))
       assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Child wait accepted a fabricated outcome"
     forM_ ["internal-child-child-wait","auto-collision"] $ \key -> do

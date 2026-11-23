@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Porcelain.Protocol.FlowCatalog (catalogValue, parseCatalog) where
 
-import Agentic.Aeson (fromAeson, toAeson)
-import Kyyn.Types.EventWait (encodeEventRequest, decodeEventRequest)
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Monad (unless)
-import Data.Aeson (Key, Value(..), object, (.=), (.:), withObject)
+import Data.Aeson (Key, Value(..), object, toJSON, parseJSON, (.=), (.:), withObject)
 import Data.Aeson.Types (Parser, Object)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (nub, sort)
@@ -49,16 +48,16 @@ waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"ki
 kindValue :: WaitKind -> Value
 kindValue ReplyWait = tag "reply" Null
 kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanceIdText child,"outputContract" .= output])
-kindValue (EventWait request) = tag "event" (toAeson (encodeEventRequest request))
+kindValue (EventWait reference) = tag "event" (toJSON reference)
 dispatchValue :: DispatchState -> Text.Text
 dispatchValue NotRequired = "notRequired"
 dispatchValue Pending = "pending"
 dispatchValue Started = "started"
-dispatchValue Dispatched = "completed"
+dispatchValue DispatchCompleted = "completed"
 originValue :: DeliveryOrigin -> Value
 originValue (ChildCompletion child) = tag "child" (String (flowInstanceIdText child))
 originValue (ReceivedFrom (ManualReply surface)) = tag "manual" (String surface)
-originValue (ReceivedFrom (ProviderReply binding event)) = tag "provider" (object ["binding" .= binding,"event" .= event])
+originValue (ReceivedFrom (ProviderReply binding (EventIdentity event))) = tag "provider" (object ["binding" .= binding,"event" .= event])
 deliveryValue :: FlowDelivery -> Value
 deliveryValue item = object ["id" .= item.deliveryId,"wait" .= item.waitId,"origin" .= originValue item.origin,
   "value" .= item.value,"outcome" .= fmap outcomeValue item.outcome]
@@ -140,7 +139,7 @@ parseWait = withObject "wait" $ \fields -> do
   kind <- fields .: "kind" >>= parseKind
   dispatch <- fields .: "dispatch" >>= traverse (\name -> case name :: Text.Text of
     "notRequired" -> pure NotRequired; "pending" -> pure Pending
-    "started" -> pure Started; "completed" -> pure Dispatched
+    "started" -> pure Started; "completed" -> pure DispatchCompleted
     _ -> fail "Invalid dispatch state")
   unless (case kind of EventWait{} -> dispatch /= Nothing; _ -> dispatch == Nothing)
     (fail "Dispatch state must belong to an event wait")
@@ -151,7 +150,7 @@ parseKind value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("child",body) -> withObject "child wait" (\fields -> do
     exact ["child","outputContract"] fields
     ChildWait <$> (fields .: "child" >>= checkedId) <*> fields .: "outputContract") body
-  ("event",body) -> EventWait <$> either (fail . Text.unpack) pure (decodeEventRequest (fromAeson body))
+  ("event",body) -> EventWait <$> parseJSON body
   _ -> fail "Invalid wait kind"
 parseOrigin :: Value -> Parser DeliveryOrigin
 parseOrigin value = tagged value >>= \(name,payload) -> case (name,payload) of
@@ -159,7 +158,7 @@ parseOrigin value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("manual",String surface) -> pure (ReceivedFrom (ManualReply surface))
   ("provider",body) -> withObject "provider origin" (\fields -> do
     exact ["binding","event"] fields
-    ReceivedFrom <$> (ProviderReply <$> fields .: "binding" <*> fields .: "event")) body
+    ReceivedFrom <$> (ProviderReply <$> fields .: "binding" <*> (EventIdentity <$> fields .: "event"))) body
   _ -> fail "Invalid reply origin"
 parseDelivery :: Value -> Parser FlowDelivery
 parseDelivery = withObject "delivery" $ \fields -> do

@@ -12,6 +12,7 @@ import Kyyn.Domain.FlowBundleId (flowBundleIdText)
 import Kyyn.Domain.RecipeRunId (runIdText)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 
 data FlowValues = FlowValues
   { input :: Maybe Text.Text, output :: Maybe Text.Text, diagnostics :: [Diagnostic] }
@@ -80,7 +81,7 @@ waitStatusText Closed = "closed"
 originValue :: DeliveryOrigin -> Value
 originValue (ChildCompletion child) = object ["kind" .= String "child","child" .= flowInstanceIdText child]
 originValue (ReceivedFrom (ManualReply surface)) = object ["kind" .= String "manual","surface" .= surface]
-originValue (ReceivedFrom (ProviderReply binding event)) = object ["kind" .= String "provider","binding" .= binding,"event" .= event]
+originValue (ReceivedFrom (ProviderReply binding (EventIdentity event))) = object ["kind" .= String "provider","binding" .= binding,"event" .= event]
 
 deliveryValue :: FlowDelivery -> Value
 deliveryValue delivery = object ["id" .= delivery.deliveryId,"wait" .= delivery.waitId,
@@ -98,4 +99,4 @@ dispatchText :: DispatchState -> Text.Text
 dispatchText NotRequired = "not required"
 dispatchText Pending = "pending"
 dispatchText Started = "started"
-dispatchText Dispatched = "completed"
+dispatchText DispatchCompleted = "completed"

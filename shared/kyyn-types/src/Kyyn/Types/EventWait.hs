@@ -3,7 +3,7 @@ module Kyyn.Types.EventWait
   ( ReplyOrigin(..), ReceivedReply(..), receivedReplyCodec, encodeReceivedReply
   , EventWaitRequest(..), eventRequestCodec, encodeEventRequest, decodeEventRequest ) where
 
-import Agentic.Contract (Contract)
+import Agentic.Contract (Contract(..), Structure(..), Fields(..), Case(..), Constructor(..), FieldStyle(..), nominal)
 import Agentic.Codec (Codec(..))
 import qualified Agentic.Schema as S
 import Agentic.Value (Value(..))
@@ -17,11 +17,21 @@ import qualified Data.Text.Encoding as Text
 import Type.Reflection (Typeable)
 import GHC.Generics (Generic)
 import Kyyn.Types.Contract (Description)
-import Kyyn.Types.KnowledgeBase (EventReference)
+import Kyyn.Types.KnowledgeBase (EventReference(..))
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 
 -- Ingress supplies provenance; a submitted reply never chooses it.
-data ReplyOrigin = ManualReply Text | ProviderReply { providerBinding :: Text, eventIdentity :: Text } deriving (Eq, Show, Generic)
-instance Contract ReplyOrigin
+data ReplyOrigin = ManualReply Text | ProviderReply { providerBinding :: EventReference, eventIdentity :: EventIdentity } deriving (Eq, Show, Generic)
+instance Contract ReplyOrigin where
+  contract = nominal (Sum
+    [ Case (Constructor "manual" PositionalFields) Nothing
+        (\source -> case source of ManualReply surface -> Just surface; _ -> Nothing)
+        ManualReply (Field "value" Nothing contract id)
+    , Case (Constructor "provider" RecordFields) Nothing
+        (\source -> case source of ProviderReply binding identity -> Just (binding,identity); _ -> Nothing)
+        (uncurry ProviderReply)
+        ((,) <$> Field "binding" Nothing contract fst <*> Field "event" Nothing contract snd)
+    ])
 
 data ReceivedReply reply = ReceivedReply { origin :: ReplyOrigin, value :: reply }
   deriving (Eq, Show, Generic)
@@ -61,7 +71,7 @@ decodeEventRequest value = do
 receivedReplyCodec :: Codec a -> Codec (ReceivedReply a)
 receivedReplyCodec codec = Codec
   (recordSchema [("origin",S.schemaOf (S.SSum [S.Variant "manual" Nothing [S.Field "value" textSchema True],
-    S.Variant "provider" Nothing [S.Field "value" (recordSchema [("binding",textSchema),("event",textSchema)]) True]])),("value",codec.schema)])
+    S.Variant "provider" Nothing [S.Field "value" (recordSchema [("binding",bindingSchema),("event",textSchema)]) True]])),("value",codec.schema)])
   (encodeReceivedReply codec.encode) decode
   where
     decode value = do
@@ -73,7 +83,7 @@ encodeReceivedReply :: (a -> Value) -> ReceivedReply a -> Value
 encodeReceivedReply encodeValue (ReceivedReply source value) = Object
   [("origin",case source of
       ManualReply surface -> Object [("tag",String "manual"),("value",String surface)]
-      ProviderReply binding event -> Object [("tag",String "provider"),("value",Object [("binding",String binding),("event",String event)])]),
+      ProviderReply binding (EventIdentity event) -> Object [("tag",String "provider"),("value",Object [("binding",encodeBinding binding),("event",String event)])]),
    ("value",encodeValue value)]
 
 decodeOrigin :: Value -> Either Text ReplyOrigin
@@ -83,7 +93,7 @@ decodeOrigin value = do
     Just (String "manual") -> ManualReply <$> (field "value" fields >>= text)
     Just (String "provider") -> do
       provider <- field "value" fields >>= record ["binding","event"]
-      ProviderReply <$> (field "binding" provider >>= text) <*> (field "event" provider >>= text)
+      ProviderReply <$> (field "binding" provider >>= decodeBinding) <*> (EventIdentity <$> (field "event" provider >>= text))
     _ -> Left "Invalid reply origin"
 
 json :: ToJSON a => a -> Value
@@ -104,3 +114,14 @@ textSchema :: S.Schema
 textSchema = S.schemaOf (S.SString Nothing)
 recordSchema :: [(Text,S.Schema)] -> S.Schema
 recordSchema = S.schemaOf . S.SObject . map (\(key,schema) -> S.Field key schema True)
+
+bindingSchema :: S.Schema
+bindingSchema = recordSchema [(key,textSchema) | key <- ["plugin","connector","instanceName","method"]]
+encodeBinding :: EventReference -> Value
+encodeBinding (EventReference p c i m) = Object
+  [("plugin",String p),("connector",String c),("instanceName",String i),("method",String m)]
+decodeBinding :: Value -> Either Text EventReference
+decodeBinding value = do
+  fields <- record ["plugin","connector","instanceName","method"] value
+  EventReference <$> (field "plugin" fields >>= text) <*> (field "connector" fields >>= text)
+    <*> (field "instanceName" fields >>= text) <*> (field "method" fields >>= text)

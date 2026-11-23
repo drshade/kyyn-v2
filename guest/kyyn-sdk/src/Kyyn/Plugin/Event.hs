@@ -4,6 +4,7 @@ module Kyyn.Plugin.Event
   ( WaitId(..), EventIdentity(..), LiveEvent, EventDispatch(..), EventPoll(..), EventArrival(..), EventBatch(..) ) where
 
 import Data.Text (Text)
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Kyyn.Types.Program (Program, (:+:))
 import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
 
@@ -11,7 +12,6 @@ import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
 type LiveEvent = Program (Http :+: (Secrets :+: Waiting))
 
 newtype WaitId = WaitId Text deriving (Eq, Show)
-newtype EventIdentity = EventIdentity Text deriving (Eq, Show)
 
 -- | The stable wait identity is reused when a dispatch is retried.
 data EventDispatch request = EventDispatch

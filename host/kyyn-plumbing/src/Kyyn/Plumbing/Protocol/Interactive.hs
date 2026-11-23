@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
-module Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment, describeWait) where
+module Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment, describeWait, eventWaitRequest) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value(..), toJSON)
@@ -47,7 +47,7 @@ parseProgress namespace revision value = do
           V.String "child" -> do
             ChildWaitRequest identity output <- either (Left . Text.unpack) Right (childWaitCodec.decode pending.request)
             ChildWait <$> flowInstanceId identity <*> pure output
-          V.String "event" -> EventWait <$> either (Left . Text.unpack) Right (decodeEventRequest pending.request)
+          V.String "event" -> EventWait . (.binding) <$> either (Left . Text.unpack) Right (decodeEventRequest pending.request)
           _ -> Left "Unknown Kyyn wait envelope"
         _ -> Right ReplyWait
       pure (Journal.durableKeyText pending.key,encoded,kind)
@@ -74,11 +74,19 @@ parseFulfilment value = do
 describeWait :: FlowWait -> Either String Value
 describeWait wait = do
   value <- parseEither decodeFlowValue wait.descriptor
-  pure $ case (wait.kind,value) of
-    (EventWait request,Object fields) -> Object
-      (Keys.insert "event" (toJSON request.binding)
-        (Keys.insert "request" (toAeson request.payload)
-          (Keys.insert "requestContract" (toJSON request.requestContract)
-            (Keys.insert "replyContract" (toJSON request.replyContract)
-              (Keys.delete "requestSchema" (Keys.delete "replySchema" fields))))))
-    _ -> value
+  case (wait.kind,value) of
+    (EventWait _,Object fields) -> do
+      request <- eventWaitRequest wait.descriptor
+      pure (Object
+        (Keys.insert "event" (toJSON request.binding)
+          (Keys.insert "request" (toAeson request.payload)
+            (Keys.insert "requestContract" (toJSON request.requestContract)
+              (Keys.insert "replyContract" (toJSON request.replyContract)
+                (Keys.delete "requestSchema" (Keys.delete "replySchema" fields)))))))
+    _ -> pure value
+
+eventWaitRequest :: Value -> Either String EventWaitRequest
+eventWaitRequest encoded = do
+  wire <- Wire.decodeWith valueCodec encoded
+  pending <- either (Left . Text.unpack) Right (Wait.pendingWaitFromValue wire)
+  either (Left . Text.unpack) Right (decodeEventRequest pending.request)

@@ -7,8 +7,7 @@
 module Main (main) where
 
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference))
-import qualified Kyyn.Types.EventWait as Event
-import qualified Agentic.Value as AgenticValue
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Control.Monad (unless, void, when)
@@ -221,12 +220,7 @@ main = do
     parentBundleId <- case parent.launch.owner of Instance.Hosted identity _ -> pure identity; _ -> fail "Parent is not hosted"
     reopenedForChild <- store (readExecutionBundle parentBundleId) >>= right >>= right
     child <- store (startPreparedInstance (Just parent.instanceId) "child-start" (PreparedFlow (R.RecipeId "child") (String "2") reopenedForChild)) >>= right >>= right
-    let eventContracts = [(input,output) | PreparedPlugin _ instances <- declared.bundle.plugins,
-          ConfiguredConnector _ _ PreparedEventConnector {events = methods} _ <- instances,
-          PreparedEvent _ _ _ input output _ _ (Just _) <- methods]
-    (eventInput,eventOutput) <- case eventContracts of [pair] -> pure pair; _ -> fail "Missing event contracts"
-    let request = Event.EventWaitRequest eventReference (descriptionOf eventInput) (descriptionOf eventOutput) (AgenticValue.String "Question")
-        eventKind = Instance.EventWait request
+    let eventKind = Instance.EventWait eventReference
     _ <- store (beginAttempt parent.instanceId) >>= right >>= right
     deniedFrontier <- store (reportFrontier parent.instanceId
       [("bare",Null,Instance.ReplyWait),("event",Null,eventKind)]) >>= right
@@ -359,7 +353,7 @@ main = do
         visitWith fault first selectedIdentity = workerWith fault first (visitInstance selectedIdentity)
         workerWith fault first operation = do
           outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-            . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
+            . runDhallHandling . (if fault == NoGuest then unexpected @GuestExecution else runGuestExecution [("LC_ALL","C.UTF-8")])
             . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . (case fault of PluginFault -> failPlugin True; ProtocolFault -> failPlugin False; _ -> id) . runDocumentPersistenceIO . runFlowStore kb
@@ -379,15 +373,15 @@ main = do
           [Fact (FactId "event") (R.ClosedRecipe (Interactive (InteractionBindings [] [eventReference])) (FlowEntryRef "Flows.eventWaiting"))]
           (R.RecipeId "event") (Just "\"Question\"")
     eventReady <- right eventPrepared >>= right
-    Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply "updates" "provider-event"),
-      ("provider-first",Instance.ProviderReply "updates" "provider-event",Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
+    Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply eventReference (EventIdentity "provider-event")),
+      ("provider-first",Instance.ProviderReply eventReference (EventIdentity "provider-event"),Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
       eventHosted <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
       _ <- visit False eventHosted.instanceId
       eventWaiting <- inspect eventHosted.instanceId
       eventWait <- case eventWaiting.waits of [selected] -> pure selected; _ -> fail "Event wait not published"
       unless (eventWait.dispatch == Just Instance.Pending) (fail "Event dispatch did not remain pending")
       _ <- store (queueDelivery eventHosted.instanceId "invalid" eventWait.waitId (Instance.ReceivedFrom firstOrigin) (Number 7)) >>= right >>= right
-      _ <- visit False eventHosted.instanceId
+      _ <- visitWith NoGuest False eventHosted.instanceId >>= right
       stillWaiting <- inspect eventHosted.instanceId
       unless (stillWaiting.status == Instance.Waiting && stillWaiting.attempts == eventWaiting.attempts &&
         (case stillWaiting.deliveries of
@@ -631,7 +625,7 @@ failRunTerminal = interpose $ \env operation -> case operation of
   ReadRecipeRun kb selected cursor limit -> readRecipeRun kb selected cursor limit
   ClearRecipeRun kb selected -> clearRecipeRun kb selected
 
-data WorkerFault = NoFault | RecordingFault | PluginFault | ProtocolFault deriving Eq
+data WorkerFault = NoFault | NoGuest | RecordingFault | PluginFault | ProtocolFault deriving Eq
 
 failPlugin :: PluginRead :> es => Bool -> Eff es a -> Eff es a
 failPlugin authoritative = interpose $ \_ operation -> case operation of

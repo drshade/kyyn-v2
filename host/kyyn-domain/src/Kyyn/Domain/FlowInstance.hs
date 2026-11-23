@@ -8,8 +8,8 @@ module Kyyn.Domain.FlowInstance
 
 import Kyyn.Domain.RecipeRunId (RecipeRunId)
 import Kyyn.Domain.FlowBundleId (FlowBundleId)
-import Kyyn.Types.KnowledgeBase (RecipeId)
-import Kyyn.Types.EventWait (ReplyOrigin(..), EventWaitRequest)
+import Kyyn.Types.KnowledgeBase (RecipeId, EventReference)
+import Kyyn.Types.EventWait (ReplyOrigin(..))
 import Data.Aeson (Value)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
@@ -46,8 +46,8 @@ data FlowInstance = FlowInstance
   , blocked :: [Diagnostic], retryRequired :: Bool, cancelDescendants :: Bool, waits :: [FlowWait]
   , deliveries :: [FlowDelivery], attempts :: [RecipeRunId]
   } deriving (Eq, Show)
-data WaitKind = ReplyWait | ChildWait FlowInstanceId Description | EventWait EventWaitRequest deriving (Eq, Show)
-data DispatchState = NotRequired | Pending | Started | Dispatched deriving (Eq, Show)
+data WaitKind = ReplyWait | ChildWait FlowInstanceId Description | EventWait EventReference deriving (Eq, Show)
+data DispatchState = NotRequired | Pending | Started | DispatchCompleted deriving (Eq, Show)
 data FlowWait = FlowWait
   { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus, dispatch :: Maybe DispatchState
   } deriving (Eq, Show)

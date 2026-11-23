@@ -671,9 +671,8 @@ attempt blocks. `flow retry` reuses the same captured declaration: accepting a
 corrected recipe requires starting a new instance, not retrying the old one.
 
 Event waits show `dispatch: pending` when their connector declares a dispatch, or
-`dispatch: not required` otherwise. Provider dispatch and polling are not yet
-implemented; both kinds can be fulfilled manually. Manual fulfilment preserves
-dispatch state. Bare upstream waits and child-completion waits remain distinct.
+`dispatch: not required` otherwise. Both kinds are fulfilled using `flow fulfil`; `pending` means the provider
+request has not been sent. Manual fulfilment preserves dispatch state. Bare upstream waits and child-completion waits remain distinct.
 
 #### Starting child flows
 

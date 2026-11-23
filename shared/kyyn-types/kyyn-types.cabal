@@ -10,7 +10,7 @@ library
   exposed-modules: Kyyn.Types.Wire Kyyn.Types.Contract.ScalarKind Kyyn.Types.Guest Kyyn.Types.GuestBuild Kyyn.Types.Contract Kyyn.Types.SchemaMetadata Kyyn.Types.Fact Kyyn.Types.Diagnostic
     Kyyn.Types.Program Kyyn.Types.Query Kyyn.Types.StoredShape Kyyn.Types.SnapshotWire
     Kyyn.Types.Evidence Kyyn.Types.Evolution
-    Kyyn.Types.Plugin Kyyn.Types.KnowledgeBase Kyyn.Types.FlowJournal Kyyn.Types.FlowControl Kyyn.Types.FlowStatus Kyyn.Types.ChildWait Kyyn.Types.EventWait
+    Kyyn.Types.Plugin Kyyn.Types.KnowledgeBase Kyyn.Types.FlowJournal Kyyn.Types.FlowControl Kyyn.Types.FlowStatus Kyyn.Types.ChildWait Kyyn.Types.EventWait Kyyn.Types.EventIdentity
     Kyyn.Types.PluginHost Kyyn.Types.Sink
     Kyyn.Types.Blob Kyyn.Types.Scalar
   other-modules: Kyyn.Types.Json

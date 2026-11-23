@@ -28,7 +28,7 @@ main = do
   unless (bindings (withEvents [] (withChildren [childRef] base)) == InteractionBindings [ChildReference (RecipeId "child") (FlowEntryRef "Flows.parent")] [])
     (fail "Replacing events cleared child declarations")
   compiled <- either (fail . show) pure (compileContract (contract @Text))
-  _ <- either (fail . show) pure (compileContract (contract @(ReceivedReply Text)))
+  receivedContract <- either (fail . show) pure (compileContract (contract @(ReceivedReply Text)))
   let requestCodec = eventRequestCodec expected compiled.description compiled.description compiled.codec
       replyCodec = receivedReplyCodec compiled.codec
       encoded = requestCodec.encode "Question"
@@ -43,8 +43,11 @@ main = do
       case decodeEventRequest (V.Object [(key,if key == "kyynWait" then V.String "unknown" else value) | (key,value) <- fields]) of
         Left _ -> pure (); Right _ -> fail "Unknown event envelope accepted"
     _ -> fail "Event envelope is not an object"
-  forM_ [ManualReply "cli",ProviderReply "updates" "event-1"] $ \source -> do
+  forM_ [ManualReply "cli",ProviderReply expected (EventIdentity "event-1")] $ \source -> do
     let reply = ReceivedReply source "Answer"
+    unless (receivedContract.codec.encode reply == replyCodec.encode reply &&
+      receivedContract.codec.decode (replyCodec.encode reply) == Right reply)
+      (fail "ReceivedReply persistence and Contract encodings differ")
     unless (replyCodec.decode (replyCodec.encode reply) == Right reply) (fail "Reply provenance failed roundtrip")
   case replyCodec.decode (V.String "Answer") of
     Left _ -> pure (); Right _ -> fail "Unwrapped reply accepted"
