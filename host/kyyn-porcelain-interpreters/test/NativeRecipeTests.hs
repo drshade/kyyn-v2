@@ -192,7 +192,7 @@ main = do
       (fail "Capture lost permitted event declaration")
     reopenedEvent <- right (parseEither parseBundle (bundleValue declared.bundle))
     unless (bundleValue reopenedEvent == bundleValue declared.bundle) (fail "Event declaration changed on reopen")
-    forM_ [EventReference "local-file" "Updates" "missing" "question",
+    Foldable.forM_ [EventReference "local-file" "Updates" "missing" "question",
       EventReference "local-file" "Updates" "updates" "missing",
       EventReference "local-file" "Other" "updates" "question"] $ \invalid -> do
         result <- captureEvent invalid >>= right
