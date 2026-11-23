@@ -9,14 +9,12 @@ import Data.Aeson.Types (parseEither)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, liftIO, (:>))
-import Kyyn.Domain.Contract (contractShape)
-import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
-import Kyyn.Porcelain.Capability.FlowPreparation (FlowBundle(..), PreparedFlowEntry(..))
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Effectful.Error.Static (catchError)
 import System.IO (hPutStrLn, stderr)
 import Kyyn.Configuration (Host(..), SelectedKb(..))
+import Kyyn.Composition.FlowValues (FlowValues(..), readFlowValues)
 import Kyyn.Composition.Runtime (Base, runBase, runRuntime, withRuntime, finish)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure, operationalDiagnostic)
@@ -152,21 +150,10 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
 
 present :: (FlowStore :> es, DhallHandling :> es, Failure :> es) => Bool -> FlowInstance -> Eff es Response
 present stopped item = do
-  rendered <- case item.launch.owner of
-    External -> pure (Nothing,Nothing,[])
-    Hosted identity recipe -> catchError @OperationalFailure (readBundleDescription identity)
-      (\_ problem -> pure (Left [operationalDiagnostic problem])) >>= \captured -> case captured of
-      Left problems -> pure (Nothing,Nothing,problems)
-      Right bundle -> case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
-        [entry] -> do
-          input <- encodeValue (contractShape entry.inputContract) item.launch.request
-          output <- case item.status of
-            Finished (Completed value) -> fmap Just <$> encodeValue (contractShape entry.outputContract) value
-            _ -> pure (Right Nothing)
-          pure (either (const Nothing) Just input,either (const Nothing) id output,
-            either id (const []) input ++ either id (const []) output)
-        _ -> pure (Nothing,Nothing,[errorDiagnostic "flow.bundle-entry" "Captured recipe is absent from its execution bundle"])
-  let (input,output,problems) = rendered
+  values <- readFlowValues item
+  let input = values.input
+      output = values.output
+      problems = values.diagnostics
       waits = descriptors item
   pure (success (View.instanceValue item stopped waits input output problems)
     (View.instanceLines item stopped waits input output problems))

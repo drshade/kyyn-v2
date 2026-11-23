@@ -198,6 +198,7 @@ pageDocument selected banner title extraHead content = doctypehtml_ $ do
       a_ [href_ (inspectionLink selected [])] "Index"
       a_ [href_ "/kb/"] "Views"
       a_ [href_ "/runs"] "Runs"
+      a_ [href_ "/flows"] "Flows"
       case selected of Nothing -> mempty; Just _ -> a_ [href_ "/"] "Accepted KB"
     maybe mempty id banner
     h1_ (toHtml title)

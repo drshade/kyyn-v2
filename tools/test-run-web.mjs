@@ -56,10 +56,28 @@ try{
   events.push(restored?{kind:'returned'}:{kind:'suspended',waitCount:'1'});
   return events.map((body,index)=>({sequence:String(index),event:{elapsedNanos:String(BigInt(index+1)*100000000n),body}}));
  }
- const interactiveMetadata={instance:'deleted-instance',mermaid:'flowchart LR\nsubgraph run[Interactive]\neffect[Read opportunity] --> wait[Await reply]\nend'};
+ const interactiveMetadata={instance:'instance-demo',mermaid:'flowchart LR\nsubgraph run[Interactive]\neffect[Read opportunity] --> wait[Await reply]\nend'};
  save('suspended',interactiveGraph,interactive(false),interactiveMetadata);
  save('restored',interactiveGraph,interactive(true),interactiveMetadata);
 
+ const tag=(tag,value=null)=>({tag,value});
+ const wire=value=>value===null?{tag:'Null'}:typeof value==='string'?{tag:'String',value}:Array.isArray(value)?{tag:'Array',value:value.map(wire)}:{tag:'Object',value:Object.entries(value).map(([key,value])=>({key,value:wire(value)}))};
+ const instance=(id,status,parent=null)=>({id,parent,startKey:id,launch:{revision:'b'.repeat(40),request:'<script>input</script>',owner:{tag:'hosted',bundle:'c'.repeat(64),recipe:'reviewOpportunity'}},status,retryRequired:false,blocked:[],cancelDescendants:false,attempts:[],waits:[],deliveries:[]});
+ const coordinator=instance('instance-demo',tag('waiting'));
+ coordinator.attempts=['suspended','restored'];
+ coordinator.waits=[{id:'child-wait',kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
+   {id:'manual-wait',kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
+ coordinator.deliveries=[{id:'manual-delivery',wait:'manual-wait',origin:tag('manual','cli'),value:'captured reply',outcome:tag('accepted')},
+   {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:'fixture',event:'event-1'}),value:'changed',outcome:tag('conflict')}];
+ const childInstance=instance('child-demo',tag('finished',tag('completed','<script>result</script>')),'instance-demo');
+ const runningInstance=instance('running-instance',tag('running'));
+ const stoppedInstance=instance('stopped-instance',tag('running'));
+ const blockedInstance=instance('blocked-instance',tag('waiting'));
+ blockedInstance.retryRequired=true;blockedInstance.blocked=failedTerminal.diagnostics;
+ const catalogPath=path.join(kb,'.kyyn/flows/catalog/instances.json');
+ const catalog=JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]});write(catalogPath,catalog);
+ const journalDirectory=path.join(kb,'.kyyn/flows/journals/running-instance');fs.mkdirSync(path.dirname(journalDirectory),{recursive:true});
+ const instanceLock=spawn('flock',['-x',journalDirectory+'.lock','sh','-c',"printf 'locked\\n'; cat >/dev/null"],{env});children.push(instanceLock);await once(instanceLock.stdout,'data');
  const interrupted=fixture.records.slice(0,Math.floor(fixture.records.length/2));
  const interruptedDir=save('interrupted',fixture.graph,interrupted);fs.appendFileSync(path.join(interruptedDir,'events.jsonl'),'{partial');
  const activeDir=save('active',fixture.graph,fixture.records.slice(0,10));
@@ -68,6 +86,19 @@ try{
  let errors='';web.stderr.on('data',x=>errors+=x);
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});
  async function get(url,status=200,method='GET'){const r=await fetch(base+url,{method});const body=await r.text();assert.equal(r.status,status,body);assert.equal(r.headers.get('cache-control'),'no-store');return body;}
+ const flowList=await get('/flows');
+ assert(flowList.includes('reviewOpportunity'));assert(flowList.includes('interrupted'));assert(flowList.includes('running'));
+ const flowPage=await get('/flows/instance-demo');
+ assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
+ assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
+ assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
+ const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
+ assert((await get('/flows/child-demo')).includes('href="/flows/instance-demo"'));
+ assert((await get('/flows/blocked-instance')).includes('explicit retry'));
+ assert((await get('/runs/suspended')).includes('href="/flows/instance-demo"'));
+ await get('/flows/missing',404);await get('/flows/instance-demo/unknown',404);await get('/flows',405,'POST');await get('/flows/child-demo',405,'DELETE');
+ assert.equal(fs.readFileSync(catalogPath,'utf8'),catalog,'Viewer mutated the instance catalog');
+ assert(!fs.existsSync(path.join(journalDirectory,'journal.json')),'Activity probe initialized a journal');
  assert((await get('/runs')).includes('demoReview'));
  assert((await get('/runs')).includes('Suspended'));
  assert((await get('/runs')).includes('Recording unavailable:'));
@@ -97,6 +128,8 @@ try{
   const {chromium}=await import(pathToFileURL(process.env.KYYN_PLAYWRIGHT_MODULE));
   browser=await chromium.launch({headless:true,executablePath:process.env.KYYN_CHROMIUM});const page=await browser.newPage({viewport:{width:1440,height:1050}});
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
+  await page.goto(base+'/flows');await page.screenshot({path:path.join(screenshots,'flows.png'),fullPage:true});
+  await page.goto(base+'/flows/instance-demo');await page.screenshot({path:path.join(screenshots,'instance.png'),fullPage:true});
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
    await page.locator('#run-inspector .progress-count').waitFor();

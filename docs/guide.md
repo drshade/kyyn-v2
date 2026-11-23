@@ -328,6 +328,8 @@ back to the index and related pages.
 | Route | Shows |
 | --- | --- |
 | `/` | Evolutions, collections, types, queries, tools and recipes; link to domain views |
+| `/flows` | Durable interactive instances and their latest activity |
+| `/flows/ID` | Parent/children, waits, reply origins, delivery outcomes and execution attempts |
 | `/evolutions/ID` | Explanation, lifecycle state, recorded step values and source changes against the base |
 | `/collections/NAME` | Collection records and their titles |
 | `/records/COLLECTION/ID` | Labelled record fields and links for declared references |
@@ -689,6 +691,13 @@ child is published. An undeclared child, mismatched contract or invalid input
 returns a typed failure and ends the parent as Failed. The diagnostic identifies
 the recipes and the mismatched input or result side. Ordinary recipes and tools
 cannot start children through this capability.
+
+The Web UI's `/flows` pages observe durable instances independently of the
+current root or a selected evolution. Instance pages link to their parent,
+children and recorded attempts; attempt pages link back to their instance.
+Running versus interrupted activity comes from a nonblocking writer-lock probe.
+Refresh the page for a new snapshot. These pages do not execute guests, resolve
+secrets, call providers or change flow state; use the CLI for those operations.
 
 `awaitFlow` waits durably for a child's `Completed result`, `Failed diagnostics`
 or `Cancelled` outcome. It validates the handle, then suspends through the same

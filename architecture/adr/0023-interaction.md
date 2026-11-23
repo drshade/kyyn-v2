@@ -39,6 +39,8 @@ Web has two kinds of page:
 | `GET /queries/<name>` | Description, input and result types, the module that implements it and, when `input` is given, the result |
 | `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
 | `GET /recipes/<name>` | Instructions or flow structure, state type and saved checkpoint, without executing actions |
+| `GET /flows` | Durable interactive instances and lock-derived activity |
+| `GET /flows/<id>` | Parent/children, waits, reply provenance, delivery outcomes and linked attempts |
 | `GET /runs` | Local recipe runs, optionally filtered by recipe |
 | `GET /runs/<id>` | Captured flow graph with live progress or recorded playback |
 | `GET /runs/<id>/events?after=N&limit=L` | A bounded page of recorded events after the exclusive sequence cursor |

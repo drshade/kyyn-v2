@@ -15,6 +15,7 @@ import Kyyn.Domain.FlowInstance (flowInstanceIdText)
 import Kyyn.Domain.RecipeRun
 import Kyyn.Domain.Evolution (evolutionIdName)
 import Kyyn.Plumbing.Protocol.RecipeRun (summaryValue)
+import Kyyn.Web.Flows (flowLink)
 import Kyyn.Web.Inspection (pageDocument)
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Domain.Git (revisionName)
@@ -49,7 +50,7 @@ runPage run = document name $ do
   p_ [class_ "muted"] $ do
     toHtml (Text.pack (runIdText run.header.runId) <> " · " <> run.header.startedAt <> " · ")
     a_ [href_ ("/runs?recipe=" <> Text.decodeUtf8 (urlEncode True (Text.encodeUtf8 name)))] "Matching runs"
-  forM_ run.header.instanceId $ \identity -> p_ (toHtml ("Interactive instance: " <> flowInstanceIdText identity))
+  forM_ run.header.instanceId $ \identity -> p_ $ "Interactive instance: " >> a_ [href_ (flowLink identity)] (toHtml (flowInstanceIdText identity))
   textarea_ [id_ "run-data", style_ "display:none", makeAttribute "aria-hidden" "true"]
     (toHtml (Text.decodeUtf8 (Bytes.toStrict (encode (summaryValue run)))))
   div_ [id_ "run-viewer"] $ do

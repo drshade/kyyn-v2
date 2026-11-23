@@ -34,6 +34,7 @@ import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Surfaces.Result
+import Kyyn.Composition.FlowViewing (viewFlow)
 import Kyyn.Web (runServer, ViewSource(..))
 
 serveWeb :: Host -> DirectoryScope -> Int -> Maybe EvolutionId -> IO Response
@@ -43,7 +44,7 @@ serveWeb host scope port draft
       selected <- selectKnowledgeBase host scope
       case selected of
         Left failure -> pure failure
-        Right _ -> runServer port pages invoke (inspectPage host scope) (viewRun host scope)
+        Right _ -> runServer port pages invoke (inspectPage host scope) (viewRun host scope) (viewFlow host scope)
   where
     pages = do
       selected <- selectKnowledgeBase host scope

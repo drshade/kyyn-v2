@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Surfaces.Flows (instanceValue, instanceLines, deliveryValue, deliveryOutcomeText, statusText) where
+module Kyyn.Surfaces.Flows (FlowValues(..), waitLabel, instanceValue, instanceLines, deliveryValue, deliveryOutcomeText, statusText) where
 
+import qualified Data.Aeson.KeyMap as Keys
+import Data.Foldable (toList)
 import Data.Aeson (Value(..), object, (.=), encode)
 import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.Text.Encoding as Text
@@ -10,6 +12,20 @@ import Kyyn.Domain.FlowBundleId (flowBundleIdText)
 import Kyyn.Domain.RecipeRunId (runIdText)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
+
+data FlowValues = FlowValues
+  { input :: Maybe Text.Text, output :: Maybe Text.Text, diagnostics :: [Diagnostic] }
+
+-- Upstream path notes are outermost first. Keep transport IDs separate from
+-- the authored name, since the durable key is deliberately not a display label.
+waitLabel :: Int -> [(Text.Text,Value)] -> FlowWait -> Text.Text
+waitLabel index descriptors wait = case reverse names of
+  name:_ -> name
+  [] -> "Wait " <> Text.pack (show index)
+  where
+    names = [name | Just (Object descriptor) <- [lookup wait.waitId descriptors],
+      Just (Array path) <- [Keys.lookup "path" descriptor], Object note <- toList path,
+      Just (String name) <- [Keys.lookup "name" note], not (Text.null (Text.strip name))]
 
 -- Pending descriptors here are upstream's decoded plain-data descriptions,
 -- supplied by the application boundary without loading the guest executable.
@@ -41,7 +57,7 @@ instanceLines item interrupted descriptors input result problems =
   ["Inspection: " ++ Text.unpack problem.message | problem <- problems] ++
   ["Failed: " ++ Text.unpack problem.message | Finished (Failed failures) <- [item.status], problem <- failures] ++
   ["Blocked: " ++ Text.unpack diagnostic.message | diagnostic <- item.blocked] ++
-  ["Wait " ++ Text.unpack wait.waitId ++ "  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); ReplyWait -> "") | wait <- item.waits] ++
+  [Text.unpack (waitLabel index descriptors wait) ++ " [" ++ Text.unpack wait.waitId ++ "]  " ++ Text.unpack (waitStatusText wait.waitStatus) ++ (case wait.kind of ChildWait child _ -> " on child " ++ Text.unpack (flowInstanceIdText child); ReplyWait -> "") | (index,wait) <- zip [1..] item.waits] ++
   ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && wait.kind == ReplyWait) item.waits] ++
   ["Reply " ++ Text.unpack wait.waitId ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | wait <- item.waits, Answered _ value <- [wait.waitStatus]] ++
   ["Attempt " ++ runIdText ident ++ ": /runs/" ++ runIdText ident | ident <- item.attempts]
