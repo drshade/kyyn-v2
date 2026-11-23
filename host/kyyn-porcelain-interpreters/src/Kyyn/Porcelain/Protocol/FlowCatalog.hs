@@ -41,7 +41,7 @@ statusValue (Finished outcome) = tag "finished" (case outcome of
   Failed errors -> object ["tag" .= String "failed","value" .= map diagnosticValue errors]
   Cancelled -> tag "cancelled" Null)
 waitValue :: FlowWait -> Value
-waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"kind" .= kindValue wait.kind,"dispatch" .= fmap dispatchValue wait.dispatch,"status" .= case wait.waitStatus of
+waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"kind" .= kindValue wait.kind,"adapter" .= fmap adapterValue wait.adapter,"status" .= case wait.waitStatus of
   Open -> tag "open" Null
   Closed -> tag "closed" Null
   Answered origin value -> tag "answered" (object ["origin" .= originValue origin,"value" .= value])]
@@ -49,6 +49,9 @@ kindValue :: WaitKind -> Value
 kindValue ReplyWait = tag "reply" Null
 kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanceIdText child,"outputContract" .= output])
 kindValue (EventWait reference) = tag "event" (toJSON reference)
+adapterValue :: EventAdapter -> Value
+adapterValue state = object ["dispatch" .= dispatchValue state.dispatch,"cursor" .= fmap (\value -> object ["value" .= value]) state.cursor,
+  "blocked" .= map diagnosticValue state.dispatchProblems]
 dispatchValue :: DispatchState -> Text.Text
 dispatchValue NotRequired = "notRequired"
 dispatchValue Pending = "pending"
@@ -128,7 +131,7 @@ parseStatus value = tagged value >>= \(name,payload) -> case (name,payload) of
   _ -> fail "Invalid execution status"
 parseWait :: Value -> Parser FlowWait
 parseWait = withObject "wait" $ \fields -> do
-  exact ["id","descriptor","kind","status","dispatch"] fields
+  exact ["id","descriptor","kind","status","adapter"] fields
   state <- fields .: "status" >>= tagged >>= \(name,payload) -> case (name,payload) of
     ("open",Null) -> pure Open
     ("closed",Null) -> pure Closed
@@ -137,13 +140,18 @@ parseWait = withObject "wait" $ \fields -> do
       Answered <$> (reply .: "origin" >>= parseOrigin) <*> reply .: "value") body
     _ -> fail "Invalid wait status"
   kind <- fields .: "kind" >>= parseKind
-  dispatch <- fields .: "dispatch" >>= traverse (\name -> case name :: Text.Text of
-    "notRequired" -> pure NotRequired; "pending" -> pure Pending
-    "started" -> pure Started; "completed" -> pure DispatchCompleted
-    _ -> fail "Invalid dispatch state")
-  unless (case kind of EventWait{} -> dispatch /= Nothing; _ -> dispatch == Nothing)
-    (fail "Dispatch state must belong to an event wait")
-  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure kind <*> pure state <*> pure dispatch
+  adapter <- fields .: "adapter" >>= traverse (withObject "event adapter" (\entry -> do
+    exact ["dispatch","cursor","blocked"] entry
+    phase <- entry .: "dispatch" >>= \name -> case name :: Text.Text of
+      "notRequired" -> pure NotRequired; "pending" -> pure Pending
+      "started" -> pure Started; "completed" -> pure DispatchCompleted
+      _ -> fail "Invalid dispatch state"
+    cursor <- entry .: "cursor" >>= traverse (withObject "cursor" (\stored -> exact ["value"] stored >> stored .: "value"))
+    unless ((phase == DispatchCompleted) == (cursor /= Nothing)) (fail "Dispatch cursor does not match phase")
+    EventAdapter phase cursor <$> (entry .: "blocked" >>= diagnostics)))
+  unless (case kind of EventWait{} -> adapter /= Nothing; _ -> adapter == Nothing)
+    (fail "Adapter state must belong to an event wait")
+  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure kind <*> pure state <*> pure adapter
 parseKind :: Value -> Parser WaitKind
 parseKind value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("reply",Null) -> pure ReplyWait

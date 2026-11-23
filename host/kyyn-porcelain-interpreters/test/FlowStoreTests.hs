@@ -6,14 +6,18 @@ module Main (main) where
 
 import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Kyyn.Types.KnowledgeBase (EventReference(..))
-import Control.Concurrent.Async (concurrently, withAsync, cancel)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (concurrently, withAsync)
+import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Monad (when, void, unless, replicateM_, forM_)
 import qualified Data.ByteString as Bytes
 import qualified Effectful.State.Static.Local as State
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import Data.Aeson (Value(..), object)
+import Data.Aeson.Types (parseEither)
+import qualified Kyyn.Domain.FlowLifecycle as Lifecycle
+import qualified Kyyn.Domain.FlowDispatch as Dispatch
+import Kyyn.Porcelain.Protocol.FlowCatalog (catalogValue, parseCatalog)
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, runEff, liftIO, (:>), UnliftStrategy(..))
 import System.IO.Temp (withSystemTempDirectory)
@@ -45,6 +49,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.FlowStore
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(FlowJournalIdentity), saveCompletion)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
+import Kyyn.Porcelain.Interpreter.FlowLocks (tryFlowAdapterLock)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 
 type Host = '[DocumentPersistence,FileSystem,Failure,IOE]
@@ -290,29 +295,78 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   assert (retainedParent.status == Finished (Completed Null)) "Clearing finished children removed their retained parent"
   _ <- update (clearInstances [ancestor.instanceId])
 
-  -- Interrupt clearing after its catalog commit, while journal deletion waits
-  -- for an exiting attempt. A subsequent empty clear must sweep the orphan.
-  orphan <- start Nothing "clear-orphan"
-  _ <- update (finishInstance orphan.instanceId (Completed Null))
+  -- Cancellation is durable before its journal writer exits. Clear must
+  -- refuse without deleting either the catalog entry or the locked journal.
+  orphan <- start Nothing "clear-active-writer"
+  _ <- update (beginAttempt orphan.instanceId)
   journalEntered <- newEmptyMVar
   journalRelease <- newEmptyMVar
   let orphanIdentity = FlowJournalIdentity (flowInstanceIdText orphan.instanceId) "revision" Null
       journalPath = either error id (relativePath (".kyyn/flows/journals/" ++ Text.unpack (flowInstanceIdText orphan.instanceId)))
-      awaitRemoval = do
-        found <- store scope (readInstance orphan.instanceId)
-        case found of Nothing -> pure (); Just _ -> threadDelay 1000 >> awaitRemoval
-  withAsync (execute scope (runFlowJournal kb orphanIdentity (liftIO (putMVar journalEntered () >> takeMVar journalRelease)))) $ \_ -> do
+  withAsync (execute scope (runFlowJournal kb orphanIdentity (liftIO (putMVar journalEntered () >> takeMVar journalRelease)))) $ \writer -> do
     takeMVar journalEntered
-    withAsync (store scope (clearInstances [orphan.instanceId])) $ \clearing -> do
-      removed <- timeout 3000000 awaitRemoval
-      assert (removed == Just ()) "Clearing did not commit before waiting for the journal lock"
-      cancel clearing
+    _ <- update (cancelInstance orphan.instanceId ThisFlow)
+    writerRefusal <- timeout 2000000 (store scope (clearInstances [orphan.instanceId]))
+    assert (case writerRefusal of Just (Left InvalidTransition{}) -> True; _ -> False) "Clear did not promptly refuse an active cancelled writer"
+    retained <- readFlow orphan.instanceId
+    assert (retained.status == Finished Cancelled) "Refused clear changed the cancelled instance"
+    exists <- execute scope (entryExists scope journalPath)
+    assert exists "Refused clear deleted the locked journal"
     putMVar journalRelease ()
-  exists <- execute scope (entryExists scope journalPath)
-  assert exists "Interrupted clear unexpectedly deleted its locked journal"
-  _ <- update (clearInstances [])
+    Async.wait writer
+  _ <- update (clearInstances [orphan.instanceId])
   swept <- execute scope (entryExists scope journalPath)
-  assert (not swept) "Repeated clear leaked an orphan journal"
+  assert (not swept) "Clear retained the released journal"
+
+  -- A nullable cursor is still a present cursor. Exercise the persisted codec,
+  -- and preserve unreported Started when retrying an unrelated attempt block.
+  let eventReference = EventReference "plugin" "connector" "instance" "event"
+      pendingEvent = orphan { status = Waiting, retryRequired = False, blocked = [],
+        waits = [FlowWait "event" Null (EventWait eventReference) Open
+          (Just (EventAdapter Pending Nothing []))] }
+      eventState item = case item.waits of
+        [event] -> maybe (error "Missing event adapter") id event.adapter
+        _ -> error "Missing event wait"
+  (didStart, startedEvent) <- right (Dispatch.beginDispatch "event" pendingEvent)
+  assert didStart "Pending event did not start"
+  completedEvent <- right (Dispatch.completeDispatch "event" Null startedEvent)
+  decoded <- right (parseEither parseCatalog (catalogValue [completedEvent]))
+  assert (decoded == [completedEvent] && (eventState completedEvent).cursor == Just Null)
+    "JSON null cursor lost presence in catalog round-trip"
+  retryUnreported <- right (Lifecycle.retry startedEvent {retryRequired = True})
+  assert ((eventState retryUnreported).dispatch == Started)
+    "Retry of unrelated attempt block reset an unreported dispatch"
+  dispatchBlocked <- right (Dispatch.blockDispatch "event" [errorDiagnostic "fixture" "dispatch failed"] startedEvent)
+  retryReported <- right (Lifecycle.retry dispatchBlocked)
+  assert ((eventState retryReported).dispatch == Pending && null (eventState retryReported).dispatchProblems)
+    "Dispatch-only block did not permit retry"
+  completedAgain <- right (Dispatch.beginDispatch "event" completedEvent)
+  assert (not (fst completedAgain)) "Completed dispatch was eligible for repetition"
+  attemptBlocked <- right (Dispatch.beginDispatch "event" pendingEvent {retryRequired = True})
+  assert (not (fst attemptBlocked)) "Attempt-blocked flow began dispatch"
+  cancelledResult <- right (Dispatch.completeDispatch "event" Null startedEvent {status = Finished Cancelled})
+  assert ((eventState cancelledResult).cursor == Just Null && cancelledResult.status == Finished Cancelled)
+    "Cancellation discarded an in-flight dispatch result"
+
+  -- Adapter ownership also excludes retry and clear, but never cancellation.
+  adapting <- start Nothing "clear-active-adapter"
+  adapterEntered <- newEmptyMVar
+  adapterRelease <- newEmptyMVar
+  withAsync (execute scope (tryFlowAdapterLock kb adapting.instanceId (liftIO (putMVar adapterEntered () >> takeMVar adapterRelease)))) $ \adapterWorker -> do
+    takeMVar adapterEntered
+    retryBusy <- store scope (retryInstance adapting.instanceId)
+    assert (case retryBusy of Left InvalidTransition{} -> True; _ -> False) "Retry reset an active adapter"
+    _ <- update (cancelInstance adapting.instanceId ThisFlow)
+    clearBusy <- timeout 2000000 (store scope (clearInstances [adapting.instanceId]))
+    assert (case clearBusy of Just (Left InvalidTransition{}) -> True; _ -> False) "Clear did not promptly refuse an active adapter"
+    _ <- readFlow adapting.instanceId
+    putMVar adapterRelease ()
+    _ <- Async.wait adapterWorker
+    pure ()
+  _ <- update (clearInstances [adapting.instanceId])
+  let adapterPath = either error id (relativePath (".kyyn/flows/adapters/" ++ Text.unpack (flowInstanceIdText adapting.instanceId)))
+  adapterDirectory <- execute scope (entryExists scope adapterPath)
+  assert (not adapterDirectory) "Adapter ownership created a per-instance data directory"
   collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
     . collisionDocuments . runFlowStore kb $ do
       first <- startPreparedInstance Nothing "first" preparedFixture

@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginHost (answerNetwork, answerLogin, executeAcquisition, executeLogin) where
+module Kyyn.Porcelain.Protocol.PluginHost (decodeHostFrame, answerNetwork, answerLogin, executeAcquisition, executeLogin) where
 
 import Data.Aeson (Value, toJSON, parseJSON)
 import Data.Aeson.Types (Parser)

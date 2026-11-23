@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot #-}
 module Kyyn.Domain.FlowInstance
   ( FlowInstanceId, flowInstanceId, flowInstanceIdText, FlowOwner(..)
-  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), DeliveryOrigin(..), ReplyOrigin(..), DispatchState(..)
+  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), DeliveryOrigin(..), ReplyOrigin(..), DispatchState(..), EventAdapter(..)
   , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitKind(..), WaitStatus(..)
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
@@ -48,8 +48,11 @@ data FlowInstance = FlowInstance
   } deriving (Eq, Show)
 data WaitKind = ReplyWait | ChildWait FlowInstanceId Description | EventWait EventReference deriving (Eq, Show)
 data DispatchState = NotRequired | Pending | Started | DispatchCompleted deriving (Eq, Show)
+data EventAdapter = EventAdapter
+  { dispatch :: DispatchState, cursor :: Maybe Value, dispatchProblems :: [Diagnostic] }
+  deriving (Eq, Show)
 data FlowWait = FlowWait
-  { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus, dispatch :: Maybe DispatchState
+  { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus, adapter :: Maybe EventAdapter
   } deriving (Eq, Show)
 data WaitStatus = Open | Answered DeliveryOrigin Value | Closed deriving (Eq, Show)
 data FlowDelivery = FlowDelivery

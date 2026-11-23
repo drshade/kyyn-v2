@@ -8,10 +8,13 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Porcelain.Protocol.EventBindings (resolveEventBinding)
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedEvent(..))
 import Data.Aeson (encode, eitherDecodeStrict')
-import Control.Monad (forM_, void, when, unless)
+import Control.Monad (forM, forM_, void, when, unless, join)
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (find)
+import Data.List (find, sort)
+import Data.Maybe (isNothing)
+import Kyyn.Porcelain.Interpreter.FlowLocks (tryFlowAdapterLock)
+import Kyyn.Porcelain.Interpreter.FlowJournal (tryFlowWriterLock)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>), raise)
 import Effectful.Dispatch.Dynamic (interpret)
@@ -25,6 +28,7 @@ import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow(..), FlowBundle(.
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
 import Kyyn.Domain.FlowInstance
 import qualified Kyyn.Domain.FlowLifecycle as Lifecycle
+import qualified Kyyn.Domain.FlowDispatch as Dispatch
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
 import Kyyn.Domain.Path (scopePath, directoryScope, relativePath, relativeName)
 import qualified Kyyn.Domain.Failure as Failure
@@ -40,12 +44,44 @@ import System.FilePath ((</>))
 runFlowStore :: forall es a. (DocumentPersistence :> es, FileSystem.FileSystem :> es, Failure :> es)
   => KnowledgeBase -> Eff (FlowStore : es) a -> Eff es a
 runFlowStore kb = interpret $ \_ operation -> do
-  result <- transaction operation
+  result <- case operation of
+    ClearInstances requested -> clearSelected requested
+    RetryInstance identity -> readRetry identity
+    _ -> transaction operation
   case operation of
     ClearInstances _ -> case result of Right _ -> sweepJournals; Left _ -> pure ()
     _ -> pure ()
   pure result
   where
+    readRetry identity = transaction (ReadInstance identity) >>= \case
+      Nothing -> pure (Left MissingInstance)
+      Just _ -> fmap (maybe (Left (InvalidTransition "An event adapter is active; retry after it returns")) id)
+        (tryFlowAdapterLock kb identity (raise (transaction (RetryInstance identity))))
+    clearSelected requested = do
+      catalog <- transaction ListInstances
+      case Lifecycle.clearFinished requested catalog of
+        Left problem -> pure (Left problem)
+        Right ([],_) -> pure (Right [])
+        Right (removed,_) -> do
+          -- Freeze the candidate set: an empty request means all terminal
+          -- instances, and more may finish while locks are acquired.
+          -- Terminal status cannot reverse. Once an adapter probe succeeds,
+          -- no later adapter owner may start a call for these instances.
+          probes <- forM (sort removed) (\identity -> tryFlowAdapterLock kb identity (pure ()))
+          if any isNothing probes
+            then pure (Left (InvalidTransition "An event adapter is active; retry clear after it returns"))
+            else fmap (maybe (Left (InvalidTransition "A journal writer is active; retry clear after it returns")) id)
+              (lockJournals removed (sort removed))
+    lockJournals :: [FlowInstanceId] -> [FlowInstanceId] -> Eff es (Maybe (Either FlowStoreProblem [FlowInstanceId]))
+    lockJournals requested [] = Just <$> transaction (ClearInstances requested)
+    lockJournals requested (identity:remaining) = do
+      nested <- tryFlowWriterLock kb identity $ do
+        result <- raise (lockJournals requested remaining)
+        case result of
+          Just (Right removed) | identity `elem` removed -> void clearCurrent
+          _ -> pure ()
+        pure result
+      pure (join nested)
     transaction :: FlowStore m b -> Eff es b
     transaction operation = do
       base <- checked (knowledgeBaseScope kb)
@@ -85,6 +121,21 @@ runFlowStore kb = interpret $ \_ operation -> do
                   let item = FlowInstance identity parent key launch Runnable [] False False [] [] []
                   commit (Right (item,catalog ++ [item]))
         case operation of
+          BeginDispatch identity key -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right False)
+            Just current -> commit $ do
+              (started,updated) <- Dispatch.beginDispatch key current
+              pure (started,replace updated catalog)
+          CompleteDispatch identity key value -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right ())
+            Just current -> commit $ do
+              updated <- Dispatch.completeDispatch key value current
+              pure ((),replace updated catalog)
+          BlockDispatch identity key problems -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right ())
+            Just current -> commit $ do
+              updated <- Dispatch.blockDispatch key problems current
+              pure ((),replace updated catalog)
           ListInstances -> pure catalog
           ReadDescendant caller target -> pure (Lifecycle.requireDescendant caller target catalog)
           CancelDescendant caller target selected -> commit $ do

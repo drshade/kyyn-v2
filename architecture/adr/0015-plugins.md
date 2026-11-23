@@ -668,7 +668,9 @@ must agree on configuration, request and cursor types. A dispatch returns the
 initial cursor, allowing the plugin to carry the provider's message or thread
 identity into subsequent polling. Only an event without dispatch receives
 `Nothing` on its first poll. The cursor is adapter-owned state; the flow author
-does not construct it.
+does not construct it. The host persists cursors in the local catalog and exposes
+them in CLI and web inspection. Cursors must not contain credentials; plugins
+use named secrets for authentication.
 
 The concrete capability row provides HTTP, named secrets and waiting. It does
 not install captured-evidence or KB-write handlers. Native guests remain trusted;

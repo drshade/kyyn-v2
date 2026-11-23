@@ -44,7 +44,10 @@ flowPage item interrupted values children descriptions = document (recipe item) 
       ChildWait child _ -> p_ $ "Child outcome: " >> instanceLink child
       _ -> do
         forM_ (lookup wait.waitId descriptions) $ \value -> details_ $ summary_ "Request and reply contract" >> json value
-    forM_ wait.dispatch $ \state -> p_ (toHtml ("Dispatch: " <> dispatchText state))
+    forM_ wait.adapter $ \state -> do
+      p_ (toHtml ("Dispatch: " <> dispatchText state.dispatch))
+      diagnostics state.dispatchProblems
+      forM_ state.cursor $ \value -> details_ $ summary_ "Adapter cursor" >> json value
     case wait.waitStatus of
       Answered origin value -> do
         p_ $ "Received from: " >> originHtml origin

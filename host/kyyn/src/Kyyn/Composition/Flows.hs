@@ -46,6 +46,14 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.Flow (runFlow)
 import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
+import Kyyn.Porcelain.Capability.FlowEvents (FlowEvents, dispatchEvents)
+import Kyyn.Porcelain.Capability.PluginEvent (PluginEvent)
+import Kyyn.Porcelain.Interpreter.FlowEvents (runFlowEvents)
+import Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent)
+import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
+import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
+import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportIO)
+import Kyyn.Plumbing.Interpreter.PluginInteraction (runWaitingIO)
 import Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
@@ -55,15 +63,15 @@ import qualified Kyyn.Surfaces.Flows as View
 import qualified Kyyn.Surfaces.Result as Result
 import Kyyn.Surfaces.Result (Response, success, refusal, operationalFailure)
 
-type Pinned = FlowWorker ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
-  ': DocumentPersistence ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
+type Pinned = FlowEvents ': PluginEvent ': FlowWorker ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
+  ': DocumentPersistence ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
 
 -- Resumption and inspection do not resolve Nix, inspect current source, or rebuild.
 runPinned :: Host -> KnowledgeBase -> DirectoryScope -> Eff Pinned a -> IO (Either OperationalFailure a)
 runPinned host kb scope = runBase host . runGuestExecution host.runtimeEnvironment
-  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runDocumentPersistenceIO
+  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runDocumentPersistenceIO
   . runBlobStorageIO scope . runEvidenceStore scope . runPluginRead . runFlowStore kb
-  . runAppendJournalIO . runRecipeRunStore announce . runFlowWorker kb
+  . runAppendJournalIO . runRecipeRunStore announce . runFlowWorker kb . runPluginEvent . runFlowEvents kb
   where announce header = liftIO (hPutStrLn stderr ("Attempt " ++ runIdText header.runId ++ ": /runs/" ++ runIdText header.runId))
 
 dispatchFlows :: Host -> Cli.FlowCommand -> SelectedKb -> IO Response
@@ -133,7 +141,10 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
       result <- runPinned host kb scope $ do
         items <- listInstances
         forM (filter eligible items) $ \item -> do
-          visited <- catchError @OperationalFailure (Right <$> visitInstance item.instanceId) (\_ problem -> pure (Left problem))
+          visited <- catchError @OperationalFailure (Right <$> (do
+            guest <- visitInstance item.instanceId
+            events <- dispatchEvents item.instanceId
+            pure (if events == NoWork then guest else events))) (\_ problem -> pure (Left problem))
           pure (item.instanceId,visited)
       case result of
         Left problem -> pure (operationalFailure problem)
