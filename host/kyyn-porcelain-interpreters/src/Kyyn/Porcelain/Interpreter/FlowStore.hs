@@ -61,14 +61,17 @@ runFlowStore kb = interpret $ \_ operation -> do
       catalog <- transaction ListInstances
       case Lifecycle.clearFinished requested catalog of
         Left problem -> pure (Left problem)
+        Right ([],_) -> pure (Right [])
         Right (removed,_) -> do
+          -- Freeze the candidate set: an empty request means all terminal
+          -- instances, and more may finish while locks are acquired.
           -- Terminal status cannot reverse. Once an adapter probe succeeds,
           -- no later adapter owner may start a call for these instances.
           probes <- forM (sort removed) (\identity -> tryFlowAdapterLock kb identity (pure ()))
           if any isNothing probes
             then pure (Left (InvalidTransition "An event adapter is active; retry clear after it returns"))
             else fmap (maybe (Left (InvalidTransition "A journal writer is active; retry clear after it returns")) id)
-              (lockJournals requested (sort removed))
+              (lockJournals removed (sort removed))
     lockJournals :: [FlowInstanceId] -> [FlowInstanceId] -> Eff es (Maybe (Either FlowStoreProblem [FlowInstanceId]))
     lockJournals requested [] = Just <$> transaction (ClearInstances requested)
     lockJournals requested (identity:remaining) = do

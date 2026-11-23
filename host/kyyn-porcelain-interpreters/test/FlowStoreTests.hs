@@ -6,8 +6,8 @@ module Main (main) where
 
 import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Kyyn.Types.KnowledgeBase (EventReference(..))
-import Control.Concurrent.Async (concurrently, withAsync, cancel)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (concurrently, withAsync)
+import qualified Control.Concurrent.Async as Async
 import Control.Concurrent.MVar
 import Control.Monad (when, void, unless, replicateM_, forM_)
 import qualified Data.ByteString as Bytes
@@ -45,6 +45,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.FlowStore
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(FlowJournalIdentity), saveCompletion)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
+import Kyyn.Porcelain.Interpreter.FlowLocks (tryFlowAdapterLock)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 
 type Host = '[DocumentPersistence,FileSystem,Failure,IOE]
@@ -290,29 +291,45 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   assert (retainedParent.status == Finished (Completed Null)) "Clearing finished children removed their retained parent"
   _ <- update (clearInstances [ancestor.instanceId])
 
-  -- Interrupt clearing after its catalog commit, while journal deletion waits
-  -- for an exiting attempt. A subsequent empty clear must sweep the orphan.
-  orphan <- start Nothing "clear-orphan"
-  _ <- update (finishInstance orphan.instanceId (Completed Null))
+  -- Cancellation is durable before its journal writer exits. Clear must
+  -- refuse without deleting either the catalog entry or the locked journal.
+  orphan <- start Nothing "clear-active-writer"
+  _ <- update (beginAttempt orphan.instanceId)
   journalEntered <- newEmptyMVar
   journalRelease <- newEmptyMVar
   let orphanIdentity = FlowJournalIdentity (flowInstanceIdText orphan.instanceId) "revision" Null
       journalPath = either error id (relativePath (".kyyn/flows/journals/" ++ Text.unpack (flowInstanceIdText orphan.instanceId)))
-      awaitRemoval = do
-        found <- store scope (readInstance orphan.instanceId)
-        case found of Nothing -> pure (); Just _ -> threadDelay 1000 >> awaitRemoval
-  withAsync (execute scope (runFlowJournal kb orphanIdentity (liftIO (putMVar journalEntered () >> takeMVar journalRelease)))) $ \_ -> do
+  withAsync (execute scope (runFlowJournal kb orphanIdentity (liftIO (putMVar journalEntered () >> takeMVar journalRelease)))) $ \writer -> do
     takeMVar journalEntered
-    withAsync (store scope (clearInstances [orphan.instanceId])) $ \clearing -> do
-      removed <- timeout 3000000 awaitRemoval
-      assert (removed == Just ()) "Clearing did not commit before waiting for the journal lock"
-      cancel clearing
+    _ <- update (cancelInstance orphan.instanceId ThisFlow)
+    writerRefusal <- timeout 2000000 (store scope (clearInstances [orphan.instanceId]))
+    assert (case writerRefusal of Just (Left InvalidTransition{}) -> True; _ -> False) "Clear did not promptly refuse an active cancelled writer"
+    retained <- readFlow orphan.instanceId
+    assert (retained.status == Finished Cancelled) "Refused clear changed the cancelled instance"
+    exists <- execute scope (entryExists scope journalPath)
+    assert exists "Refused clear deleted the locked journal"
     putMVar journalRelease ()
-  exists <- execute scope (entryExists scope journalPath)
-  assert exists "Interrupted clear unexpectedly deleted its locked journal"
-  _ <- update (clearInstances [])
+    Async.wait writer
+  _ <- update (clearInstances [orphan.instanceId])
   swept <- execute scope (entryExists scope journalPath)
-  assert (not swept) "Repeated clear leaked an orphan journal"
+  assert (not swept) "Clear retained the released journal"
+
+  -- Adapter ownership also excludes retry and clear, but never cancellation.
+  adapting <- start Nothing "clear-active-adapter"
+  adapterEntered <- newEmptyMVar
+  adapterRelease <- newEmptyMVar
+  withAsync (execute scope (tryFlowAdapterLock kb adapting.instanceId (liftIO (putMVar adapterEntered () >> takeMVar adapterRelease)))) $ \adapterWorker -> do
+    takeMVar adapterEntered
+    retryBusy <- store scope (retryInstance adapting.instanceId)
+    assert (case retryBusy of Left InvalidTransition{} -> True; _ -> False) "Retry reset an active adapter"
+    _ <- update (cancelInstance adapting.instanceId ThisFlow)
+    clearBusy <- timeout 2000000 (store scope (clearInstances [adapting.instanceId]))
+    assert (case clearBusy of Just (Left InvalidTransition{}) -> True; _ -> False) "Clear did not promptly refuse an active adapter"
+    _ <- readFlow adapting.instanceId
+    putMVar adapterRelease ()
+    _ <- Async.wait adapterWorker
+    pure ()
+  _ <- update (clearInstances [adapting.instanceId])
   collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
     . collisionDocuments . runFlowStore kb $ do
       first <- startPreparedInstance Nothing "first" preparedFixture
