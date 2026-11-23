@@ -505,9 +505,12 @@ main = do
     _ <- visit True publishedChild.instanceId
     childState <- inspect publishedChild.instanceId
     unless (childState.status == Instance.Waiting) (fail "Completed parent prevented independent child execution")
-    cancelledChild <- controlChild (CancelChildCall (Instance.flowInstanceIdText publishedChild.instanceId)
-      (descriptionOf childContract.outputContract) False) >>= right
-    unless (cancelledChild == object ["tag" .= String "Right","value" .= object []]) (fail "Valid child cancellation was refused")
+    expectRefused "Completed parent cancelled its independent child" (controlChild
+      (CancelChildCall (Instance.flowInstanceIdText publishedChild.instanceId)
+        (descriptionOf childContract.outputContract) False))
+    independentChild <- inspect publishedChild.instanceId
+    unless (independentChild.status == Instance.Waiting) (fail "Refused terminal caller cancellation changed the child")
+    _ <- store (cancelInstance publishedChild.instanceId Instance.ThisFlow) >>= right >>= right
     _ <- store (clearInstances [publishedChild.instanceId]) >>= right >>= right
     clearedInspection <- controlChild (InspectChildCall (Instance.flowInstanceIdText publishedChild.instanceId)
       (descriptionOf childContract.outputContract)) >>= right

@@ -695,6 +695,8 @@ cannot start children through this capability.
 status also contains its outstanding wait IDs. Inspection is durable: replay
 restores the earlier observation; a later step or authored loop iteration takes
 a new snapshot.
+Project the fields you need from this status inside the flow; `FlowStatus` itself
+is not a recipe result contract.
 
 `cancelFlow ThisFlow` cancels the selected child. `cancelFlow FlowAndDescendants`
 also cancels its subtree, including descendants of an already finished child,

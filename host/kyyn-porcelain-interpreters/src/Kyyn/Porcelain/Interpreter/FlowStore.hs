@@ -83,6 +83,7 @@ runFlowStore kb = interpret $ \_ operation -> do
           ReadDescendant caller target -> pure (Lifecycle.requireDescendant caller target catalog)
           CancelDescendant caller target selected -> commit $ do
             _ <- Lifecycle.requireDescendant caller target catalog
+            Lifecycle.parentAllowsStart (Just caller) catalog
             next <- Lifecycle.cancelTree target selected catalog
             item <- maybe (Left MissingInstance) Right (find ((== target) . (.instanceId)) next)
             pure (item,next)
