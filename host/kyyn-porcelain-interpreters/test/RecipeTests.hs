@@ -62,7 +62,7 @@ recipeTests = do
   check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
   check "Retargeted child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe (Interactive (InteractionBindings [])) (FlowEntryRef "Flows.other"))])
   let flow name refs = Fact (FactId name) (ClosedRecipe (Interactive (InteractionBindings
-        [ChildReference (RecipeId child) (FlowEntryRef "Flows.shared") | child <- refs])) (FlowEntryRef "Flows.shared"))
+        [ChildReference (RecipeId childName) (FlowEntryRef "Flows.shared") | childName <- refs])) (FlowEntryRef "Flows.shared"))
       graph = [flow "root" ["left","right"], flow "left" ["leaf"], flow "right" ["leaf"], flow "leaf" ["root"], flow "unused" []]
   check "Closure must handle diamond/cycle and preserve IDs sharing source" (case flowClosure graph (RecipeId "root") of
     Right declarations -> [ident | FlowDeclaration ident _ _ <- declarations] == map RecipeId ["root","left","leaf","right"]
