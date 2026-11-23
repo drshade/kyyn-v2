@@ -22,21 +22,21 @@ executeEventAction channel result = execute channel (eitherCodec result) (handle
 dispatchCodec :: Codec request -> Codec (EventDispatch request)
 dispatchCodec requestCodec = Codec encode decode
   where
-    encode (EventDispatch identity request) = record
+    encode (EventDispatch (WaitId identity) request) = record
       [("waitIdentity",encodeWith textCodec identity),("request",encodeWith requestCodec request)]
     decode value = do
       members <- fields ["waitIdentity","request"] value
-      EventDispatch <$> field "waitIdentity" textCodec members <*> field "request" requestCodec members
+      EventDispatch . WaitId <$> field "waitIdentity" textCodec members <*> field "request" requestCodec members
 
 pollCodec :: Codec request -> Codec cursor -> Codec (EventPoll request cursor)
 pollCodec requestCodec cursorCodec = Codec encode decode
   where
-    encode (EventPoll identity request cursor) = record
+    encode (EventPoll (WaitId identity) request cursor) = record
       [("waitIdentity",encodeWith textCodec identity),("request",encodeWith requestCodec request),
        ("cursor",encodeWith (optionalCodec cursorCodec) cursor)]
     decode value = do
       members <- fields ["waitIdentity","request","cursor"] value
-      EventPoll <$> field "waitIdentity" textCodec members <*> field "request" requestCodec members
+      EventPoll . WaitId <$> field "waitIdentity" textCodec members <*> field "request" requestCodec members
         <*> field "cursor" (optionalCodec cursorCodec) members
 
 batchCodec :: Codec reply -> Codec cursor -> Codec (EventBatch reply cursor)
@@ -48,7 +48,7 @@ batchCodec replyCodec cursorCodec = Codec encode decode
       members <- fields ["arrivals","cursor"] value
       EventBatch <$> field "arrivals" (listCodec arrivalCodec) members <*> field "cursor" cursorCodec members
     arrivalCodec = Codec
-      (\(EventArrival identity value) -> record [("identity",encodeWith textCodec identity),("value",encodeWith replyCodec value)])
+      (\(EventArrival (EventIdentity identity) value) -> record [("identity",encodeWith textCodec identity),("value",encodeWith replyCodec value)])
       (\value -> do
         members <- fields ["identity","value"] value
-        EventArrival <$> field "identity" textCodec members <*> field "value" replyCodec members)
+        EventArrival . EventIdentity <$> field "identity" textCodec members <*> field "value" replyCodec members)
