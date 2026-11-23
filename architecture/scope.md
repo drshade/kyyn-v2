@@ -80,10 +80,14 @@ regular users; a graphical installer is not a prerequisite. Test the actual
 Windows-host/WSL browser and MCP journey. Repeatable workflows can be driven by
 an external runner with explicit acceptance intent, no interactive UI or daemon.
 
+Interactive sales review queries current opportunities, opens owner conversations,
+waits across restarts and proposes KB changes. Parent flows may finish while child
+reviews continue. [ADR 0028](adr/0028-agentic-workflows.md) owns this lifecycle.
+
 ## Deliberate exclusions
 
 No kyyn-v1 compatibility layer; universal workflow graph; mandatory causal ledger;
-per-record governance ceremony; hosted identity/account service; autonomous scheduler; generic RAG platform; durable continuation store; automatic semantic
+per-record governance ceremony; hosted identity/account service; autonomous scheduler; generic RAG platform; serialised arbitrary Haskell continuations; automatic semantic
 merge; historical connector-schema negotiation; arbitrary native-program plugin
 ABI; or standalone execution requirement for KBs.
 

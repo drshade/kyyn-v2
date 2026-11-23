@@ -21,9 +21,10 @@ and operational integration. KBs may depend on Kyyn to execute.
 Treat exploration and improved understanding as useful outcomes before reporting
 or automation is complete. Preserve unknown and disputed domain values rather
 than forcing every accepted fact to mean “verified true”. External schedulers
-and agent harnesses call ordinary Kyyn operations; Kyyn does not autonomously
-orchestrate agents. Explicitly invoked KB-authored agentic flows are defined in
-[ADR 0028](0028-agentic-workflows.md); they do not make the kernel an agent scheduler.
+and agent harnesses call ordinary Kyyn operations.
+[ADR 0028](0028-agentic-workflows.md) defines explicitly invoked KB-authored
+flows, including interactive instances and authored child coordination. Kyyn
+executes that authored policy rather than inventing goals or business schedules.
 
 ## Boundaries and alternatives
 

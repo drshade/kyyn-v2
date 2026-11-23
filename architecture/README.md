@@ -41,7 +41,7 @@ and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are
 | [0025](adr/0025-lifecycle.md) | Agent setup, per-KB open/close and headless operation |
 | [0026](adr/0026-repository-layout.md) | Monorepo with explicit host/guest and interpreter package boundaries |
 | [0027](adr/0027-judgement.md) | Typed model judgements in KB tools; Jev first |
-| [0028](adr/0028-agentic-workflows.md) | Typed agentic tools and fact-edit recipes |
+| [0028](adr/0028-agentic-workflows.md) | Typed agentic tools, fact-edit recipes and interactive flow lifetimes |
 | [0029](adr/0029-evidence-blobs-sync.md) | Evidence blobs and connector-owned sync positions |
 
 ## Reading and changing decisions

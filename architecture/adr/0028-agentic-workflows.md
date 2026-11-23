@@ -15,9 +15,9 @@ Necessary library changes should be requested upstream, not implemented as a
 private Kyyn orchestration fork.
 
 **Owner-established direction:** KB tools may execute typed agentic flows,
-including model-assisted drafting and subagents. Recipes support both external
-instruction-led work and explicit flow execution. Kyyn is not an autonomous
-agent; evolutions remain pure and nothing is automatically accepted. The host
+including model-assisted drafting and subagents. Recipes support external instruction-led work, explicit flow execution and
+interactive lifetimes. Kyyn executes authored coordination rather than choosing
+its own goals; evolutions remain pure and flow completion never accepts them. The host
 performs individual model turns with per-KB credentials hidden from guest code.
 SystemOne and SystemTwo use Agentic's types directly. Closed agents propose only
 fact edits and their own next recipe state, not schema or code changes.
@@ -49,8 +49,8 @@ conversation, not a separately scheduled Kyyn agent.
 
 The library owns the loop: request a turn, dispatch requested tools, return their
 results and decode the response. Kyyn supplies capability handlers and ordinary
-execution/cancellation. It does not duplicate this loop, choose a goal, schedule
-recipes or keep agents alive after the requested invocation.
+execution/cancellation. It does not duplicate this loop or choose a goal. Ordinary invocations finish
+with their caller; interactive instances follow the durable lifetime below.
 
 Existing ordinary KB tools remain ordinary functions. Registering a flow-backed
 tool exposes the same checked input/output contract to CLI/MCP callers. It adds
@@ -304,11 +304,281 @@ The ordinary evolution report identifies the producing recipe/flow and captured
 source revision alongside its changes and rationale. Local run recordings below
 retain execution progress separately.
 
-Use record/replay fixtures for individual turns and Judgement calls, plus fixed
+For ordinary invocation tests, use record/replay fixtures for individual turns and Judgement calls, plus fixed
 captured-evidence handlers, to test the complete flow deterministically. Upstream
 `agentic-io` replay only replaces model calls; tool bodies and `act` still execute.
 Replay-only tests must refuse missing recordings and must not contact providers.
-Production response caching or mandatory transcript retention is not selected.
+This model-answer cache is separate from the durable operation journal used by
+interactive execution below.
+
+### Interactive flows have a durable lifetime
+
+[Issue #345](https://github.com/drshade/kyyn-v2/issues/345) motivates a sales
+portfolio flow which starts opportunity reviews. Each review queries Salesforce,
+asks an owner for clarification, waits for a Teams reply and proposes a KB update.
+Captured evidence is optional in this path. A live response need not be published
+into the evidence store before the workflow can use it.
+
+Open/closed describes who directs the work; interactive describes its lifetime.
+An open recipe guides an external agent. A closed recipe supplies an authored
+Agentic flow. Either may be interactive. The recipe declaration explicitly selects
+interactive execution; ordinary recipe invocations retain the single-invocation
+contract above. Interactive closed entries have checked request and result types;
+the existing recipe declaration is their registration point, not a second registry.
+Their effect context additionally supplies the capabilities below. Pure queries,
+renderers, evolution functions and ordinary investigation tools do not gain them.
+
+The library owns flow interpretation, model/tool orchestration, durable operation
+identity and generic suspension/resumption semantics. Kyyn owns persistent
+instances, their checked inputs and bindings, event routing, execution attempts
+and links to evolution workspaces. The accepted interactive declaration advertises its selected action bindings,
+visible in description before starting it. Starting the instance authorises those
+authored actions, including after an unattended resume, subject to the caller's
+existing authority. A model cannot grant itself additional bindings.
+The host is an executor of authored decisions,
+not an additional model deciding goals, reminders or escalation policy.
+
+```haskell
+-- Typed guest/application facade; transport representations remain private.
+data FlowRef input output
+newtype FlowHandle output = FlowHandle FlowInstanceId
+
+data FlowStatus output
+  = Runnable
+  | Running
+  | Waiting [WaitId]
+  | Completed output
+  | Failed [Diagnostic]
+  | Cancelled
+
+data CancelScope = ThisFlow | FlowAndDescendants
+
+startFlow :: Interactive m => FlowRef input output -> input -> m (FlowHandle output)
+inspectFlow :: Interactive m => FlowHandle output -> m (FlowStatus output)
+awaitFlow :: Interactive m => FlowHandle output -> m (FlowStatus output)
+cancelFlow :: Interactive m => CancelScope -> FlowHandle output -> m ()
+```
+
+`Interactive m` denotes the selected generated request row, not arbitrary IO.
+`FlowRef` resolves an accepted declaration with its checked input/result contracts.
+Starting a flow records its original input, execution revision and selected
+configuration. Each instance has a stable ID, optional parent ID, execution owner (hosted or
+external), checked request/result contracts and status.
+Runtime state lives locally under `.kyyn/flows/`, outside accepted
+facts and recipe state. Operations validate handles against the selected KB and
+stored contracts. Inspection is read-only; `awaitFlow` returns a terminal status
+or durably waits. Failure is observable data, not automatic sibling cancellation.
+Runtime storage/dispatch failures retain ADR 0019's operational failure boundary.
+
+### Parents author how they manage children
+
+A start made by a hosted flow records that instance as parent. Parentage is
+immutable provenance and navigation, not a requirement to join children before
+returning. The parent may await all, some or none; normal completion leaves its
+children running. A daily scanner can finish after launching opportunity reviews,
+and a campaign can await those same reviews to assemble its summary. Failure of
+a parent does not silently cancel children either.
+
+Replay of the same child-start occurrence returns the same child handle. Starting
+another child on replay is a correctness bug. Preventing a new daily scan from
+starting another review of the same opportunity is separate authored business
+policy: the scanner inspects active reviews before choosing to start one.
+
+`ThisFlow` stops only the selected instance. `FlowAndDescendants` requests
+cancellation throughout its subtree, including active descendants of terminal
+parents. Already terminal outcomes are preserved. Cancellation is persisted and
+checked before further dispatch and resumption; it interrupts active work where
+possible and closes pending waits. Subtree cancellation also covers descendants
+created by a start racing with that request; publishing a child and checking the
+ancestor's cancellation state must be coordinated in the instance store.
+Acknowledging the request does not assert that an in-flight external action was
+undone or even interrupted. Late replies are retained as unmatched/closed-wait
+outcomes and never restart a cancelled instance. Existing draft evolutions remain
+available; cancellation neither accepts nor deletes them.
+
+### Live plugin capabilities and waiting
+
+Plugins expose typed live queries, actions and incoming event contracts alongside
+captured sources and sinks, using the same vendored package, instance configuration
+and authentication ownership in [ADR 0015](0015-plugins.md). Generated proxies
+hide transport. A query reads the provider at execution time; an action may change
+it. Neither implicitly fetches evidence or accepts KB changes. An explicit action
+may invoke an existing sink through ADR 0017's delivery boundary without requiring
+a renderer. Input/options remain checked and delivery uncertainty remains visible.
+
+```haskell
+-- Method-specific generated bindings implement these typed boundaries.
+liveQuery :: LiveQuery m => LiveQueryRef input output -> input -> m output
+performAction :: LiveAction m
+              => ActionRef input output -> OperationKey -> input -> m output
+
+data EventRef request reply
+newtype WaitHandle reply = WaitHandle WaitId
+
+openWait :: Interactive m
+         => EventRef request reply -> request -> m (WaitHandle reply)
+awaitReply :: Interactive m => WaitHandle reply -> m reply
+
+-- Host application operation, also available to authenticated event adapters.
+fulfilWait :: (FlowStore :> es, Failure :> es)
+           => KnowledgeBase -> WaitId -> EventIdentity -> CheckedValue
+           -> Eff es FulfilOutcome
+```
+
+Refs bind a specific declared method/event and checked types; they are not an
+untyped provider RPC escape hatch. Runtime identities, codec projections and
+wire envelopes are generated. The plugin owns provider-specific reception and
+correlation; the host validates the resulting event against the registered wait
+contract before committing it. `FulfilOutcome` distinguishes accepted, duplicate,
+conflicting, invalid and closed-wait deliveries. The first valid fulfilment is
+immutable; a conflicting value never overwrites it.
+
+Opening a wait persists its typed request and expected reply contract and returns
+a stable handle. An author can establish the wait before sending a question, so
+a fast reply is not lost before execution reaches `awaitReply`. Replay returns
+the same handle. Awaiting an unfulfilled wait suspends the execution through the
+library's wait semantics; it is not a failure or a sleeping guest process. The
+runtime can release the process and retains all outstanding waits, including
+concurrent branches. A received reply is durable before acknowledgement and
+before making the instance runnable. Duplicate wakeups do not start concurrent
+writers for one instance. Deadlines, reminders and decisions to give up belong
+to the authored workflow; a deadline event is an input, not inferred business policy.
+
+### Replay reconstructs execution, not the external world
+
+Use the library's durable recording contract, with Kyyn supplying its store.
+[Upstream issue #12](https://github.com/drshade/haskell-agentic/issues/12) owns
+completion-only replay. Generic suspension and fulfilment belong upstream too;
+Kyyn does not implement a competing arrow interpreter to obtain them.
+
+Each instance fixes the original request, execution revision (code, codecs and
+provider configuration) and journal namespace. Resumption reuses that execution;
+it does not silently switch to newly accepted code. Persist secret names, not resolved credentials; inspection never reads the secret
+store. Resolve credentials only for new live operations. Live payloads follow the
+same authored provider/redaction policy as captured payloads, including any
+required people redaction before sending data to Jev.
+Keep its guest build available
+while the instance is resumable. Missing code/build or a revision/input mismatch
+is a diagnostic, not an automatic migration or a compatibility reader. Inspection
+of persisted status does not require executing the old build.
+
+Completed durable operations return their stored typed results. Captured reads,
+live queries and KB queries record the values consumed by the flow, rather than
+reopening changed evidence or providers during replay. A model completion is
+replayed; an incomplete model call can be repeated under the upstream limitation. Model decisions
+and provider tool-call identities are restored through the same journal.
+An unfinished tool re-enters its body, whose completed durable sub-actions replay.
+Plain `act` still runs: values affecting control flow must come from fixed inputs
+or recorded operations. Refreshing external or KB data is a new durable operation,
+not replacement of an earlier read result during replay. Kyyn-owned operations
+which start children, open waits or prepare proposals return their existing handles
+when repeated under the same operation key.
+
+The journal stores completed results only. An action that ran but failed to save
+its result can run again. External actions receive the stable instance-qualified
+operation key; their adapter must establish repeat safety or report that safe
+resumption cannot be provided. A destination may not support idempotency, and a
+local receipt alone does not close the send/save crash window. Do not promise
+exactly-once delivery or add an implicit retry of an uncertain send. Message
+adapters must state and test their delivery semantics before enabling replay.
+
+### Knowledge access and proposals remain explicit
+
+Interactive execution composes selected-snapshot reads and evolution application
+operations; it does not gain filesystem mutation of accepted facts.
+
+```haskell
+-- Guest-facing capabilities; host handlers use existing application operations.
+selectKnowledge :: KnowledgeAccess m => m KnowledgeSnapshot
+queryKnowledge :: KnowledgeAccess m
+               => KnowledgeSnapshot -> KnowledgeQueryRef input output -> input -> m output
+prepareProposal :: ProposalAuthoring m
+                => KnowledgeSnapshot -> RecipeProposal edits state
+                -> m EvolutionId
+inspectProposal :: ProposalAuthoring m => EvolutionId -> m ProposalStatus
+```
+
+A `KnowledgeSnapshot` identifies an accepted Git revision and its checked root
+contract. Queries use that selected snapshot, including across several calls;
+the journal retains results required for replay. Selecting knowledge again is an
+explicit refresh. A changed schema incompatible with the running entry produces
+a contract diagnostic rather than coercion or silent reuse of stale types.
+
+`prepareProposal` uses the ordinary frozen fact-edit proposal and recipe-state
+contract above, with the snapshot revision as Before. The host checks edits and
+state against the selected recipe/root contracts. A long conversation need not
+create a workspace at its start; it may refresh knowledge and prepare a proposal
+when ready. It must not relabel an old proposal as based on a newer root. Multiple
+proposals are allowed, each with its own explicit base. Conflicting concurrent
+children meet the normal expected-head acceptance boundary.
+
+Evolution checking and acceptance remain the existing host application operations.
+There is no accepted-ref guest capability and flow success never accepts a
+proposal. An authorised external agent or explicitly configured host automation
+may check, mark Ready and accept through those operations; no per-proposal human
+prompt is inherent. The interactive flow can inspect or await their recorded
+outcome through the event interface. Checking a proposal never re-executes the
+conversation. Rationale explains the proposed changes; conversation references
+or summaries may support it without becoming mandatory evidence captures. Persist
+the material live observations needed to explain an edit in the frozen proposal's
+rationale/input data; a disposable journal or a remote URL alone is not that record.
+Do not fabricate an EvidenceRef for an uncaptured interaction. The ordinary
+rationale remains meaningful if local execution state is removed.
+
+### Runtime ownership and observation
+
+An explicitly launched per-KB worker executes runnable hosted instances and
+resumes them when fulfilled waits permit progress. Only one execution attempt
+may write an instance at a time. Persisted runnable work survives worker shutdown;
+reopening does not require a browser. While the worker is down, no hosted guest
+advances; accepted event deliveries remain queued. An offline event receiver
+cannot promise delivery: its plugin must document provider retry or catch-up
+behaviour and report gaps rather than manufacture replies. Starting/stopping this worker is distinct
+from starting/stopping Web and from cancelling a flow. A process loss leaves an
+interrupted attempt, not a fabricated failure/completion of the durable instance.
+Native process interruption and cleanup still follow ADR 0019.
+
+CLI and MCP expose the same start/inspect/fulfil/await/cancel application operations.
+Web observes instances, parent/child relationships, waits and attempts; it remains
+read-only under ADR 0023. An external agent can use the same KB, plugin and
+interaction operations to implement an open interactive recipe. Its harness owns
+its next model turn and resumption. Kyyn persists the external instance's interactions and operation handles; it
+does not journal or restore the external harness's private reasoning or execution.
+A pending reply in Kyyn does not automatically
+launch or reconstruct a Codex/Claude session. Externally coordinated instances
+retain status and correlation records but are not dispatched as hosted guest flows.
+
+Durable instance state, reply values and the replay journal are distinct from
+ADR 0028's disposable viewer recordings. Each execution attempt has its own
+recording namespace; restoring work is reported using the library's replay
+observations. A waiting attempt is not a completed logical flow. An instance links
+its attempts and draft evolutions. Clearing viewer recordings does not delete
+replay state or abandon waiting work. The instance view shows logical status and child statuses separately; the run
+list/viewer continues to show individual attempts, linked to their instance.
+A completed parent can therefore visibly have active children.
+Run identity checks for resumption do not
+turn recording inspection into historical compatibility enforcement.
+
+### Interactive verification
+
+Use deterministic provider/event fixtures to exercise query, open-wait, send,
+process stop, reply, resume and proposal creation. Prove the completed send is
+not re-executed, a reply arriving before await is retained, and malformed or
+conflicting replies cannot advance the flow. Exercise incomplete-action repeat
+semantics without claiming to solve an unsupported provider crash window.
+
+Exercise partial tool completion, two waits in parallel, duplicate wakeups,
+child-start replay, a parent completing before children, selective await, failure
+without sibling cancellation, subtree cancellation beneath a completed parent,
+and a start racing with cancellation. Verify late replies cannot resurrect a
+cancelled instance. Preserve a draft and any accepted changes after cancellation.
+
+Exercise a KB refresh before proposing, a changed schema, a stale base after a
+sibling accepts, and unchanged ordinary recipe/tool capability boundaries. The
+external-agent journey uses the same application operations without launching a
+hosted model loop. Restart with the retained build and journal; report missing
+builds and changed input/revision honestly. Clear viewer recordings while waiting
+and prove resumption still works.
 
 ### Record recipe execution for live viewing and playback
 
