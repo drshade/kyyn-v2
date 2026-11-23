@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition, flowDefinitions, optionalStateDefinition) where
+module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition, flowDefinitions, interactiveDefinitions, optionalStateDefinition) where
 
 import Control.Monad (unless)
 import qualified Agentic as A
@@ -57,3 +57,20 @@ optionalStateDefinition binding state reference = recover (pure []) $ do
   let selected = AppE (AppTypeE (VarE (mkName "Bindings.recipeType")) kind) (LitE (StringL reference))
       body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
   pure [SigD binding (AppT (ConT (mkName "RecipeType")) kind),ValD (VarP binding) (NormalB body) []]
+
+-- Interactive references describe the actual request/result, independent of the
+-- KB root and shared recipe state. Non-flow helpers are not generated bindings.
+interactiveDefinitions :: [(String,Name,String)] -> Q [Dec]
+interactiveDefinitions candidates = concat <$> traverse (\(binding,implementation,reference) ->
+  recover (pure []) $ do
+    signature <- reifyType implementation >>= expandSynonyms
+    (input,output) <- case signature of
+      AppT (AppT (AppT (ConT flow) _) request) result | flow == ''A.Agentic -> pure (request,result)
+      _ -> fail "Expected an interactive Agentic flow"
+    supportedInput <- isInstance ''Contract [input]
+    supportedOutput <- isInstance ''Contract [output]
+    unless (supportedInput && supportedOutput) (fail "Interactive request/result need Contract instances")
+    let selected = AppE (AppTypeE (AppTypeE (VarE (mkName "Bindings.interactiveFlow")) input) output) (LitE (StringL reference))
+        body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
+    pure [SigD (mkName binding) (AppT (AppT (ConT (mkName "FlowRef")) input) output),
+      ValD (VarP (mkName binding)) (NormalB body) []]) candidates

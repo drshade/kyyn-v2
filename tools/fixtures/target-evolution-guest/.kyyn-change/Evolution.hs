@@ -1,4 +1,6 @@
 module Evolution where
+import Kyyn.Interactive (interactiveRecipe)
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Flows as Interactive
 import Kyyn.Workspace.Evolution
 import Kyyn.Types.Fact (Fact(..))
 import qualified Kyyn.Workspace.Target as Collections
@@ -17,5 +19,6 @@ evolution = prepare (do
     (\(Input.State count) -> Right (Flows.State count True))
   retireRecipe reason (RecipeId "obsolete")
   retireRecipe reason (RecipeId "notAFlow")
-  retireRecipe reason (RecipeId "noContract")) mempty
+  retireRecipe reason (RecipeId "noContract"))
+    (edit reason (createRecipe (RecipeId "conversation") (interactiveRecipe Interactive.conversation) ()))
   where reason = Rationale "Target-only migration" []

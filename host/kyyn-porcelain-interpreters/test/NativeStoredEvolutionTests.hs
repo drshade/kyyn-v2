@@ -2,6 +2,7 @@
 -- target materialization and report checking. No historical code/schema is loaded.
 {-# LANGUAGE GHC2021, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
 import qualified Data.ByteString as Bytes
@@ -45,10 +46,10 @@ main = do
     result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . runRootStore . runExceptT $ do
         definitions <- ExceptT (encodeRecipes
-          [Fact (FactId "weekly") (ClosedRecipe (FlowEntryRef "Flows.review")),
-           Fact (FactId "notAFlow") (ClosedRecipe (FlowEntryRef "Flows.oldFlow")),
-           Fact (FactId "noContract") (OpenRecipe "Obsolete" "Flows.OldState"),
-           Fact (FactId "obsolete") (ClosedRecipe (FlowEntryRef "Missing.obsolete"))])
+          [Fact (FactId "weekly") (ClosedRecipe Ordinary (FlowEntryRef "Flows.review")),
+           Fact (FactId "notAFlow") (ClosedRecipe Ordinary (FlowEntryRef "Flows.oldFlow")),
+           Fact (FactId "noContract") (OpenRecipe Ordinary "Obsolete" "Flows.OldState"),
+           Fact (FactId "obsolete") (ClosedRecipe Ordinary (FlowEntryRef "Missing.obsolete"))])
         let stored = either error id (fileTree
               [(path "facts/root.dhall","{=}"),
                (path "facts/items/index.dhall","[\"one\"]"),
@@ -63,8 +64,8 @@ main = do
         guest <- ExceptT (describeGuest program)
         ExceptT (executeStoredEvolution program guest code (Rationale "Native target migration" []) Nothing input)
     (Root _ _ _ recipes,steps) <- right result >>= right
-    unless (length recipes == 1 && length steps == 7) (fail "Wrong recipe or observation membership")
-    unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,Authored,Authored,TargetProjection])
+    unless (length recipes == 2 && length steps == 8) (fail "Wrong recipe or observation membership")
+    unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,Authored,Authored,Authored,TargetProjection])
       (fail "Lost the target projection boundary")
   putStrLn "Native stored evolution and independent target projection verification passed"
 right :: Show e => Either e a -> IO a

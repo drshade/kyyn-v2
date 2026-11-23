@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), toJSON, fromJSON, Result(..))
 import qualified Data.ByteString as Bytes
@@ -25,7 +26,7 @@ import Kyyn.Porcelain.Protocol.StoredSnapshot
 main :: IO ()
 main = do
   recipeBytes <- right (runPureEff (runDhallHandling (encodeRecipes
-    [Fact (FactId "weekly") (ClosedRecipe (FlowEntryRef "BrokenFlow.run"))])))
+    [Fact (FactId "weekly") (ClosedRecipe Ordinary (FlowEntryRef "BrokenFlow.run"))])))
   let original =
         [("facts/root.dhall", "{ optional = None Text, names = [] : List Text, choice = < Empty | Filled : Text >.Empty }")
         ,("facts/people/index.dhall", "[\"a\", \"b\"]")
@@ -54,7 +55,7 @@ main = do
     _ -> False)
   assert "empty collection lost" (lookup "empty" collections == Just [])
   assert "closed recipe needs no executable" (case recipes of
-    [Fact (FactId "weekly") (RecordedRecipe (ClosedRecipe (FlowEntryRef "BrokenFlow.run")) _)] -> True
+    [Fact (FactId "weekly") (RecordedRecipe (ClosedRecipe Ordinary (FlowEntryRef "BrokenFlow.run")) _)] -> True
     _ -> False)
   reject "duplicate IDs accepted" (replace "facts/people/index.dhall" "[\"a\",\"a\"]")
   reject "missing listed file accepted" (without "facts/people/a.dhall")

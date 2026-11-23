@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import qualified Data.Text as Text
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
@@ -62,9 +63,9 @@ main = do
   imported <- right (fileTree [(path "recipes/stateless/state.dhall","./external.dhall")])
   assert "Dhall import accepted in stored state" (isFailure (run (decodeRecipeStates [(third,unit)] imported)))
   let stored =
-        [ Fact (FactId "mail") (StoredRecipe (OpenAgent "Review mail") "Review.State" state (value ["one"]))
-        , Fact (FactId "calendar") (StoredRecipe (ClosedAgent (FlowEntryRef "Flows.calendar")) "Review.State" state (value ["two"]))
-        , Fact (FactId "stateless") (StoredRecipe (OpenAgent "Investigate") "()" unit unitValue)
+        [ Fact (FactId "mail") (StoredRecipe (OpenAgent Ordinary "Review mail") "Review.State" state (value ["one"]))
+        , Fact (FactId "calendar") (StoredRecipe (ClosedAgent Ordinary (FlowEntryRef "Flows.calendar")) "Review.State" state (value ["two"]))
+        , Fact (FactId "stateless") (StoredRecipe (OpenAgent Ordinary "Investigate") "()" unit unitValue)
         ]
       resolved = [(Fact ident (recipeDefinition recipe),name,contract) |
         Fact ident recipe@(StoredRecipe _ name contract _) <- stored]

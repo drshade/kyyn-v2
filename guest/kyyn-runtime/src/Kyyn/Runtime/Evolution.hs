@@ -5,7 +5,8 @@ import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..), StoredDefinition(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import Data.Aeson (Value)
+import Data.Aeson (Value, toJSON)
+import Data.Aeson.Types (parseEither, parseJSON)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Validation (encodeReportValue)
 
@@ -37,21 +38,23 @@ knowledgeBaseCodec valueCodec = Codec encode decode
       definition <- field "definition" definitionCodec values
       StoredRecipe definition <$> field "state" (Codec id Right) values
     definitionCodec = Codec encodeDefinition decodeDefinition
-    encodeDefinition (OpenDefinition instructions authored) = tagged "OpenAgent" (Just
-      (record [("instructions",encodeWith textCodec instructions),
+    encodeDefinition (OpenDefinition lifetime instructions authored) = tagged "OpenAgent" (Just
+      (record [("lifetime",toJSON lifetime),("instructions",encodeWith textCodec instructions),
         ("stateType",encodeWith textCodec authored)]))
-    encodeDefinition (ClosedDefinition (FlowEntryRef entry)) = tagged "ClosedAgent" (Just
-      (record [("flow",encodeWith textCodec entry)]))
+    encodeDefinition (ClosedDefinition lifetime (FlowEntryRef entry)) = tagged "ClosedAgent" (Just
+      (record [("lifetime",toJSON lifetime),("flow",encodeWith textCodec entry)]))
     decodeDefinition value = do
       (name, payload) <- variant value
       case (name,payload) of
         ("OpenAgent", Just contents) -> do
-          values <- fields ["instructions","stateType"] contents
+          values <- fields ["lifetime","instructions","stateType"] contents
+          lifetime <- field "lifetime" (Codec toJSON (parseEither parseJSON)) values
           instructions <- field "instructions" textCodec values
           authored <- field "stateType" textCodec values
-          pure (OpenDefinition instructions authored)
+          pure (OpenDefinition lifetime instructions authored)
         ("ClosedAgent", Just contents) -> do
-          values <- fields ["flow"] contents
+          values <- fields ["lifetime","flow"] contents
+          lifetime <- field "lifetime" (Codec toJSON (parseEither parseJSON)) values
           entry <- field "flow" textCodec values
-          pure (ClosedDefinition (FlowEntryRef entry))
+          pure (ClosedDefinition lifetime (FlowEntryRef entry))
         _ -> Left "Expected OpenAgent or ClosedAgent recipe"

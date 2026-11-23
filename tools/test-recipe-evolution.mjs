@@ -20,7 +20,7 @@ const record = fields => shape('StoredRecord', Object.entries(fields));
 const text = shape('StoredText'), integer = shape('StoredInteger');
 const stored = (shape, value) => ({shape, value});
 const state = stored(record({reviewed: shape('StoredBool'), runs: integer}), {runs: '4', reviewed: false});
-const recipe = () => ({definition: {kind: 'closed', flow: 'Flows.review'}, state: structuredClone(state)});
+const recipe = () => ({definition: {kind: 'closed', lifetime: {tag: 'Ordinary'}, flow: 'Flows.review'}, state: structuredClone(state)});
 const snapshot = {
   fields: [['total', stored(integer, '0')]],
   collections: [['items', []]],

@@ -128,7 +128,7 @@ migrateRecipe rationale (RecipeId name) (RecipeDefinition method (RecipeType typ
     StoredRecipe _ _ state <- required ("recipe " <> name) (FactId name) [(ident,value) | Fact ident value <- recipes]
     output <- decodeStored state >>= convert
     let selected = StoredRecipe method
-          (case method of OpenAgent _ -> Just typeName; ClosedAgent _ -> Nothing)
+          (case method of OpenAgent _ _ -> Just typeName; ClosedAgent _ _ -> Nothing)
           (RecordedValue shape (encode output))
     pure (StoredSnapshot fields collections
       [Fact ident (if ident == FactId name then selected else value) | Fact ident value <- recipes])

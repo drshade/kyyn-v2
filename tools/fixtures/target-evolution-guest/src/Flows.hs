@@ -1,4 +1,4 @@
-module Flows (review, State(..), oldFlow, OldState(..)) where
+module Flows (review, State(..), oldFlow, OldState(..), conversation) where
 import GHC.Generics (Generic)
 import Agentic.Contract (Contract)
 import qualified Agentic as A
@@ -15,3 +15,6 @@ review = A.act $ \(RecipeInput _ () state) -> pure (RecipeProposal [] state)
 oldFlow :: Integer
 oldFlow = 1
 data OldState = OldState Integer
+
+conversation :: Flow Integer Bool
+conversation = A.arr (> 0)

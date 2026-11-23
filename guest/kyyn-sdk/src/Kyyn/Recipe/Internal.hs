@@ -9,7 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Aeson (Value)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(OpenAgent, ClosedAgent), FlowEntryRef)
+import Kyyn.Types.KnowledgeBase (Lifetime, Recipe(OpenAgent, ClosedAgent), FlowEntryRef)
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Types.Fact (Fact)
@@ -24,18 +24,18 @@ data RecipeType state = RecipeType Text StoredShape
 -- | A recipe's instructions or flow and its typed state binding.
 data RecipeDefinition state = RecipeDefinition Recipe (RecipeType state)
 
-data StoredDefinition = OpenDefinition Text Text | ClosedDefinition FlowEntryRef deriving (Eq, Show)
+data StoredDefinition = OpenDefinition Lifetime Text Text | ClosedDefinition Lifetime FlowEntryRef deriving (Eq, Show)
 data StoredRecipe = StoredRecipe StoredDefinition Value deriving (Eq, Show)
 
 recipeMethod :: StoredDefinition -> Recipe
-recipeMethod (OpenDefinition instructions _) = OpenAgent instructions
-recipeMethod (ClosedDefinition flow) = ClosedAgent flow
+recipeMethod (OpenDefinition lifetime instructions _) = OpenAgent lifetime instructions
+recipeMethod (ClosedDefinition lifetime flow) = ClosedAgent lifetime flow
 
 storeRecipe :: RecipeDefinition state -> state -> StoredRecipe
 storeRecipe (RecipeDefinition method (RecipeType name _ encode _)) state =
   StoredRecipe (case method of
-    OpenAgent instructions -> OpenDefinition instructions name
-    ClosedAgent flow -> ClosedDefinition flow) (encode state)
+    OpenAgent lifetime instructions -> OpenDefinition lifetime instructions name
+    ClosedAgent lifetime flow -> ClosedDefinition lifetime flow) (encode state)
 
 readRecipeState :: RecipeId -> RecipeType state -> StoredRecipe
   -> Either EvolutionFailure state

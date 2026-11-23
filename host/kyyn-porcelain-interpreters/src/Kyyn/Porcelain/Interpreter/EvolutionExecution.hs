@@ -16,7 +16,7 @@ import Kyyn.Domain.Contract (checkRootLayout)
 import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (RecipeId(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..), Lifetime(..), FlowEntryRef(..))
 import Kyyn.Domain.Plugin (pluginName)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.FileTree (FileTree, files)
@@ -43,8 +43,8 @@ runEvolutionExecution = interpret $ \_ -> \case
       (EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ _ explanation _ kind) target change _))
       stored@(Stored.StoredSnapshot _ _ recipes) accepted) -> runExceptT $ do
     let reference (Stored.RecordedRecipe definition _) = case definition of
-          Value.OpenRecipe _ name -> OpenState (Text.pack name)
-          Value.ClosedRecipe (FlowEntryRef name) -> ClosedFlow name
+          Value.OpenRecipe _ _ name -> OpenState (Text.pack name)
+          Value.ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name
         references = [reference recipe | Fact _ recipe <- recipes]
     selected <- case kind of
       AdHoc -> pure Nothing

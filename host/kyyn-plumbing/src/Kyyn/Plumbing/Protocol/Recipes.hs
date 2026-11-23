@@ -15,48 +15,51 @@ import Kyyn.Domain.Recipe (KnowledgeBase(..), RecipeDefinition(..), ProposedReci
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 
+lifetimeShape :: Shape
+lifetimeShape = Union [("Ordinary",Nothing),("Interactive",Nothing)]
+
 methodShape :: Shape
 methodShape = Union
-  [("OpenAgent", Just (Record [("instructions",Scalar TextScalar)])),
-   ("ClosedAgent", Just (Record [("flow", Scalar TextScalar)]))]
+  [("OpenAgent", Just (Record [("lifetime",lifetimeShape),("instructions",Scalar TextScalar)])),
+   ("ClosedAgent", Just (Record [("lifetime",lifetimeShape),("flow", Scalar TextScalar)]))]
 
 recipeDefinitionShape :: Shape
 recipeDefinitionShape = Union
-  [("OpenAgent",Just (Record [("instructions",Scalar TextScalar),("stateType",Scalar TextScalar)])),
-   ("ClosedAgent",Just (Record [("flow",Scalar TextScalar)]))]
+  [("OpenAgent",Just (Record [("lifetime",lifetimeShape),("instructions",Scalar TextScalar),("stateType",Scalar TextScalar)])),
+   ("ClosedAgent",Just (Record [("lifetime",lifetimeShape),("flow",Scalar TextScalar)]))]
 
 recipesShape :: Shape
 recipesShape = List (Record [("id", Scalar TextScalar), ("value", recipeDefinitionShape)])
 
 methodValue :: Recipe -> Value
-methodValue (OpenAgent instructions) = object
-  ["tag" .= ("OpenAgent" :: String), "value" .= object ["instructions" .= instructions]]
-methodValue (ClosedAgent (FlowEntryRef entry)) = object
-  ["tag" .= ("ClosedAgent" :: String), "value" .= object ["flow" .= entry]]
+methodValue (OpenAgent lifetime instructions) = object
+  ["tag" .= ("OpenAgent" :: String), "value" .= object ["lifetime" .= lifetime,"instructions" .= instructions]]
+methodValue (ClosedAgent lifetime (FlowEntryRef entry)) = object
+  ["tag" .= ("ClosedAgent" :: String), "value" .= object ["lifetime" .= lifetime,"flow" .= entry]]
 
 parseMethod :: Value -> Parser Recipe
 parseMethod = exact "Recipe method" ["tag","value"] (\values -> do
       tag <- values .: "tag" :: Parser String
       payload <- values .: "value"
       case tag of
-        "OpenAgent" -> exact "OpenAgent" ["instructions"] (\p -> OpenAgent <$> p .: "instructions") payload
-        "ClosedAgent" -> exact "ClosedAgent" ["flow"] (\p -> ClosedAgent . FlowEntryRef <$> p .: "flow") payload
+        "OpenAgent" -> exact "OpenAgent" ["lifetime","instructions"] (\p -> OpenAgent <$> p .: "lifetime" <*> p .: "instructions") payload
+        "ClosedAgent" -> exact "ClosedAgent" ["lifetime","flow"] (\p -> ClosedAgent <$> p .: "lifetime" <*> (FlowEntryRef <$> p .: "flow")) payload
         _ -> fail "Unknown recipe constructor")
 
 recipeDefinitionValue :: RecipeDefinition -> Value
-recipeDefinitionValue (OpenRecipe instructions stateType) = object
-  ["tag" .= ("OpenAgent" :: String), "value" .= object ["instructions" .= instructions,"stateType" .= stateType]]
-recipeDefinitionValue (ClosedRecipe (FlowEntryRef entry)) = object
-  ["tag" .= ("ClosedAgent" :: String), "value" .= object ["flow" .= entry]]
+recipeDefinitionValue (OpenRecipe lifetime instructions stateType) = object
+  ["tag" .= ("OpenAgent" :: String), "value" .= object ["lifetime" .= lifetime,"instructions" .= instructions,"stateType" .= stateType]]
+recipeDefinitionValue (ClosedRecipe lifetime (FlowEntryRef entry)) = object
+  ["tag" .= ("ClosedAgent" :: String), "value" .= object ["lifetime" .= lifetime,"flow" .= entry]]
 
 parseRecipeDefinition :: Value -> Parser RecipeDefinition
 parseRecipeDefinition = exact "Recipe definition" ["tag","value"] $ \values -> do
   tag <- values .: "tag" :: Parser String
   payload <- values .: "value"
   case tag of
-    "OpenAgent" -> exact "OpenAgent" ["instructions","stateType"]
-      (\p -> OpenRecipe <$> p .: "instructions" <*> p .: "stateType") payload
-    "ClosedAgent" -> exact "ClosedAgent" ["flow"] (\p -> ClosedRecipe . FlowEntryRef <$> p .: "flow") payload
+    "OpenAgent" -> exact "OpenAgent" ["lifetime","instructions","stateType"]
+      (\p -> OpenRecipe <$> p .: "lifetime" <*> p .: "instructions" <*> p .: "stateType") payload
+    "ClosedAgent" -> exact "ClosedAgent" ["lifetime","flow"] (\p -> ClosedRecipe <$> p .: "lifetime" <*> (FlowEntryRef <$> p .: "flow")) payload
     _ -> fail "Unknown recipe constructor"
 
 recipesValue :: [Fact RecipeDefinition] -> Value

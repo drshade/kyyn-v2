@@ -104,7 +104,7 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
   cli(['root', 'recipe', 'describe', 'sync', '--dot', '--mermaid'], 2, false);
   const noRuntime = ['--nix', path.join(temporary, 'absent')];
   assert.deepEqual(cli([...noRuntime, 'root', 'recipe', 'show', 'sync']).result.recipe,
-    { kind: 'ClosedAgent', flow: 'Tasks.reconcile' });
+    { kind: 'ClosedAgent', lifetime: {tag: 'Ordinary'}, flow: 'Tasks.reconcile' });
   assert.match(JSON.stringify(cli([...noRuntime, 'evolution', 'show', closed.id])), /Tasks.reconcile/);
   const changed = cli(['evolution', 'new', 'new-schema']).result;
   const changedTarget = path.join(changed.path, 'target');

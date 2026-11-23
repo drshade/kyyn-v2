@@ -13,7 +13,7 @@ import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
 import Kyyn.Domain.Recipe (RecipeDefinition(..), checkRecipeDefinitions)
 import Kyyn.Domain.Root (SourceRoot(..))
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), FlowEntryRef(..))
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, guestSources, GuestSelection(..), RecipeReference(..))
 import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection, describeGuest)
@@ -25,17 +25,23 @@ inspectRecipeContracts (SourceRoot schema code _ _) definitions = runExceptT $ d
   _ <- ExceptT (pure (checkRecipeDefinitions definitions))
   if null definitions then pure [] else do
     let references = [case definition of
-          OpenRecipe _ name -> OpenState (Text.pack name)
-          ClosedRecipe (FlowEntryRef name) -> ClosedFlow name | Fact _ definition <- definitions]
-    source <- either (throwE . pure . errorDiagnostic "recipe.sources") pure (guestSources (RecipeEntries references) (files code))
+          OpenRecipe _ _ name -> OpenState (Text.pack name)
+          ClosedRecipe lifetime (FlowEntryRef name) -> case lifetime of Ordinary -> ClosedFlow name; Interactive -> InteractiveFlow name | Fact _ definition <- definitions]
+    source <- either (throwE . pure . errorDiagnostic "recipe.sources") pure (guestSources (RecipeEntries (references ++ [OpenState "()" | any (\ref -> case ref of InteractiveFlow{} -> True; _ -> False) references])) (files code))
     program <- ExceptT (compileGuest source)
     description <- ExceptT (describeGuest program)
     traverse (\definition@(Fact _ method) -> case method of
-      OpenRecipe _ name -> case [selected.contract | G.ContractEntry actual selected <- checkedEntries description,
+      OpenRecipe _ _ name -> case [selected.contract | G.ContractEntry actual selected <- checkedEntries description,
           actual == "$state." <> Text.pack name] of
         [contract] -> pure (definition,name,contract)
         _ -> missing name
-      ClosedRecipe (FlowEntryRef reference) -> case [(root.contract,state.contract) |
+      ClosedRecipe Interactive (FlowEntryRef reference) -> do
+        unless (any (\entry -> case entry of G.InteractiveEntry _ name _ -> name == reference; _ -> False)
+          (checkedEntries description)) (missing (Text.unpack reference))
+        case [selected.contract | G.ContractEntry "$state.()" selected <- checkedEntries description] of
+          [unit] -> pure (definition,"()",unit)
+          _ -> missing "()"
+      ClosedRecipe Ordinary (FlowEntryRef reference) -> case [(root.contract,state.contract) |
           G.RecipeEntry _ actual (G.RecipeContracts root _ state) <- checkedEntries description, actual == reference] of
         [(root,contract)] -> do
           unless (contractId root == contractId (rootSchema schema)) (throwE

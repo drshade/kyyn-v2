@@ -2,6 +2,7 @@
 -- types, including unused empty/None annotations, without an old Root contract.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Data.Aeson (object, (.=), Value(..))
 import qualified Data.ByteString as Bytes
@@ -36,7 +37,7 @@ main = do
       steps = [SnapshotStep Authored reason
         [SnapshotFactChange "items" (FactId "one") (Just old) (Just new),
          SnapshotFieldChange "optional" (Just (none text)) (Just (none (Scalar BoolScalar))),
-         SnapshotRecipeChange (FactId "review") Nothing (Just (RecordedRecipe (OpenRecipe "Review" "State") state))],
+         SnapshotRecipeChange (FactId "review") Nothing (Just (RecordedRecipe (OpenRecipe Ordinary "Review" "State") state))],
         SnapshotStep TargetProjection reason [SnapshotMembershipChange "new" Nothing (Just [])]]
       encode = runPureEff . runDhallHandling . encodeSnapshotArchive identity target []
       decode = runPureEff . runDhallHandling . decodeSnapshotArchive

@@ -12,7 +12,7 @@ import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..))
+import Kyyn.Types.KnowledgeBase (Lifetime(..), Recipe(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -41,8 +41,9 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
   location <- either (failure "kb.path") pure (rootLocation kb)
   root@(Root _ _ _ recipes) <- ExceptT (loadRootAt repository revision (Subtree location))
   (entry,state) <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
-    [StoredRecipe (ClosedAgent value) _ _ state] -> pure (value,state)
-    [StoredRecipe (OpenAgent _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
+    [StoredRecipe (ClosedAgent Ordinary value) _ _ state] -> pure (value,state)
+    [StoredRecipe (ClosedAgent Interactive _) _ _ _] -> failure "recipe.interactive" "Use flow start for this interactive recipe"
+    [StoredRecipe (OpenAgent _ _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
     _ -> failure "recipe.unknown" ("No recipe named " ++ Text.unpack name)
   prepared <- ExceptT (prepareRecipeFlow root entry state request)
   ExceptT $ withRecipeRun (PreparedRecipeRun kb recipe entry revision (entryProgram prepared.entry).identity prepared.graph prepared.mermaid) $ \writer@(RecipeRunWriter _ header) -> do

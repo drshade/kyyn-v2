@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs #-}
 module RecipeTests (recipeTests) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import Effectful (Eff, runPureEff)
@@ -22,7 +23,7 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 
 recipeTests :: IO ()
 recipeTests = do
-  let recipe = Fact (FactId "syncTodos") (OpenRecipe "Read current documents, then explain the proposed changes." "()")
+  let recipe = Fact (FactId "syncTodos") (OpenRecipe Ordinary "Read current documents, then explain the proposed changes." "()")
       check label condition = unless condition (fail label)
       kb = KnowledgeBase repository (Subtree (either error id (relativePath "nested/kb")))
       at = either error id (gitRevision (replicate 40 'a'))
@@ -48,4 +49,4 @@ recording selected = interpret $ \_ request -> case request of
   _ -> error "Recipe discovery performed a non-document Git operation"
 
 recipeData :: ByteString
-recipeData = "let Recipe = < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"
+recipeData = "let Recipe = < OpenAgent : { lifetime : < Ordinary | Interactive >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive >, flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { lifetime = < Ordinary | Interactive >.Ordinary, instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"

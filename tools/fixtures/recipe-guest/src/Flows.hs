@@ -54,7 +54,7 @@ trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
   A.>>> (A.draftWith [A.tool "helper" "Nested helper" (A.draft "inner" :: Flow Text Text)] "outer" :: Flow Text Text)
   A.>>> A.arr (const (RecipeProposal [] (State 1)))
 
--- The connector must run only on the first attempt; the reply completes the proposal.
+-- The connector must run only on the first attempt; the reply becomes the typed result.
 waiting :: Flow Integer Integer
 waiting = A.durably integer number (\_ runs -> do
     count <- ExceptT (Files.count files ())

@@ -57,7 +57,7 @@ decodeStoredRecipes definitions tree = runExceptT $ do
     (Fact (FactId name) _,_,contract) <- definitions] tree)
   traverse (\(Fact identity@(FactId name) definition,stateType,contract) -> do
     value <- maybe (bad ("Missing state for " ++ Text.unpack name)) pure (lookup (RecipeId name) states)
-    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ authored -> authored; ClosedRecipe _ -> stateType) contract value))) definitions
+    pure (Fact identity (StoredRecipe (recipeMethod definition) (case definition of OpenRecipe _ _ authored -> authored; ClosedRecipe _ _ -> stateType) contract value))) definitions
 
 encodeRecipeContracts :: DhallHandling :> es
   => [Fact StoredRecipe] -> Eff es (Either [Diagnostic] ByteString)

@@ -80,7 +80,7 @@ resolveModules libdir roots requested = do
       candidates = authored ++ libraries ++ fixed
       choose value = case sortOn (negate . length)
         [name | name <- candidates, name == value || (name ++ ".") `isPrefixOf` value] of
-        name:_ | not (any (`isPrefixOf` value) ["Kyyn.Plugins.","Kyyn.Workspace.Target.RecipeTypes.","Kyyn.Workspace.Target.RecipeFlows."]) -> name
+        name:_ | not (any (`isPrefixOf` value) ["Kyyn.Plugins.","Kyyn.Workspace.Target.RecipeTypes.","Kyyn.Workspace.Target.RecipeFlows.","Kyyn.Workspace.Target.InteractiveFlows."]) -> name
         _ -> intercalate "." (takeWhile (\part -> case part of first:_ -> not (isLower first); [] -> False) (map Text.unpack (Text.splitOn "." (Text.pack value))))
   pure (nub (map choose requested))
 
@@ -308,7 +308,7 @@ buildEvolutionFull compiler libdir generated basePackages destination references
     pure [case reference of
       OpenState stateName -> "Kyyn.Workspace.Target.RecipeTypes." ++ Text.unpack stateName
       ClosedFlow _ -> "Kyyn.Workspace.Target.RecipeFlows." ++ name
-      InteractiveFlow _ -> "Kyyn.Workspace.Target.RecipeFlows." ++ name
+      InteractiveFlow _ -> "Kyyn.Workspace.Target.InteractiveFlows." ++ name
       | reference <- references,
         let selected = case reference of OpenState value -> value; ClosedFlow value -> value; InteractiveFlow value -> value,
         Right parsed <- [qualifiedReference (case reference of OpenState _ -> True; _ -> False) selected],

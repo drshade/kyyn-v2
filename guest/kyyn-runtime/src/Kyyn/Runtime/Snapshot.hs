@@ -16,8 +16,8 @@ snapshotWire (StoredSnapshot fields collections recipes) = SnapshotWire
   <*> pure [(name,[(ident,encode value) | Fact (FactId ident) value <- members]) | (name,members) <- collections]
   <*> traverse (\(Fact (FactId name) (StoredRecipe method selected value)) -> do
     definition <- case (method,selected) of
-      (OpenAgent instructions,Just stateType) -> Right (OpenWire instructions stateType)
-      (ClosedAgent (FlowEntryRef flow),Nothing) -> Right (ClosedWire flow)
+      (OpenAgent lifetime instructions,Just stateType) -> Right (OpenWire lifetime instructions stateType)
+      (ClosedAgent lifetime (FlowEntryRef flow),Nothing) -> Right (ClosedWire lifetime flow)
       _ -> Left "Invalid recipe definition in snapshot"
     pure (name,RecipeWire definition (encode value))) recipes
   where encode (RecordedValue shape value) = ValueWire shape value
@@ -36,8 +36,8 @@ fromSnapshotWire (SnapshotWire fields collections recipes) = do
   states <- traverse (\(identity,RecipeWire definition value) -> do
     ident <- either (Left . Text.unpack) Right (parseFactId identity)
     let recipe = case definition of
-          OpenWire instructions name -> StoredRecipe (OpenAgent instructions) (Just name) (decode value)
-          ClosedWire name -> StoredRecipe (ClosedAgent (FlowEntryRef name)) Nothing (decode value)
+          OpenWire lifetime instructions name -> StoredRecipe (OpenAgent lifetime instructions) (Just name) (decode value)
+          ClosedWire lifetime name -> StoredRecipe (ClosedAgent lifetime (FlowEntryRef name)) Nothing (decode value)
     pure (Fact ident recipe)) recipes
   pure (StoredSnapshot [(name,decode value) | (name,value) <- fields] members states)
   where decode (ValueWire shape value) = RecordedValue shape value

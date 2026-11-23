@@ -39,8 +39,8 @@ try {
   write('root/facts/root.dhall','{=}');
   write('root/facts/items/index.dhall','["one"]');
   write('root/facts/items/one.dhall','{ id = "one", value = { amount = +7 } }');
-  const method = '< OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } >';
-  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { flow = ${methodValue.slice(12)} }` : `OpenAgent { instructions = "Obsolete", stateType = "${stateType}" }`} }`;
+  const method = '< OpenAgent : { lifetime : < Ordinary | Interactive >, instructions : Text, stateType : Text } | ClosedAgent : { lifetime : < Ordinary | Interactive >, flow : Text } >';
+  const definition = (id, methodValue, stateType) => `{ id = "${id}", value = ${method}.${methodValue.startsWith('ClosedAgent') ? `ClosedAgent { lifetime = < Ordinary | Interactive >.Ordinary, flow = ${methodValue.slice(12)} }` : `OpenAgent { lifetime = < Ordinary | Interactive >.Ordinary, instructions = "Obsolete", stateType = "${stateType}" }`} }`;
   write('root/recipes.dhall', '[' + [definition('weekly','ClosedAgent "Flows.review"',''),
     definition('obsolete','ClosedAgent "Missing.obsolete"',''),definition('notAFlow','ClosedAgent "Flows.oldFlow"',''),
     definition('noContract','OpenAgent "Obsolete"','Flows.OldState')].join(',') + ']');
@@ -66,8 +66,12 @@ try {
   assert.equal(cli(['evolution','accept',draft.id]).accepted,true);
   assert.deepEqual(cli(['evolution','show',draft.id]).report,report);
   assert.deepEqual(cli(['root','fact','show','items','one']).value,{amount:'7',note:'migrated'});
-  assert.equal(cli(['root','recipe','list']).recipes.length,1);
+  assert.equal(cli(['root','recipe','list']).recipes.length,2);
   cli(['root','check']);
+  const interactive = cli(['root','recipe','show','conversation']);
+  assert.equal(interactive.recipe.lifetime.tag, 'Interactive');
+  cli(['root','recipe','describe','conversation','--format','tree']);
+  cli(['root','recipe','run','conversation'], 1);
   const replay = cli(['root','recipe','run','weekly']);
   cli(['evolution','check',replay.id]);
   console.log('Stored migration, input scaffold, stable target names, closed state, archive, acceptance and running the migrated recipe passed.');

@@ -30,8 +30,8 @@ encodeSnapshotWire (StoredSnapshot fields collections recipes) = SnapshotWire
   <*> traverse (\(Fact (FactId identity) (RecordedRecipe definition state)) -> do
     value <- encode state
     pure (identity,RecipeWire (case definition of
-      OpenRecipe instructions name -> OpenWire instructions (Text.pack name)
-      ClosedRecipe (FlowEntryRef flow) -> ClosedWire flow) value)) recipes
+      OpenRecipe lifetime instructions name -> OpenWire lifetime instructions (Text.pack name)
+      ClosedRecipe lifetime (FlowEntryRef flow) -> ClosedWire lifetime flow) value)) recipes
   where encode (RecordedValue shape value) = ValueWire <$> storageShape shape <*> pure value
 
 -- Guest-produced observations are untrusted. Reuse the same hermetic storage
@@ -52,8 +52,8 @@ decodeSnapshotWire (SnapshotWire fields collections recipes) = runExceptT $ do
       file (prefix ++ encodeComponent identity ++ ".dhall") (inferredShape shape) value) values
     pure (index:facts)) collections
   let definitions = [Fact (FactId identity) (case definition of
-        OpenWire instructions name -> OpenRecipe instructions (Text.unpack name)
-        ClosedWire flow -> ClosedRecipe (FlowEntryRef flow)) | (identity,RecipeWire definition _) <- recipes]
+        OpenWire lifetime instructions name -> OpenRecipe lifetime instructions (Text.unpack name)
+        ClosedWire lifetime flow -> ClosedRecipe lifetime (FlowEntryRef flow)) | (identity,RecipeWire definition _) <- recipes]
   definitionBytes <- ExceptT (encodeRecipes definitions)
   definitionPath <- checked (relativePath "recipes.dhall")
   states <- traverse (\(identity,RecipeWire _ (ValueWire shape value)) ->

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeApplications, LambdaCase, OverloadedRecordDot #-}
-module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram, executeInteractiveRecipeProgram) where
+module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram, executeInteractiveProgram) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, object)
@@ -51,11 +51,11 @@ executeRecordedRecipeProgram :: (RecipeRunStore :> es, EvidenceStore :> es, Plug
 executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap fst)
   (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) Nothing program plugins model [] arguments)
 
-executeInteractiveRecipeProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
+executeInteractiveProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
   GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => FlowJournalIdentity -> (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin]
   -> Maybe ModelConfiguration -> Value -> Eff es (Either [Diagnostic] Value)
-executeInteractiveRecipeProgram identity observe program plugins model arguments = fmap (fmap fst)
+executeInteractiveProgram identity observe program plugins model arguments = fmap (fmap fst)
   (executeProgram (Just observe) (Just answerJournal) program plugins model [] arguments)
   where
     answerJournal (InitialiseJournal namespace revision)

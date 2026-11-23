@@ -6,11 +6,12 @@ module Kyyn.Types.SnapshotWire
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Text (Text)
+import Kyyn.Types.KnowledgeBase (Lifetime)
 import Kyyn.Types.StoredShape (StoredShape)
 import Kyyn.Types.Json (exactObject)
 
 data ValueWire = ValueWire StoredShape Value deriving (Eq, Show)
-data DefinitionWire = OpenWire Text Text | ClosedWire Text deriving (Eq, Show)
+data DefinitionWire = OpenWire Lifetime Text Text | ClosedWire Lifetime Text deriving (Eq, Show)
 data RecipeWire = RecipeWire DefinitionWire ValueWire deriving (Eq, Show)
 data SnapshotWire = SnapshotWire
   [(Text,ValueWire)] [(Text,[(Text,ValueWire)])] [(Text,RecipeWire)]
@@ -23,16 +24,16 @@ instance FromJSON ValueWire where
     exactObject "Stored value" ["shape","value"] (const (pure ())) (Object o)
     ValueWire <$> o .: "shape" <*> o .: "value"
 instance ToJSON DefinitionWire where
-  toJSON (OpenWire instructions stateType) = object
-    ["kind" .= String "open","instructions" .= instructions,"stateType" .= stateType]
-  toJSON (ClosedWire flow) = object ["kind" .= String "closed","flow" .= flow]
+  toJSON (OpenWire lifetime instructions stateType) = object
+    ["kind" .= String "open","lifetime" .= lifetime,"instructions" .= instructions,"stateType" .= stateType]
+  toJSON (ClosedWire lifetime flow) = object ["kind" .= String "closed","lifetime" .= lifetime,"flow" .= flow]
 instance FromJSON DefinitionWire where
   parseJSON = withObject "Stored definition" $ \o -> do
     kind <- o .: "kind" :: Parser Text
     case kind of
-      "open" -> exactObject "Open definition" ["kind","instructions","stateType"] (const (pure ())) (Object o) >>
-        (OpenWire <$> o .: "instructions" <*> o .: "stateType")
-      "closed" -> exactObject "Closed definition" ["kind","flow"] (const (pure ())) (Object o) >> (ClosedWire <$> o .: "flow")
+      "open" -> exactObject "Open definition" ["kind","lifetime","instructions","stateType"] (const (pure ())) (Object o) >>
+        (OpenWire <$> o .: "lifetime" <*> o .: "instructions" <*> o .: "stateType")
+      "closed" -> exactObject "Closed definition" ["kind","lifetime","flow"] (const (pure ())) (Object o) >> (ClosedWire <$> o .: "lifetime" <*> o .: "flow")
       _ -> fail "Unknown stored definition kind"
 instance ToJSON RecipeWire where
   toJSON (RecipeWire definition state) = object ["definition" .= definition,"state" .= state]

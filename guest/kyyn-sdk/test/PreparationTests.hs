@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
 module Main (main) where
 
+import Kyyn.Types.KnowledgeBase (Lifetime(..))
 import Control.Monad (unless)
 import Data.Either (isLeft)
 import Data.Text (Text)
@@ -29,7 +30,7 @@ main = do
   count <- right (encodeStored (2 :: Integer))
   state <- right (encodeStored False)
   let initial = StoredSnapshot [("count",count)] [("people",[Fact (FactId "one") old])]
-        [Fact (FactId "weekly") (StoredRecipe (OpenAgent "old") (Just "Old.State") state)]
+        [Fact (FactId "weekly") (StoredRecipe (OpenAgent Ordinary "old") (Just "Old.State") state)]
       target = Collection "people" (lens (\(KnowledgeBase values _) -> values)
         (\(KnowledgeBase _ recipes) values -> KnowledgeBase values recipes))
         :: Collection (KnowledgeBase [Fact New]) New
@@ -39,7 +40,7 @@ main = do
       convert = traverse (\(Fact ident (Old value)) -> Right (Fact ident (New value True)))
       reason = Rationale "Explicit migration" []
       field = TargetField "total" :: TargetField [Fact New] Integer
-      recipe = RecipeDefinition (OpenAgent "new")
+      recipe = RecipeDefinition (OpenAgent Ordinary "new")
         (RecipeType "New.State" StoredBool Bool
           (\value -> case value of Bool result -> Right result; _ -> Left "expected boolean"))
       action = do
