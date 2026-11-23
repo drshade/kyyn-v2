@@ -41,7 +41,7 @@ Use per-KB processes with explicit repository/KB selection:
   agent can use. No manual configuration expertise is required of the human;
   automatic registration for every client is not a prerequisite.
 - An explicitly launched per-KB interactive worker owns execution attempts and
-  event-driven resumption under [ADR 0028](0028-agentic-workflows.md#runtime-ownership-and-observation).
+  event-driven resumption under [ADR 0030](0030-interactive-agentic-workflows.md#runtime-ownership-and-observation).
   Persisted instances survive its shutdown; stopping it is not flow cancellation.
 - Ordinary CLI operations execute directly and exit, with structured results and
   useful exit codes. They require neither a Web server nor an MCP connection.
@@ -63,7 +63,7 @@ listing drafts must remain usable independently. Compiled guest outputs use Nix
 output retention and reuse as described in [ADR 0002](0002-runtime.md). Clients refresh persisted
 workspace/results to observe each other's work; collaborative editing or
 ordinary invocation cancellation remains process-scoped. Interactive instance
-cancellation is persisted and consumed by its worker under ADR 0028.
+cancellation is persisted and consumed by its worker under ADR 0030.
 
 Closing means stopping the relevant server/connection or allowing a one-shot
 command to finish. Keep drafts as files; closing neither accepts nor deletes them.
@@ -86,7 +86,7 @@ deletion and failure behavior. It is not a claim that slice 3 alone can accept.
 ## Automation is ordinary CLI scripting
 
 One-shot automation uses the scriptable CLI. Interactive flow execution uses
-ADR 0028's explicit worker; it is not a prerequisite for ordinary scripting. An external shell script creates an evolution workspace, invokes
+ADR 0030's explicit worker; it is not a prerequisite for ordinary scripting. An external shell script creates an evolution workspace, invokes
 the user's chosen agent harness to populate/trial/refine it and mark it Ready,
 then asks Kyyn to accept it and update a declared output. The script is illustrative;
 the helper and argument-file convention are not additional Kyyn interfaces:

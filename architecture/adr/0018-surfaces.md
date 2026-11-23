@@ -797,7 +797,7 @@ not require the workbench, static publishing or a view/query type-link checker.
 
 The `kyyn-v2 flow` command group and matching MCP operations expose interactive
 instance start, inspection, fulfilment, awaiting outcomes, cancellation and
-external-harness completion. [ADR 0028](0028-agentic-workflows.md#interactive-flows-have-a-durable-lifetime)
+external-harness completion. [ADR 0030](0030-interactive-agentic-workflows.md#interactive-flows-have-a-durable-lifetime)
 owns their typed contracts, authority, parent/child behaviour and persistence.
 `kyyn-v2 flow worker` runs the selected KB's foreground worker; it does not start
 Web or accept evolutions. These operations follow the ordinary KB-selection and

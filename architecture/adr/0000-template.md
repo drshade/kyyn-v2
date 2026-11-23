@@ -7,8 +7,8 @@ title: 'Decision title'
 
 ## Context
 
-What situation, evidence or requirement needs a significant decision? Link the
-motivating Issue.
+What situation, evidence or requirement needs a significant decision? State the
+context independently of issue or PR links; issues and PRs own outstanding work.
 
 ## Decision
 

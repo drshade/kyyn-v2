@@ -593,7 +593,7 @@ These boundaries guide authoring and interpretation, not a claim of containment.
 
 ### Live connector methods and events
 
-[ADR 0028](0028-agentic-workflows.md#live-plugin-capabilities-and-waiting) owns
+[ADR 0030](0030-interactive-agentic-workflows.md#live-plugin-capabilities-and-waiting) owns
 interactive invocation, routing and durable waiting. Live connector registration
 names query/action implementations and event adapters using the same qualified
 Haskell entry mechanism as other connectors. Checked signatures determine input,

@@ -66,7 +66,7 @@ an external runner with explicit acceptance intent, no interactive UI or daemon.
 
 Interactive sales review queries current opportunities, opens owner conversations,
 waits across restarts and proposes KB changes. Parent flows may finish while child
-reviews continue. [ADR 0028](adr/0028-agentic-workflows.md) owns this lifecycle.
+reviews continue. [ADR 0030](adr/0030-interactive-agentic-workflows.md) owns this lifecycle.
 
 ## Deliberate exclusions
 
