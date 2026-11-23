@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, publishBytes, replaceTree, readTree, readSelectedTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, publishBytes, replaceTree, readTree, readSelectedTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, resolveDirectory, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -22,6 +22,7 @@ data FileSystem :: Effect where
   FileSize :: DirectoryScope -> RelativePath -> FileSystem m (Maybe Integer)
   RemoveFile :: DirectoryScope -> RelativePath -> FileSystem m ()
   EntryExists :: DirectoryScope -> RelativePath -> FileSystem m Bool
+  ResolveDirectory :: DirectoryScope -> FileSystem m (Maybe DirectoryScope)
   DirectoryExists :: DirectoryScope -> FileSystem m Bool
   CreateUniqueDirectory :: DirectoryScope -> FileSystem m RelativePath
   CreateDirectory :: DirectoryScope -> FileSystem m Bool
@@ -91,3 +92,6 @@ ensureIgnoredDirectory scope directory = do
   case existing of
     Nothing -> writeBytes scope ignore "*\n"
     Just _ -> pure ()
+
+resolveDirectory :: FileSystem :> es => DirectoryScope -> Eff es (Maybe DirectoryScope)
+resolveDirectory = send . ResolveDirectory

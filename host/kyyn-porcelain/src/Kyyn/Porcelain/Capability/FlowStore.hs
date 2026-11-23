@@ -2,7 +2,7 @@
 module Kyyn.Porcelain.Capability.FlowStore
   ( FlowStore(..), startInstance, listInstances, readInstance, beginAttempt
   , reportFrontier, finishInstance, blockInstance, cancelInstance
-  , queueDelivery, resolveDelivery
+  , queueDelivery, resolveDelivery, startPreparedInstance, readExecutionBundle, clearInstances
   ) where
 
 import Data.Aeson (Value)
@@ -10,10 +10,16 @@ import Data.Text (Text)
 import Effectful (Effect, Eff, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Domain.FlowBundleId (FlowBundleId)
+import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow, FlowBundle)
 import Kyyn.Domain.FlowInstance
 
 data FlowStore :: Effect where
   StartInstance :: Maybe FlowInstanceId -> Text -> FlowLaunch -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  -- Publish the immutable bundle and its first catalog reference under one lock.
+  StartPreparedInstance :: Maybe FlowInstanceId -> Text -> PreparedFlow -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  ReadExecutionBundle :: FlowBundleId -> FlowStore m (Either [Diagnostic] FlowBundle)
+  ClearInstances :: [FlowInstanceId] -> FlowStore m (Either FlowStoreProblem [FlowInstanceId])
   ListInstances :: FlowStore m [FlowInstance]
   ReadInstance :: FlowInstanceId -> FlowStore m (Maybe FlowInstance)
   -- Caller holds the per-instance attempt/journal lock for these worker operations.
@@ -48,3 +54,11 @@ queueDelivery :: FlowStore :> es => FlowInstanceId -> Text -> Text -> ReplyOrigi
 queueDelivery identity delivery wait origin = send . QueueDelivery identity delivery wait origin
 resolveDelivery :: FlowStore :> es => FlowInstanceId -> Text -> DeliveryOutcome -> Eff es (Either FlowStoreProblem FlowInstance)
 resolveDelivery identity delivery = send . ResolveDelivery identity delivery
+
+startPreparedInstance :: FlowStore :> es => Maybe FlowInstanceId -> Text -> PreparedFlow -> Eff es (Either FlowStoreProblem FlowInstance)
+startPreparedInstance parent key = send . StartPreparedInstance parent key
+readExecutionBundle :: FlowStore :> es => FlowBundleId -> Eff es (Either [Diagnostic] FlowBundle)
+readExecutionBundle = send . ReadExecutionBundle
+
+clearInstances :: FlowStore :> es => [FlowInstanceId] -> Eff es (Either FlowStoreProblem [FlowInstanceId])
+clearInstances = send . ClearInstances

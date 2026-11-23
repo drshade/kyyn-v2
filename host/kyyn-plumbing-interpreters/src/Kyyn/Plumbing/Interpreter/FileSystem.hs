@@ -102,6 +102,11 @@ runFileSystemIO parent = interpret $ \env -> \case
       Right _ -> pure True
       Left err | isDoesNotExistError err -> pure False
                | otherwise -> ioError err
+  ResolveDirectory scope -> native Failure.InspectEntry (scopePath scope) $ do
+    exists <- doesDirectoryExist (scopePath scope)
+    if not exists then pure Nothing else do
+      resolved <- Directory.canonicalizePath (scopePath scope)
+      either (ioError . userError) (pure . Just) (directoryScope resolved)
   DirectoryExists scope -> native Failure.InspectEntry (scopePath scope) (doesDirectoryExist (scopePath scope))
   EnsureDirectory scope -> native Failure.EnsureDirectory (scopePath scope) (createDirectoryIfMissing True (scopePath scope))
 
