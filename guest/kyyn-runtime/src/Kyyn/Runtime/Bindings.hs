@@ -4,7 +4,7 @@ module Kyyn.Runtime.Bindings (collection, contractCodec, recipeType, inferredRec
 
 import Kyyn.Types.StoredShape (storedShape)
 import Data.Text (Text)
-import Kyyn.Interactive.Internal (FlowRef(..))
+import Kyyn.Interactive.Internal (FlowDefinition(..))
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Optics (Lens')
@@ -49,9 +49,9 @@ rejectEvolution :: EvolutionFailure -> RecipeEvolution root state
 rejectEvolution (EvolutionFailure diagnostics) = recipeEdit (Rationale mempty []) (refuse diagnostics)
 
 interactiveFlow :: forall input output. (Contract input, Contract output)
-  => Text -> Either ProjectionError (FlowRef input output)
+  => Text -> Either ProjectionError (FlowDefinition input output)
 interactiveFlow reference = do
   input <- compileWire (contract @input)
   output <- compileWire (contract @output)
   state <- recipeType @() "()"
-  pure (FlowRef (Recipe.RecipeDefinition (ClosedAgent Interactive (FlowEntryRef reference)) state) input output)
+  pure (FlowDefinition (Recipe.RecipeDefinition (ClosedAgent Interactive (FlowEntryRef reference)) state) input output)

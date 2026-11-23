@@ -1,7 +1,7 @@
-module Kyyn.Interactive.Internal (FlowRef(..)) where
+module Kyyn.Interactive.Internal (FlowDefinition(..)) where
 
 import Kyyn.Contract (Codec)
 import Kyyn.Recipe.Internal (RecipeDefinition)
 
 -- Constructed by generated bindings from the actual compiled request/result types.
-data FlowRef input output = FlowRef (RecipeDefinition ()) (Codec input) (Codec output)
+data FlowDefinition input output = FlowDefinition (RecipeDefinition ()) (Codec input) (Codec output)

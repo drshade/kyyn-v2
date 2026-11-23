@@ -74,7 +74,7 @@ writeRecipeHandles libdir generated packages sourceRoots root handles = do
           candidate value = "(" ++ show value ++ ",mkName " ++ show (reference ++ "." ++ value) ++ "," ++ show (reference ++ "." ++ value) ++ ")"
       write name (["{-# LANGUAGE TemplateHaskell #-}","module " ++ name ++ " where",
         "import Language.Haskell.TH (mkName)", "import Kyyn.Build.RecipeTypes (flowDefinitions, interactiveDefinitions)",
-        "import Kyyn.Interactive (FlowRef)", "import qualified Kyyn.Interactive as Interactive",
+        "import Kyyn.Interactive (FlowDefinition)", "import qualified Kyyn.Interactive as Interactive",
         "import qualified Kyyn.Recipe as Recipe", "import Kyyn.Evolution (RecipeDefinition)",
         "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified " ++ Text.unpack (referenceModule root),
         "import qualified " ++ reference,

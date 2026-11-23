@@ -72,5 +72,5 @@ interactiveDefinitions candidates = concat <$> traverse (\(binding,implementatio
     unless (supportedInput && supportedOutput) (fail "Interactive request/result need Contract instances")
     let selected = AppE (AppTypeE (AppTypeE (VarE (mkName "Bindings.interactiveFlow")) input) output) (LitE (StringL reference))
         body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
-    pure [SigD (mkName binding) (AppT (AppT (ConT (mkName "FlowRef")) input) output),
+    pure [SigD (mkName binding) (AppT (AppT (ConT (mkName "FlowDefinition")) input) output),
       ValD (VarP (mkName binding)) (NormalB body) []]) candidates
