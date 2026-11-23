@@ -1,4 +1,4 @@
-module Flows (review, recursive, invalidRecursive, trace, waiting, waitingOrdinary) where
+module Flows (review, recursive, invalidRecursive, trace, waiting, waitingOrdinary, parentWaiting) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -9,6 +9,8 @@ import qualified Agentic.Schema as S
 import qualified Agentic.Value as V
 import Control.Monad.Trans.Except (ExceptT(..))
 import Kyyn.Agentic (Flow)
+import Kyyn.Interactive (FlowHandle, flowRef, startFlow)
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Connectors (files)
 import qualified Kyyn.Plugins.P_local_file.Files as Files
 import Kyyn.Recipe
@@ -73,3 +75,6 @@ waiting = A.durably integer number (\_ runs -> do
 waitingOrdinary :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
 waitingOrdinary = A.arr (\(RecipeInput _ () (State runs)) -> runs)
   A.>>> waiting A.>>> A.arr (\reply -> RecipeProposal [] (State reply))
+
+parentWaiting :: Flow Integer (FlowHandle Integer)
+parentWaiting = startFlow (flowRef (RecipeId "child") waiting)

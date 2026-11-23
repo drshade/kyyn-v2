@@ -20,19 +20,21 @@ data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
 data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
 data InteractiveInvocation
   = ResumeFlow Text Text Value | FulfilFlow Text Text Value Value
-  | RenderFlow DescriptionFormat | CaptureFlowGraph
+  | ValidateFlowInput Value | RenderFlow DescriptionFormat | CaptureFlowGraph
   deriving (Eq, Show)
 instance ToJSON InteractiveInvocation where
   toJSON (ResumeFlow namespace revision input) = object ["operation" .= String "resume",
     "namespace" .= namespace,"revision" .= revision,"input" .= input]
   toJSON (FulfilFlow namespace revision pending reply) = object ["operation" .= String "fulfil",
     "namespace" .= namespace,"revision" .= revision,"pending" .= pending,"reply" .= reply]
+  toJSON (ValidateFlowInput input) = object ["operation" .= String "validate-input","input" .= input]
   toJSON (RenderFlow format) = object ["operation" .= String "render","format" .= format]
   toJSON CaptureFlowGraph = object ["operation" .= String "graph"]
 instance FromJSON InteractiveInvocation where
   parseJSON value = withObject "interactive invocation" (\fields -> do
     operation <- fields .: "operation"
     case operation :: Text of
+      "validate-input" -> exactObject "flow input validation" ["operation","input"] (\request -> ValidateFlowInput <$> request .: "input") value
       "resume" -> exactObject "flow resume" ["operation","namespace","revision","input"]
         (\request -> ResumeFlow <$> request .: "namespace" <*> request .: "revision" <*> request .: "input") value
       "fulfil" -> exactObject "flow fulfil" ["operation","namespace","revision","pending","reply"]

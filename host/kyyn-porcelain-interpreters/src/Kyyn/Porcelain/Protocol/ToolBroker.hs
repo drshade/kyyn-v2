@@ -30,7 +30,7 @@ import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
 import qualified Kyyn.Plumbing.Capability.ModelTurn as Model
 import qualified Kyyn.Plumbing.Protocol.ModelTurn as Model
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginCall(..), success, failure)
-import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), encodeJournalLookup, decodeToolFrame)
+import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), FlowControlCall, encodeJournalLookup, decodeToolFrame)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead, loadCapturedInput, executeCapturedMethod)
 import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure, answerEvidence)
@@ -51,20 +51,20 @@ executeToolProgram program plugins model captured arguments = fmap (fmap fst)
 executeToolProgramCaptured :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeToolProgramCaptured = executeProgram Nothing Nothing
+executeToolProgramCaptured = executeProgram Nothing Nothing Nothing
 
 executeRecordedRecipeProgram :: (RecipeRunStore :> es, EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => RecipeRunWriter -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration
   -> Value -> Eff es (Either [Diagnostic] Value)
 executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap fst)
-  (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) Nothing program plugins model [] arguments)
+  (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) Nothing Nothing program plugins model [] arguments)
 
 executeInteractiveProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
   GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => FlowJournalIdentity -> (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin]
+  => FlowJournalIdentity -> (Value -> Eff es ()) -> (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin]
   -> Maybe ModelConfiguration -> Value -> Eff es (Either ProgramFailure Value)
-executeInteractiveProgram identity observe program plugins model arguments = fmap (fmap fst)
-  (executeProgramResult (Just observe) (Just answerJournal) program plugins model [] arguments)
+executeInteractiveProgram identity observe control program plugins model arguments = fmap (fmap fst)
+  (executeProgramResult (Just observe) (Just answerJournal) (Just control) program plugins model [] arguments)
   where
     answerJournal (InitialiseJournal namespace revision)
       | namespace == identity.namespace && revision == identity.revision = pure (object [])
@@ -73,17 +73,20 @@ executeInteractiveProgram identity observe program plugins model arguments = fma
     answerJournal (SaveJournal key value) = saveCompletion key value >> pure (object [])
 
 executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeProgram observe journal program plugins model captured arguments =
-  first programDiagnostics <$> executeProgramResult observe journal program plugins model captured arguments
+executeProgram observe journal control program plugins model captured arguments =
+  first programDiagnostics <$> executeProgramResult observe journal control program plugins model captured arguments
 
 executeProgramResult :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either ProgramFailure (Value, [EvidenceIndex]))
-executeProgramResult observe journal program plugins model captured arguments = runExceptT $ do
+executeProgramResult observe journal control program plugins model captured arguments = runExceptT $ do
   (result,contexts) <- ExceptT $ fmap (first InvocationFailure) $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
     conversation decodeToolFrame program arguments $ \case
+      ToolFlowControl call -> case control of
+        Nothing -> protocolFailure "flow-control is only available during hosted interactive recipe execution"
+        Just respond -> raise (raise (respond call))
       ToolJournal call -> case journal of
         Nothing -> protocolFailure "flow-journal is only available during interactive recipe execution"
         Just respond -> raise (raise (respond call))

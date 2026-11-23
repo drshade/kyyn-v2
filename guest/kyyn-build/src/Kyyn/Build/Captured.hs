@@ -10,6 +10,7 @@ import Language.Haskell.TH
 import Agentic.Contract (Contract)
 import Agentic.Questions (JudgeRequest, Answer)
 import qualified Agentic.Runtime as Agentic
+import Kyyn.Types.FlowControl (FlowControl)
 import Kyyn.Types.FlowJournal (JournalRequest)
 import Kyyn.Types.Evidence (EvidenceId, Evidence)
 import Kyyn.Types.Program (Program, Member, inject, request, (:+:))
@@ -56,14 +57,19 @@ toolCalls calls connectors methods = do
       journal = ForallC [PlainTV (mkName "result") SpecifiedSpec] []
         (GadtC [mkName "JournalCall"] [(Bang NoSourceUnpackedness NoSourceStrictness, AppT (ConT ''JournalRequest) (VarT (mkName "result")))]
           (AppT (ConT calls) (VarT (mkName "result"))))
-      additional = judgement : model : observation : journal : concatMap fst evidence
+      control = ForallC [PlainTV (mkName "result") SpecifiedSpec] []
+        (GadtC [mkName "FlowControlCall"] [(Bang NoSourceUnpackedness NoSourceStrictness, AppT (ConT ''FlowControl) (VarT (mkName "result")))]
+          (AppT (ConT calls) (VarT (mkName "result"))))
+      member = InstanceD Nothing [] (AppT (AppT (ConT ''Member) (ConT ''FlowControl)) (ConT calls))
+        [FunD 'inject [Clause [] (NormalB (ConE (mkName "FlowControlCall"))) []]]
+      additional = control : judgement : model : observation : journal : concatMap fst evidence
       append declaration = case declaration of
         DataD context name variables kind constructors derivingClauses | name == calls ->
           DataD context name variables kind (additional ++ constructors) derivingClauses
         other -> other
       existingTags = map connectorName methods
       tags = [DataD [] tag [] Nothing [] [] | tag <- nub (map connectorTag connectors), tag `notElem` existingTags]
-  pure (tags ++ map append declarations ++ concatMap snd evidence)
+  pure (member : tags ++ map append declarations ++ concatMap snd evidence)
   where
     plain = Bang NoSourceUnpackedness NoSourceStrictness
     eitherFetch = AppT (AppT (ConT ''Either) (ConT ''FetchError))

@@ -16,7 +16,7 @@ import Control.Monad.Trans.Except (ExceptT, runExceptT)
 import Kyyn.Contract
 import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.Types.Plugin (FetchError)
+import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Types.Program (Program)
 import Kyyn.Types.FlowJournal (JournalRequest)
 import Kyyn.Runtime.FlowJournal (guestJournal)
@@ -52,6 +52,9 @@ interactiveEntry reference sources dispatch runtime inject selected description 
             described <- either (fail . show) pure description
             writeReply transport (Json.object ["graph" Json..= Wire.encodeWith valueCodec (Flow.flowGraphValue (Flow.flowGraph described)),
               "mermaid" Json..= Flow.mermaid described])
+          ValidateFlowInput inputValue -> writeReply transport
+            (Wire.encodeWith (eitherCodec (runtimeCodec input.codec))
+              (either (Left . FetchError) Right (input.codec.decode (fromAeson inputValue))))
           ResumeFlow namespace revision inputValue -> do
             decoded <- either (fail . Text.unpack) pure (input.codec.decode (fromAeson inputValue))
             let durable = runtime { A.journal = Just (guestJournal inject (J.JournalIdentity namespace revision)) }

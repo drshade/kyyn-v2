@@ -38,6 +38,7 @@ handleFull (InLeft (WaitSeconds _)) = pure ()
 handleFull (InRight (JudgementCall _)) = pure (Left "unavailable")
 handleFull (InRight (ModelCall _)) = pure (Left "unavailable")
 handleFull (InRight (ObserveFlow _)) = pure ()
+handleFull (InRight (FlowControlCall _)) = error "Unexpected flow control"
 handleFull (InRight (JournalCall (InitialiseJournal _))) = pure ()
 handleFull (InRight (JournalCall (LookupJournal _))) = pure Nothing
 handleFull (InRight (JournalCall (SaveJournal _ _))) = pure ()

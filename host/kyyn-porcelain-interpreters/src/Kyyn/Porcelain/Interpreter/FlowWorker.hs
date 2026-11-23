@@ -34,6 +34,7 @@ import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournalLocked)
+import Kyyn.Porcelain.Interpreter.FlowControl (answerFlowControl)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, ProgramFailure(..), programDiagnostics)
 import qualified Kyyn.Types.Guest as G
 import System.FilePath ((</>))
@@ -125,7 +126,9 @@ runFlowWorker kb = interpret $ \_ -> \case
             Right _ -> record journal bundle entry current
         _ -> pure NoWork
     finished item = case item.status of Finished{} -> True; _ -> False
-    invoke journal bundle entry observe invocation = executeInteractiveProgram journal observe entry.entry bundle.plugins bundle.model (toJSON invocation)
+    invoke journal bundle entry observe invocation = case flowInstanceId journal.namespace of
+      Left message -> pure (Left (InvocationFailure [errorDiagnostic "flow.instance" message]))
+      Right parent -> executeInteractiveProgram journal observe (answerFlowControl parent bundle) entry.entry bundle.plugins bundle.model (toJSON invocation)
     protocol = either (Left . pure . errorDiagnostic "flow.protocol") Right
     record journal bundle entry current = withRecipeRun
       (Run.PreparedRecipeRun kb entry.declaration.recipe entry.declaration.entry bundle.revision

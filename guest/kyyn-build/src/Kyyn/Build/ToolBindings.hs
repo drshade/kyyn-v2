@@ -22,7 +22,7 @@ writeToolBindings generated roots plugins = do
         [method.implementation | (_index,_plugin,_connector,method) <- methods]
   modules <- traverse (fmap (Text.unpack . referenceModule) . either fail pure . qualifiedReference False) references
   write "KyynToolCalls" (unlines
-    (["{-# LANGUAGE TemplateHaskell #-}",
+    (["{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleInstances #-}",
       "module KyynToolCalls where", "import Kyyn.Build.Captured", "import Language.Haskell.TH (mkName)"] ++
       map ("import qualified " ++) (nub modules) ++
       ["$(toolCalls (mkName \"Calls\")",
@@ -74,12 +74,14 @@ writeToolBindings generated roots plugins = do
       "import Kyyn.Runtime.ToolEntry", "import Kyyn.Runtime.Transport (Transport)",
       "import Kyyn.Runtime.Flow (exchangeObservation)",
       "import Kyyn.Runtime.FlowJournal (exchangeJournal)",
+      "import Kyyn.Runtime.FlowControl (exchangeFlowControl)",
       "import Kyyn.Runtime.Judgement (exchangeJudgement)", "import Kyyn.Runtime.Model (exchangeModel)",
       "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
       "dispatch transport requestId (Calls.JudgementCall request) = exchangeJudgement transport requestId request",
       "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request",
       "dispatch transport requestId (Calls.ObserveFlow summary) = exchangeObservation transport requestId summary",
-      "dispatch transport requestId (Calls.JournalCall call) = exchangeJournal transport requestId call"] ++
+      "dispatch transport requestId (Calls.JournalCall call) = exchangeJournal transport requestId call",
+      "dispatch transport requestId (Calls.FlowControlCall call) = exchangeFlowControl transport requestId call"] ++
      concat [["dispatch transport requestId (Calls.ListEvidence_" ++ tag index ++ " (ConnectorInstance name)) =",
        "  exchangeEvidenceList transport requestId " ++ identity plugin connector ++ " name",
        "dispatch transport requestId (Calls.ReadEvidence_" ++ tag index ++ " (ConnectorInstance name) key) =",
