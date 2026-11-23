@@ -195,8 +195,8 @@ main = do
     Foldable.forM_ [EventReference "local-file" "Updates" "missing" "question",
       EventReference "local-file" "Updates" "updates" "missing",
       EventReference "local-file" "Other" "updates" "question"] $ \invalid -> do
-        result <- captureEvent invalid >>= right
-        case result of Left _ -> pure (); Right _ -> fail "Invalid event declaration captured"
+        refusedCapture <- captureEvent invalid >>= right
+        case refusedCapture of Left _ -> pure (); Right _ -> fail "Invalid event declaration captured"
     let originalBundle = interactive.bundle
         capturedBundle = FlowBundle originalBundle.revision originalBundle.program originalBundle.guest originalBundle.closure originalBundle.plugins
           (Just (ModelConfiguration Anthropic "fixture-model" (either error id (secretName "model-credential"))))
