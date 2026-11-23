@@ -69,7 +69,7 @@ forged _ request = case ((,) <$> compileContract (contract @request) <*> compile
  const imports=`module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Interactive
-import Kyyn.Evolution.KnowledgeBase (removeRecipe)
+import Kyyn.Evolution (removeRecipe)
 import qualified Kyyn.Workspace.Target.InteractiveFlows.Conversations as Flows
 import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_event_fixture.Updates as Updates

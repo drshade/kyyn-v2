@@ -594,7 +594,7 @@ main = do
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
 fixedCompilation program = interpret $ \_ (CompileGuest source) ->
-  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"],
+  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"], RecipeEntries [InteractiveFlow "Flows.eventWaiting"],
     RecipeEntries [InteractiveFlow "Flows.parentWaiting", InteractiveFlow "Flows.waiting"]] then pure (Right program)
   else error "Recipe path attempted a separate plugin or host-generated build"
 
