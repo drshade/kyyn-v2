@@ -66,7 +66,8 @@ waiting = A.arr (\(RecipeInput _ () (State runs)) -> runs)
   where
     number = C.primitive S.SNumber V.Number $ \value -> case value of
       V.Number n -> Right n
-      _ -> Left "Expected floating-point result, not an integer"
+      V.Integer n -> Right (fromInteger n)
+      _ -> Left "Expected numeric result"
     integer = C.primitive S.SInteger V.Integer $ \value -> case value of
       V.Integer n -> Right n
       _ -> Left "Expected integer reply"

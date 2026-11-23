@@ -14,7 +14,10 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Control.Concurrent (newEmptyMVar, putMVar, takeMVar, threadDelay)
 import Control.Concurrent.Async (async, wait, poll)
 import Control.Monad (unless)
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), object, (.=), encode)
+import qualified Data.ByteString.Lazy as Lazy
+import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), decodeToolFrame, encodeJournalLookup)
+import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..))
 import qualified Data.ByteString.Char8 as Bytes
 import Data.Either (isLeft)
 import Effectful (Eff, IOE, runEff, liftIO)
@@ -49,6 +52,17 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
       value = object ["result" .= String "reply"]
       journal = runFlowJournal kb identity
       file = directory </> ".kyyn/flows/flow-example/journal.json"
+  let floating = object ["tag" .= String "Number", "value" .= String "4.0"]
+      request = object ["tag" .= String "HostRequest", "id" .= String "1", "capability" .= String "flow-journal",
+        "method" .= String "save", "arguments" .= object ["key" .= floating, "value" .= floating]]
+  case decodeToolFrame (Lazy.toStrict (encode request)) of
+    Right (HostRequest _ (ToolJournal (SaveJournal savedKey savedValue))) -> do
+      assert "journal protocol preserves tagged keys and values" (savedKey == floating && savedValue == floating)
+      execute (journal (saveCompletion savedKey savedValue))
+      result <- execute (journal (lookupCompletion savedKey))
+      assert "journal lookup preserves tagged result" (encodeJournalLookup result ==
+        object ["tag" .= String "Some", "value" .= floating])
+    _ -> fail "Journal protocol refused a valid value"
   missing <- execute (journal (lookupCompletion key))
   assert "fresh completion is absent" (missing == Nothing)
   execute (journal (saveCompletion key value))
