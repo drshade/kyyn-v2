@@ -3,24 +3,6 @@
 This defines product scope. The [guide](../docs/guide.md) describes CLI workflows;
 ADRs own the architecture and issues own implementation work.
 
-## Two representative systems, not two built-in verticals
-
-**Exco:** distinguish realised revenue, scheduled billing and forecast pipeline;
-preserve budget grain; calculate weighted totals with exact arithmetic; reconcile
-related views; surface unresolved anomalies; refresh inputs and preview/publish
-dashboards. Shared business calculations should live in ordinary KB modules,
-not be independently reimplemented in each renderer.
-
-**BEE:** group observer copies into one meeting occurrence; distinguish invitations
-from attendance, and attendance from learning time; represent teaching segments,
-trainer identity, evidence basis and uncertainty independently; update people and
-sessions together; apply alternative reporting policies without recuration.
-
-These requirements came from the owner's Exco sales-reporting and BEE
-skills-development KBs. They motivate shared calculations, useful evidence access
-and coherent changes, not domain logic hardcoded in the kernel. Anomalies and
-curation records are legitimate KB models, not mandatory kernel lifecycles.
-
 ## Required journeys and architectural coverage
 
 | Journey | Observable result | Decisions |
@@ -44,14 +26,16 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 
 ## Synthetic acceptance fixtures
 
-Keep these public and fabricated; do not copy business records, identities,
-credentials, private endpoints or reports from the working repositories.
+Keep these public and fabricated; do not copy real business records, identities,
+credentials, private endpoints or reports.
 
 **Training:** two people, a dedicated session, a teaching segment inside an
 ordinary meeting, duplicate observer copies split across a page boundary, and
-unknown attendance. A tool proposes related person/session changes in one
+unknown attendance. The fixture distinguishes invitations, attendance and learning
+time, and records trainer identity, evidence basis and uncertainty independently.
+A tool proposes related person/session changes in one
 workspace. A schema evolution adds vendor delivery. Two views interpret the
-same facts differently without refetching them. Warnings and source limitations
+same facts differently without refetching or recurating them. Warnings and source limitations
 stay visible. A correction and deletion survive acceptance and reopen.
 
 **Reporting:** two business units, three months, realised/scheduled/forecast
@@ -94,3 +78,7 @@ ABI; or standalone execution requirement for KBs.
 Domain complexity is not excluded. Exact arithmetic, heterogeneous roots,
 relationships, payload unions, warnings, uncertainty and partial evidence are
 required now. Transport simplicity must not erase these distinctions.
+
+Shared business calculations live in ordinary KB modules, not independent copies
+in each renderer. Anomalies and curation records are KB models, not mandatory
+kernel lifecycles.

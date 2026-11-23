@@ -99,8 +99,8 @@ where an actual boundary needs them.
 Pure format decoding may live in plumbing capability helpers: the fixed metadata
 decoder uses Aeson without granting native IO or compiler access to that package.
 
-[ADR 0003](0003-effects.md) and the [boundary map](../boundaries.md) define permitted
-dependencies and module ownership. The package names above implement those boundaries,
+[ADR 0003](0003-effects.md) defines permitted dependencies; this ADR assigns
+module ownership. The package names above implement those boundaries,
 not a package per capability. In particular, `kyyn-porcelain-interpreters` can use
 both capability APIs but cannot import native IO implementations. Format-specific
 capability helpers with plumbing dependencies live there too, without becoming

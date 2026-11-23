@@ -204,7 +204,10 @@ not Facts or Evolutions; semantic layout belongs with its store capability.
 Use separate packages for domain, porcelain API/operations, plumbing API,
 porcelain interpreters, plumbing interpreters, and adapters/composition. GHC package visibility
 plus import checks enforce the dependency DAG. The porcelain-interpreter package may see both
-APIs but not IO libraries. See [boundary map](../boundaries.md).
+APIs but not IO libraries. The capability and interpreter modules in the
+[host packages](../../host) contain the actual effect rows and handlers; the
+[import checker](../../tools/checks/check-imports.mjs) checks their permitted
+dependency boundaries.
 These are dependency boundaries, not one package or service per capability.
 Several capability modules can share a package; split packages when required to
 enforce permitted imports, not because another capability or interpreter exists.
