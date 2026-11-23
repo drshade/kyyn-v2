@@ -172,6 +172,12 @@ wrapper passes EventRequest request to await, so the host routes the persisted
 request by this binding, not by schema shape, labels or question text. The worker
 rejects bindings outside the instance's captured declarations before dispatch.
 No separate openWait operation or explicit send before await is required.
+The persistence envelope reserves the top-level `kyynWait` field: `"event"`
+selects an event binding and `"child"` selects a child-completion wait. A bare
+upstream await must not use that reserved field for unrelated request data.
+Malformed or unknown Kyyn envelopes are refused rather than treated as ordinary
+reply requests. The event request/reply/cursor and dispatch/poll contracts are
+owned by [ADR 0015](0015-plugins.md#event-connector-contract).
 
 An unanswered await stops its branch. Independent branches continue until each
 has finished or suspended; sequential waits become reachable one at a time. The
@@ -183,11 +189,56 @@ request program under ExceptT; no native exception or MonadIO capability is adde
 A real failure remains a failure, not a partial successful waiting outcome.
 
 Kyyn persists the frontier before asking the plugin to dispatch its questions.
-Dispatch is keyed by the stable wait identity: re-reporting an unanswered wait
-does not resend it. The wait therefore exists before any fast reply can arrive.
-A known completed dispatch is retained; an uncertain send follows the adapter's
-repeat-safety policy, never a claim that local persistence makes delivery exactly
-once. Some waits require no outbound message (manual input or child completion).
+Each event wait retains its dispatch state (`NotRequired`, `Pending`, `Started`
+or `Completed`), adapter cursor, last-poll time and current adapter diagnostic.
+A connector with no dispatch starts in `NotRequired`; its first poll has no
+cursor. Otherwise the host records `Started` before invocation. A successful
+dispatch publishes its initial cursor and `Completed` together. Polling begins
+only after that publication. A completed dispatch is never repeated, including
+when the guest reports the same unanswered wait again. The wait therefore exists
+before any fast reply can arrive.
+
+The stable wait identity is the dispatch operation key. The plugin owns its
+mapping to provider idempotency and correlation. A `Started` dispatch whose live
+adapter owner has gone away is uncertain: `SafeToRepeat` permits another attempt
+with the same identity; `RequireExplicitRetry` produces a sticky block naming the
+wait until `flow retry` authorises another dispatch. A returned `FetchError` is a
+reported dispatch failure and also requires explicit retry, regardless of repeat
+safety. Neither local persistence nor a stable identity implies exactly-once
+provider delivery. Child completion and bare manual waits require no dispatch.
+
+Polling is read-only and uses the retained cursor and authored request. Each
+contract declares a positive minimum poll interval. The host persists the poll
+attempt time before invocation and does not poll that wait sooner than the
+interval permits. A poll failure preserves its cursor, keeps the wait open and
+surfaces a per-wait diagnostic; it may retry at the next interval. This interval
+bounds retry frequency. It is transport pacing, not a business timer: elapsed
+time alone neither fulfils nor times out a wait.
+
+A successful poll saves its arrivals and next cursor in one catalog transaction.
+Provider identities are deduplicated for the bound event wait; an identity reused
+with conflicting contents cannot overwrite the first arrival. Received values
+are checked against the captured connector reply contract before ingress, then
+against the actual flow codec at fulfilment. A malformed adapter result cannot
+advance the cursor. The host supplies `ProviderReply` provenance from the bound,
+authenticated adapter; submitted reply payloads cannot choose their own origin.
+
+Adapter entries execute from the instance's pinned program with its captured
+connector configuration. Secret references are resolved by name only during an
+actual invocation. Inspection does not load secret values or call the provider.
+
+Dispatch and polling share one process-held, nonblocking adapter lock per
+instance, separate from its journal lock. A worker unable to acquire it skips
+that instance's event work for the pass. The owner services event waits
+sequentially; under this lock, finding a saved `Started` state identifies a prior
+interrupted dispatch rather than another worker's live operation. Polling reads
+and advances its cursor under the same ownership. Only short catalog transactions
+are nested under the adapter lock; it is never held while acquiring the journal
+lock. Ingress and guest execution can proceed independently, including when the
+instance is Running with older open waits. Clearing must acquire the adapter lock
+before removing instance state, so an in-flight adapter cannot publish into a
+cleared instance. No lease, expiry or background service is used to establish
+ownership.
 
 Ingress may queue a received delivery without loading guest code; it is not yet a
 fulfilled reply. Under the instance writer lock, the worker loads the retained
