@@ -23,7 +23,7 @@ instance FromJSON EvolutionSelection where
       <*> (fields .: "recipe" >>= parseOptionalValue) <*> (fields .: "modules" >>= parseOptionalValue)
 
 -- Recipe data stays on the host. Only referenced code belongs to the build.
-data RecipeReference = OpenState Text | ClosedFlow Text deriving (Eq, Ord, Show)
+data RecipeReference = OpenState Text | ClosedFlow Text | InteractiveFlow Text deriving (Eq, Ord, Show)
 canonicalSelection :: GuestSelection -> GuestSelection
 canonicalSelection (RecipeEntries references) = RecipeEntries (sort (nub references))
 canonicalSelection (EvolutionEntries (EvolutionSelection references recipe modules)) =
@@ -32,12 +32,14 @@ canonicalSelection selected = selected
 
 instance ToJSON RecipeReference where
   toJSON (OpenState name) = object ["kind" .= String "state","name" .= name]
+  toJSON (InteractiveFlow name) = object ["kind" .= String "interactive","name" .= name]
   toJSON (ClosedFlow name) = object ["kind" .= String "flow","name" .= name]
 instance FromJSON RecipeReference where
   parseJSON = exactObject "recipe reference" ["kind","name"] $ \fields -> do
     kind <- fields .: "kind"
     case kind :: Text of
       "state" -> OpenState <$> fields .: "name"
+      "interactive" -> InteractiveFlow <$> fields .: "name"
       "flow" -> ClosedFlow <$> fields .: "name"
       _ -> fail "Unknown recipe reference kind"
 

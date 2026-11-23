@@ -30,7 +30,7 @@ checkGuest :: G.GuestDescription -> Either [Diagnostic] CheckedGuest
 checkGuest description = do
   unique "entry" (concatMap G.entryNames description.entries)
   entries <- traverse checkEntry description.entries
-  unique "recipe" [name | G.RecipeEntry _ name _ <- entries]
+  unique "recipe" ([name | G.RecipeEntry _ name _ <- entries] ++ [name | G.InteractiveEntry _ name _ <- entries])
   unique "tool" [name | G.ToolEntry _ name _ _ <- entries]
   let connectors = [identity | G.ConnectorEntry identity _ <- entries]
   ensure (length connectors == length (nub connectors)) "guest.connectors" "Duplicate connector identity"
@@ -54,6 +54,9 @@ checkEntry entry = case entry of
     G.ValidatorEntry name <$> root selected
   G.EvolutionEntry name contracts -> G.EvolutionEntry name <$> case contracts of
     G.TargetEvolutionContracts target -> G.TargetEvolutionContracts <$> root target
+  G.InteractiveEntry name reference contracts -> do
+    either (Left . pure . errorDiagnostic "guest.interactive") (const (Right ())) (Plugin.bindingModule (Text.unpack reference))
+    G.InteractiveEntry name reference <$> traverse check contracts
   G.RecipeEntry name reference (G.RecipeContracts rootContract arguments state) -> do
     either (Left . pure . errorDiagnostic "guest.recipe") (const (Right ())) (Plugin.bindingModule (Text.unpack reference))
     G.RecipeEntry name reference <$> (G.RecipeContracts <$> root rootContract <*> check arguments <*> check state)

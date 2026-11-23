@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( InteractiveInvocation(..), InteractiveContracts(..), EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -17,10 +17,29 @@ import Kyyn.Types.SchemaMetadata
 -- One request codec is used by the host and the executable it describes.
 data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
 data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
-data RecipeInvocation = RunRecipe Value Value Value
-  | ResumeRecipe Text Text Value Value Value
-  | FulfilRecipe Text Text Value Value
-  | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
+data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
+data InteractiveInvocation
+  = ResumeFlow Text Text Value | FulfilFlow Text Text Value Value
+  | RenderFlow DescriptionFormat | CaptureFlowGraph
+  deriving (Eq, Show)
+instance ToJSON InteractiveInvocation where
+  toJSON (ResumeFlow namespace revision input) = object ["operation" .= String "resume",
+    "namespace" .= namespace,"revision" .= revision,"input" .= input]
+  toJSON (FulfilFlow namespace revision pending reply) = object ["operation" .= String "fulfil",
+    "namespace" .= namespace,"revision" .= revision,"pending" .= pending,"reply" .= reply]
+  toJSON (RenderFlow format) = object ["operation" .= String "render","format" .= format]
+  toJSON CaptureFlowGraph = object ["operation" .= String "graph"]
+instance FromJSON InteractiveInvocation where
+  parseJSON value = withObject "interactive invocation" (\fields -> do
+    operation <- fields .: "operation"
+    case operation :: Text of
+      "resume" -> exactObject "flow resume" ["operation","namespace","revision","input"]
+        (\request -> ResumeFlow <$> request .: "namespace" <*> request .: "revision" <*> request .: "input") value
+      "fulfil" -> exactObject "flow fulfil" ["operation","namespace","revision","pending","reply"]
+        (\request -> FulfilFlow <$> request .: "namespace" <*> request .: "revision" <*> request .: "pending" <*> request .: "reply") value
+      "render" -> exactObject "flow render" ["operation","format"] (\request -> RenderFlow <$> request .: "format") value
+      "graph" -> exactObject "flow graph" ["operation"] (const (pure CaptureFlowGraph)) value
+      _ -> fail "Unknown interactive operation") value
 instance ToJSON DescriptionFormat where
   toJSON format = String (case format of Tree -> "tree"; Dot -> "dot"; Mermaid -> "mermaid")
 instance FromJSON DescriptionFormat where
@@ -31,12 +50,6 @@ instance FromJSON DescriptionFormat where
     _ -> fail "Unknown recipe description format"
 instance ToJSON RecipeInvocation where
   toJSON (RunRecipe root input state) = object ["operation" .= String "run","root" .= root,"input" .= input,"state" .= state]
-  toJSON (ResumeRecipe namespace revision root input state) = object
-    ["operation" .= String "resume","namespace" .= namespace,"revision" .= revision,
-     "root" .= root,"input" .= input,"state" .= state]
-  toJSON (FulfilRecipe namespace revision pending reply) = object
-    ["operation" .= String "fulfil","namespace" .= namespace,"revision" .= revision,
-     "pending" .= pending,"reply" .= reply]
   toJSON CaptureRecipeGraph = object ["operation" .= String "graph"]
   toJSON (RenderRecipe format) = object ["operation" .= String "render","format" .= format]
 instance FromJSON RecipeInvocation where
@@ -45,12 +58,6 @@ instance FromJSON RecipeInvocation where
     case operation :: Text of
       "run" -> exactObject "recipe run" ["operation","root","input","state"]
         (\request -> RunRecipe <$> request .: "root" <*> request .: "input" <*> request .: "state") value
-      "resume" -> exactObject "recipe resume" ["operation","namespace","revision","root","input","state"]
-        (\request -> ResumeRecipe <$> request .: "namespace" <*> request .: "revision"
-          <*> request .: "root" <*> request .: "input" <*> request .: "state") value
-      "fulfil" -> exactObject "recipe fulfil" ["operation","namespace","revision","pending","reply"]
-        (\request -> FulfilRecipe <$> request .: "namespace" <*> request .: "revision"
-          <*> request .: "pending" <*> request .: "reply") value
       "graph" -> exactObject "recipe graph" ["operation"] (const (pure CaptureRecipeGraph)) value
       "render" -> exactObject "recipe render" ["operation","format"]
         (\request -> RenderRecipe <$> request .: "format") value
@@ -175,6 +182,7 @@ data DescribedContract = DescribedContract
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
   | EvolutionEntry { entryName :: Text, evolutionContracts :: EvolutionContracts contract }
+  | InteractiveEntry { entryName :: Text, interactiveName :: Text, interactiveContracts :: InteractiveContracts contract }
   | RecipeEntry { entryName :: Text, recipeName :: Text, recipeContracts :: RecipeContracts contract }
   | ToolEntry { entryName :: Text, toolName :: Text, toolDescription :: Text, toolContracts :: ToolContracts contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
@@ -211,6 +219,7 @@ entryNames (ConnectorEntry _ (SinkEntries config publication options)) =
   [invocationName config,invocationName publication,invocationName options]
 entryNames (ValidatorEntry name _) = [name]
 entryNames (EvolutionEntry name _) = [name]
+entryNames (InteractiveEntry name _ _) = [name]
 entryNames (RecipeEntry name _ _) = [name]
 entryNames (ToolEntry name _ _ _) = [name]
 entryNames (QueryEntry name _) = [name]
@@ -266,6 +275,14 @@ instance FromJSON contract => FromJSON (EvolutionContracts contract) where
       "target" -> exactObject "target evolution contract" ["kind","target"]
         (\entry -> TargetEvolutionContracts <$> entry .: "target") value
       _ -> fail "Unknown evolution kind") value
+
+data InteractiveContracts contract = InteractiveContracts contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance ToJSON contract => ToJSON (InteractiveContracts contract) where
+  toJSON (InteractiveContracts input output) = object ["input" .= input,"output" .= output]
+instance FromJSON contract => FromJSON (InteractiveContracts contract) where
+  parseJSON = exactObject "interactive contracts" ["input","output"] $ \fields ->
+    InteractiveContracts <$> fields .: "input" <*> fields .: "output"
 
 data RecipeContracts contract = RecipeContracts contract contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -327,6 +344,8 @@ instance FromJSON DescribedContract where
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
   toJSON (EvolutionEntry name contracts) = object ["kind" .= String "evolution","entryName" .= name,"contracts" .= contracts]
+  toJSON (InteractiveEntry entry name contracts) = object
+    ["kind" .= String "interactive","entryName" .= entry,"name" .= name,"contracts" .= contracts]
   toJSON (RecipeEntry entry name contracts) = object
     ["entryName" .= entry,"kind" .= String "recipe","name" .= name,"contracts" .= contracts]
   toJSON (ToolEntry entry name description (ToolContracts input result)) = object
@@ -345,6 +364,8 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
         (\entry -> ValidatorEntry <$> entry .: "entryName" <*> entry .: "root") value
       "evolution" -> exactObject "evolution entry" ["entryName","kind","contracts"]
         (\entry -> EvolutionEntry <$> entry .: "entryName" <*> entry .: "contracts") value
+      "interactive" -> exactObject "interactive entry" ["kind","entryName","name","contracts"]
+        (\entry -> InteractiveEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "contracts") value
       "recipe" -> exactObject "recipe entry" ["entryName","kind","name","contracts"]
         (\entry -> RecipeEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "contracts") value
       "tool" -> exactObject "tool entry" ["entryName","kind","name","description","input","result"]

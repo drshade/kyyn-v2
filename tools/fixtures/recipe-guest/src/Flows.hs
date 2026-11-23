@@ -1,4 +1,4 @@
-module Flows (review, recursive, invalidRecursive, trace, waiting) where
+module Flows (review, recursive, invalidRecursive, trace, waiting, waitingOrdinary) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -55,14 +55,12 @@ trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
   A.>>> A.arr (const (RecipeProposal [] (State 1)))
 
 -- The connector must run only on the first attempt; the reply completes the proposal.
-waiting :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
-waiting = A.arr (\(RecipeInput _ () (State runs)) -> runs)
-  A.>>> A.durably integer number (\_ runs -> do
+waiting :: Flow Integer Integer
+waiting = A.durably integer number (\_ runs -> do
     count <- ExceptT (Files.count files ())
     pure (fromInteger (runs + count)))
   A.>>> A.arr round
   A.>>> A.await integer integer
-  A.>>> A.arr (\reply -> RecipeProposal [] (State reply))
   where
     number = C.primitive S.SNumber V.Number $ \value -> case value of
       V.Number n -> Right n
@@ -71,3 +69,7 @@ waiting = A.arr (\(RecipeInput _ () (State runs)) -> runs)
     integer = C.primitive S.SInteger V.Integer $ \value -> case value of
       V.Integer n -> Right n
       _ -> Left "Expected integer reply"
+
+waitingOrdinary :: Flow (RecipeInput Root () State) (RecipeProposal RootEdit State)
+waitingOrdinary = A.arr (\(RecipeInput _ () (State runs)) -> runs)
+  A.>>> waiting A.>>> A.arr (\reply -> RecipeProposal [] (State reply))
