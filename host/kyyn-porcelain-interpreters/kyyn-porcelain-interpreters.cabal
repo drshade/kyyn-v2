@@ -61,7 +61,7 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-plumbing,
+  build-depends: agentic-aeson ==0.2.1.0, base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-plumbing,
     effectful-core ==2.6.1.0, aeson, bytestring, text, transformers, filepath, containers
 
 test-suite evidence-index

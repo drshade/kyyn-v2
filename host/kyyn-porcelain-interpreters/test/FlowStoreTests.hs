@@ -105,6 +105,41 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   late <- update (queueDelivery child.instanceId "late" "two" (ManualReply "mcp") Null)
   assert (late.outcome == Just ClosedWait) "Late reply could reopen cancelled child"
 
+  controller <- start Nothing "controller"
+  controlled <- start (Just controller.instanceId) "controlled"
+  grandchild <- start (Just controlled.instanceId) "grandchild"
+  sibling <- start (Just controller.instanceId) "sibling"
+  unrelated <- start Nothing "unrelated"
+  visible <- update (readDescendant controller.instanceId grandchild.instanceId)
+  assert (visible.instanceId == grandchild.instanceId) "Grandchild was not visible to its ancestor"
+  forM_ [controlled.instanceId,controller.instanceId,sibling.instanceId,unrelated.instanceId] $ \target -> do
+    deniedRead <- store scope (readDescendant controlled.instanceId target)
+    deniedCancel <- store scope (cancelDescendant controlled.instanceId target FlowAndDescendants)
+    assert (case (deniedRead,deniedCancel) of (Left InvalidTransition{},Left InvalidTransition{}) -> True; _ -> False)
+      "Self, ancestor, sibling or unrelated root escaped child authority"
+  _ <- update (cancelDescendant controller.instanceId controlled.instanceId ThisFlow)
+  stillActive <- readFlow grandchild.instanceId
+  assert (stillActive.status == Runnable) "ThisFlow cancellation stopped a grandchild"
+  _ <- update (cancelDescendant controller.instanceId controlled.instanceId FlowAndDescendants)
+  stoppedGrandchild <- readFlow grandchild.instanceId
+  assert (stoppedGrandchild.status == Finished Cancelled) "Subtree cancellation missed a grandchild below a terminal child"
+  _ <- update (clearInstances [grandchild.instanceId])
+  clearedRead <- store scope (readDescendant controller.instanceId grandchild.instanceId)
+  clearedCancel <- store scope (cancelDescendant controller.instanceId grandchild.instanceId ThisFlow)
+  assert (clearedRead == Left MissingInstance && clearedCancel == Left MissingInstance)
+    "Cleared child was conflated with an unrelated present instance"
+
+  forM_ [Cancelled,Completed Null] $ \outcome -> do
+    allItems <- store scope listInstances
+    retired <- start Nothing ("retired-" <> Text.pack (show (length allItems)))
+    surviving <- start (Just retired.instanceId) "surviving"
+    _ <- update (beginAttempt retired.instanceId)
+    _ <- update (finishInstance retired.instanceId outcome)
+    refused <- store scope (cancelDescendant retired.instanceId surviving.instanceId ThisFlow)
+    assert (refused == Left AlreadyFinished) "Terminal caller retained mutation authority"
+    snapshot <- update (readDescendant retired.instanceId surviving.instanceId)
+    assert (snapshot.status == Runnable) "Terminal caller cancellation changed its child"
+
   -- Ingress must complete even while a long attempt holds the same instance's journal.
   separate <- start Nothing "separate"
   _ <- wait separate.instanceId
@@ -150,10 +185,10 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   -- Both serializations of child publication versus cancellation are valid.
   replicateM_ 12 $ do
     allItems <- store scope listInstances
-    racer <- start Nothing ("race-" <> Text.pack (show (length allItems)))
+    racer <- start (Just controller.instanceId) ("race-" <> Text.pack (show (length allItems)))
     (created,_) <- concurrently
       (store scope (startPreparedInstance (Just racer.instanceId) "racing-child" preparedFixture))
-      (update (cancelInstance racer.instanceId FlowAndDescendants))
+      (update (cancelDescendant controller.instanceId racer.instanceId FlowAndDescendants))
     case created of
       Left CancelledAncestor -> pure ()
       Right item -> readFlow item.instanceId >>= \actual -> assert (actual.status == Finished Cancelled) "Racing child escaped cancellation"

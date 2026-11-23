@@ -1,7 +1,8 @@
 module Kyyn.Interactive
-  ( FlowHandle, startFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
+  ( FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
 
-import Kyyn.Interactive.Control (FlowHandle, startFlow, flowRef, flowRefTyped)
+import Kyyn.Interactive.Control (FlowHandle, startFlow, inspectFlow, cancelFlow, flowRef, flowRefTyped)
+import Kyyn.Types.FlowStatus (FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..))
 import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef, ChildFlow(..))
 import Kyyn.Recipe.Internal (RecipeDefinition(..), KnowledgeBase)
 import Kyyn.Evolution.KnowledgeBase (createRecipe)

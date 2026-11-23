@@ -21,6 +21,8 @@ import Data.Time (Day, fromGregorian, UTCTime(..), secondsToDiffTime)
 import GHC.Generics (Generic)
 import Numeric.Natural (Natural)
 import Kyyn.Interactive (FlowHandle)
+import qualified Kyyn.Types.FlowStatus as Flow
+import qualified Kyyn.Types.Diagnostic as Diagnostic
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Blob (BlobRef(..))
@@ -63,6 +65,19 @@ roundTrip name value = do
 
 main :: IO ()
 main = do
+  integerResult <- compiled @Integer
+  let statusCodec = Flow.statusCodec integerResult
+      diagnostics = [Diagnostic.Diagnostic Diagnostic.Warning "full" "Unicode: café" (Just (Diagnostic.FactLocation "people" "p1" (Just "name"))),
+        Diagnostic.Diagnostic Diagnostic.Error "source" "At source" (Just (Diagnostic.SourceLocation "Module.hs" 3 7)),
+        Diagnostic.Diagnostic Diagnostic.Error "example" "At example" (Just (Diagnostic.ExampleLocation "demo")),
+        Diagnostic.Diagnostic Diagnostic.Error "plain" "No location" Nothing]
+      statuses = [Flow.FlowStatus Flow.Runnable [],Flow.FlowStatus Flow.Running ["pending"],Flow.FlowStatus Flow.Waiting ["one","two"],
+        Flow.FlowStatus (Flow.Finished (Flow.Completed (10 ^ (80 :: Integer)))) [],
+        Flow.FlowStatus (Flow.Finished (Flow.Failed diagnostics)) [],Flow.FlowStatus (Flow.Finished Flow.Cancelled) []]
+  forM_ statuses $ \status -> expect "Flow status preserves typed output and complete diagnostics"
+    (statusCodec.decode (statusCodec.encode status) == Right status)
+  expect "Flow status rejects unknown fields" (isLeft (statusCodec.decode (Object
+    [("execution",Object [("tag",String "runnable")]),("outstandingWaits",Array []),("extra",String "unexpected")])))
   integerHandle <- either (fail . show) pure (compileContract (contract @(FlowHandle Integer)))
   textHandle <- either (fail . show) pure (compileContract (contract @(FlowHandle Text)))
   plainText <- either (fail . show) pure (compileContract (contract @Text))

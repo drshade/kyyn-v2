@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Domain.FlowLifecycle
-  ( begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart, clearFinished, blockAttempt, retry ) where
+  ( requireDescendant, begin, frontier, finish, block, cancelTree, enqueue, resolve, parentAllowsStart, clearFinished, blockAttempt, retry ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value)
@@ -148,3 +148,18 @@ clearFinished requested catalog = do
   unless (all (\item -> maybe True (`notElem` ids) item.parent) remaining)
     (Left (InvalidTransition "Clear an instance together with its finished descendants, or clear its children first"))
   pure (ids,remaining)
+
+-- Resolve from one catalog snapshot. A missing/cleared target is different from
+-- a present handle outside the caller's downward authority.
+requireDescendant :: FlowInstanceId -> FlowInstanceId -> [FlowInstance] -> Either FlowStoreProblem FlowInstance
+requireDescendant caller target catalog = do
+  selected <- maybe (Left MissingInstance) Right (find ((== target) . (.instanceId)) catalog)
+  _ <- maybe (Left MissingInstance) Right (find ((== caller) . (.instanceId)) catalog)
+  unless (caller /= target && below selected.parent)
+    (Left (InvalidTransition "Child control requires a strict descendant of the calling instance"))
+  pure selected
+  where
+    below Nothing = False
+    below (Just parent)
+      | parent == caller = True
+      | otherwise = maybe False (below . (.parent)) (find ((== parent) . (.instanceId)) catalog)

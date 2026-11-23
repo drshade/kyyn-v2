@@ -27,11 +27,26 @@ import qualified Agentic.Schema as S
 import qualified Agentic.Value as V
 import Control.Monad.Trans.Except (throwE)
 import Kyyn.Agentic (Flow)
-import Kyyn.Interactive (FlowHandle, startFlow, flowRef, flowRefTyped)
+import Kyyn.Interactive (FlowHandle, startFlow, flowRef, flowRefTyped, inspectFlow, cancelFlow)
+import qualified Kyyn.Interactive as I
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Data.Text (Text)
 import qualified Child
 import Kyyn.Plugin (FetchError(..))
+observeParent :: Flow Integer Integer
+observeParent = startFlow (flowRef (RecipeId "child") Child.review)
+  A.>>> (inspectFlow A.&&& A.arr id)
+  A.>>> A.first (A.arr statusName A.>>> A.await text integer)
+  A.>>> A.arr snd A.>>> inspectFlow
+  A.>>> A.arr (\\status -> case status.execution of I.Finished (I.Completed result) -> result; _ -> -1)
+  where
+    statusName status = case status.execution of I.Runnable -> "runnable"; _ -> "changed"
+    text = C.primitive (S.SString Nothing) V.String (\\value -> case value of V.String t -> Right t; _ -> Left "Expected text")
+cancelParent :: Flow Integer Integer
+cancelParent = startFlow (flowRef (RecipeId "child") Child.review)
+  A.>>> (cancelFlow I.FlowAndDescendants A.&&& A.arr id)
+  A.>>> A.arr snd A.>>> inspectFlow
+  A.>>> A.arr (\\status -> case status.execution of I.Finished I.Cancelled -> 1; _ -> 0)
 parent :: Flow Integer (FlowHandle Integer)
 parent = startFlow (flowRef (RecipeId "child") Child.review)
 badReference :: Flow Text (FlowHandle Integer)
@@ -71,6 +86,8 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
   createInteractiveRecipe (RecipeId "refuse") Flows.refuse
   createInteractiveRecipe (RecipeId "multiple") Flows.multiple
   createInteractiveRecipe (RecipeId "child") Child.review
+  createInteractiveRecipe (RecipeId "observeParent") (withChildren [child (RecipeId "child") Child.review] Flows.observeParent)
+  createInteractiveRecipe (RecipeId "cancelParent") (withChildren [child (RecipeId "child") Child.review] Flows.cancelParent)
   createInteractiveRecipe (RecipeId "parent") (withChildren [child (RecipeId "child") Child.review] Flows.parent)
   createInteractiveRecipe (RecipeId "badReference") (withChildren [child (RecipeId "child") Child.review] Flows.badReference)
   createInteractiveRecipe (RecipeId "self") (withChildren [child (RecipeId "self") Flows.self] Flows.self)))
@@ -94,6 +111,8 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const parent=cli(['flow','start','parent','--input','+3']).result;
  const wrong=cli(['flow','start','badReference','--input','"bad"']).result;
  const self=cli(['flow','start','self','--input','+1']).result;
+ const observer=cli(['flow','start','observeParent','--input','+2']).result;
+ const canceller=cli(['flow','start','cancelParent','--input','+2']).result;
  const worker=background(['flow','worker']);
  await until(()=>show(started.id).status==='waiting');
  await until(()=>show(cancelled.id).status==='waiting');
@@ -117,6 +136,19 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  await until(()=>show(child.id).status==='completed');
  await until(()=>instances().some(x=>x.parent===self.id&&x.status==='completed'));
  assert.equal(instances().filter(x=>x.parent===self.id).length,1,'Self-reference started an unbounded tree');
+ await until(()=>show(observer.id).status==='waiting');
+ assert.equal(show(observer.id).waits[0].descriptor.request,'runnable');
+ await until(()=>instances().some(x=>x.parent===observer.id&&x.status==='waiting'));
+ const observedChild=instances().find(x=>x.parent===observer.id);
+ runtime(['flow','fulfil',observedChild.id,'--reply','17']);
+ await until(()=>show(observedChild.id).status==='completed');
+ runtime(['flow','fulfil',observer.id,'--reply','1']);
+ await until(()=>show(observer.id).status==='completed');
+ assert.equal(show(observer.id).result.trim(),'+17','Inspection did not restore the old snapshot and take a fresh one at the next occurrence');
+ await until(()=>show(canceller.id).status==='completed');
+ assert.equal(show(canceller.id).result.trim(),'+1');
+ const cancelledChild=instances().find(x=>x.parent===canceller.id);
+ assert.equal(cancelledChild.status,'cancelled');assert.deepEqual(cancelledChild.attempts,[]);
  const waiting=show(started.id),wait=waiting.waits.find(x=>x.status==='open');
  assert.equal(wait.descriptor.request,2);assert.equal(waiting.attempts.length,1);
  assert.equal(waiting.attempts[0].path,'/runs/'+waiting.attempts[0].id);
@@ -158,7 +190,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  fs.writeFileSync(bundle,captured);
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);
- runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,'--descendants']);
+ runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,observer.id,canceller.id,'--descendants']);
  assert.deepEqual(runtime(['flow','list']).result.instances,[]);
  assert.equal(runtime(['run','show',completed.attempts[1].id]).result.status,'returned','Clearing flow hid its recording');
  assert.equal(invoke('git',['-C',kb,'rev-parse','HEAD']).trim(),brokenRevision,'Runtime changed accepted knowledge');
