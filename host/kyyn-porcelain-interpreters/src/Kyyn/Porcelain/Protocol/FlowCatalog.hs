@@ -1,0 +1,147 @@
+{-# LANGUAGE OverloadedRecordDot, OverloadedStrings #-}
+module Kyyn.Porcelain.Protocol.FlowCatalog (catalogValue, parseCatalog) where
+
+import Control.Monad (unless)
+import Data.Aeson (Key, Value(..), object, (.=), (.:), withObject)
+import Data.Aeson.Types (Parser, Object)
+import qualified Data.Aeson.KeyMap as Keys
+import Data.List (nub, sort)
+import qualified Data.Text as Text
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..))
+import Kyyn.Plumbing.Protocol.Validation (diagnosticValue, parseReport)
+import Kyyn.Domain.FlowInstance
+
+catalogValue :: [FlowInstance] -> Value
+catalogValue = toList . map instanceValue
+  where toList values = object ["instances" .= values]
+
+instanceValue :: FlowInstance -> Value
+instanceValue item = object
+  ["id" .= flowInstanceIdText item.instanceId,"parent" .= fmap flowInstanceIdText item.parent
+  ,"startKey" .= item.startKey,"launch" .= launchValue item.launch,"status" .= statusValue item.status
+  ,"blocked" .= map diagnosticValue item.blocked,"cancelDescendants" .= item.cancelDescendants
+  ,"waits" .= map waitValue item.waits,"deliveries" .= map deliveryValue item.deliveries]
+launchValue :: FlowLaunch -> Value
+launchValue item = object ["revision" .= item.revision,"request" .= item.request,"captured" .= item.captured,
+  "owner" .= (case item.owner of Hosted -> "hosted"; External -> "external" :: Text.Text)]
+statusValue :: ExecutionStatus -> Value
+statusValue Runnable = tag "runnable" Null
+statusValue Running = tag "running" Null
+statusValue Waiting = tag "waiting" Null
+statusValue (Finished outcome) = tag "finished" (case outcome of
+  Completed value -> tag "completed" value
+  Failed errors -> object ["tag" .= String "failed","value" .= map diagnosticValue errors]
+  Cancelled -> tag "cancelled" Null)
+waitValue :: FlowWait -> Value
+waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"status" .= case wait.waitStatus of
+  Open -> tag "open" Null
+  Closed -> tag "closed" Null
+  Answered origin value -> tag "answered" (object ["origin" .= originValue origin,"value" .= value])]
+originValue :: ReplyOrigin -> Value
+originValue (ManualReply surface) = tag "manual" (String surface)
+originValue (ProviderReply binding event) = tag "provider" (object ["binding" .= binding,"event" .= event])
+deliveryValue :: FlowDelivery -> Value
+deliveryValue item = object ["id" .= item.deliveryId,"wait" .= item.waitId,"origin" .= originValue item.origin,
+  "value" .= item.value,"outcome" .= fmap outcomeValue item.outcome]
+outcomeValue :: DeliveryOutcome -> Value
+outcomeValue outcome = case outcome of
+  Accepted -> tag "accepted" Null
+  Duplicate -> tag "duplicate" Null
+  Conflicting -> tag "conflict" Null
+  Invalid message -> tag "invalid" (String message)
+  ClosedWait -> tag "closed" Null
+tag :: Text.Text -> Value -> Value
+tag name value = object ["tag" .= name,"value" .= value]
+
+parseCatalog :: Value -> Parser [FlowInstance]
+parseCatalog = withObject "flow catalog" $ \fields -> do
+  exact ["instances"] fields
+  catalog <- fields .: "instances" >>= traverse parseInstance
+  unique "instance IDs" (map (.instanceId) catalog)
+  unique "child start keys" [(item.parent,item.startKey) | item <- catalog]
+  let ids = map (.instanceId) catalog
+  mapM_ (\item -> maybe (pure ()) (\parent -> unless (parent `elem` ids) (fail "Missing flow parent")) item.parent) catalog
+  mapM_ (acyclic catalog []) catalog
+  pure catalog
+  where
+    acyclic catalog seen item = do
+      unless (item.instanceId `notElem` seen) (fail "Cyclic flow parentage")
+      case [parent | parent <- catalog, Just parent.instanceId == item.parent] of
+        [] -> pure ()
+        [parent] -> acyclic catalog (item.instanceId:seen) parent
+        _ -> fail "Duplicate flow parent"
+parseInstance :: Value -> Parser FlowInstance
+parseInstance = withObject "instance" $ \fields -> do
+  exact ["id","parent","startKey","launch","status","blocked","cancelDescendants","waits","deliveries"] fields
+  identity <- fields .: "id" >>= checkedId
+  parent <- fields .: "parent" >>= traverse checkedId
+  waits <- fields .: "waits" >>= traverse parseWait
+  deliveries <- fields .: "deliveries" >>= traverse parseDelivery
+  unique "wait IDs" (map (.waitId) waits)
+  unique "delivery IDs" (map (.deliveryId) deliveries)
+  FlowInstance identity parent <$> fields .: "startKey" <*> (fields .: "launch" >>= parseLaunch)
+    <*> (fields .: "status" >>= parseStatus) <*> (fields .: "blocked" >>= diagnostics) <*> fields .: "cancelDescendants"
+    <*> pure waits <*> pure deliveries
+parseLaunch :: Value -> Parser FlowLaunch
+parseLaunch = withObject "launch" $ \fields -> do
+  exact ["revision","request","captured","owner"] fields
+  owner <- fields .: "owner" >>= \name -> case name :: Text.Text of
+    "hosted" -> pure Hosted
+    "external" -> pure External
+    _ -> fail "Unknown execution owner"
+  FlowLaunch <$> fields .: "revision" <*> fields .: "request" <*> fields .: "captured" <*> pure owner
+parseStatus :: Value -> Parser ExecutionStatus
+parseStatus value = tagged value >>= \(name,payload) -> case (name,payload) of
+  ("runnable",Null) -> pure Runnable
+  ("running",Null) -> pure Running
+  ("waiting",Null) -> pure Waiting
+  ("finished",body) -> Finished <$> (tagged body >>= \(outcome,result) -> case (outcome,result) of
+    ("completed",v) -> pure (Completed v)
+    ("failed",v) -> Failed <$> diagnostics v
+    ("cancelled",Null) -> pure Cancelled
+    _ -> fail "Invalid flow outcome")
+  _ -> fail "Invalid execution status"
+parseWait :: Value -> Parser FlowWait
+parseWait = withObject "wait" $ \fields -> do
+  exact ["id","descriptor","status"] fields
+  state <- fields .: "status" >>= tagged >>= \(name,payload) -> case (name,payload) of
+    ("open",Null) -> pure Open
+    ("closed",Null) -> pure Closed
+    ("answered",body) -> withObject "reply" (\reply -> do
+      exact ["origin","value"] reply
+      Answered <$> (reply .: "origin" >>= parseOrigin) <*> reply .: "value") body
+    _ -> fail "Invalid wait status"
+  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure state
+parseOrigin :: Value -> Parser ReplyOrigin
+parseOrigin value = tagged value >>= \(name,payload) -> case (name,payload) of
+  ("manual",String surface) -> pure (ManualReply surface)
+  ("provider",body) -> withObject "provider origin" (\fields -> do
+    exact ["binding","event"] fields
+    ProviderReply <$> fields .: "binding" <*> fields .: "event") body
+  _ -> fail "Invalid reply origin"
+parseDelivery :: Value -> Parser FlowDelivery
+parseDelivery = withObject "delivery" $ \fields -> do
+  exact ["id","wait","origin","value","outcome"] fields
+  FlowDelivery <$> fields .: "id" <*> fields .: "wait" <*> (fields .: "origin" >>= parseOrigin)
+    <*> fields .: "value" <*> (fields .: "outcome" >>= traverse parseOutcome)
+parseOutcome :: Value -> Parser DeliveryOutcome
+parseOutcome value = tagged value >>= \(name,payload) -> case (name,payload) of
+  ("accepted",Null) -> pure Accepted
+  ("duplicate",Null) -> pure Duplicate
+  ("conflict",Null) -> pure Conflicting
+  ("invalid",String message) -> pure (Invalid message)
+  ("closed",Null) -> pure ClosedWait
+  _ -> fail "Invalid delivery outcome"
+tagged :: Value -> Parser (Text.Text,Value)
+tagged = withObject "variant" $ \fields -> exact ["tag","value"] fields >> ((,) <$> fields .: "tag" <*> fields .: "value")
+checkedId :: Text.Text -> Parser FlowInstanceId
+checkedId = either fail pure . flowInstanceId
+exact :: [Key] -> Object -> Parser ()
+exact expected fields = unless (sort (Keys.keys fields) == sort expected) (fail "Unexpected flow catalog fields")
+unique :: Eq a => String -> [a] -> Parser ()
+unique label values = unless (length (nub values) == length values) (fail ("Duplicate " ++ label))
+
+diagnostics :: Value -> Parser [Diagnostic]
+diagnostics value = do
+  ValidationReport items <- parseReport value
+  pure items

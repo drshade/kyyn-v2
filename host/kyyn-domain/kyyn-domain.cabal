@@ -24,6 +24,8 @@ library
     Kyyn.Domain.Model
     Kyyn.Domain.FactProposal
     Kyyn.Domain.Recipe
+    Kyyn.Domain.FlowInstance
+    Kyyn.Domain.FlowLifecycle
     Kyyn.Domain.RecipeRun
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021

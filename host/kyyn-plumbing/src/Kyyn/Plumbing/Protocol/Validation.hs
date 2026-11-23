@@ -1,8 +1,8 @@
-module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport) where
+module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport, diagnosticValue) where
 
 import Kyyn.Types.Wire (decodeWire)
 import Control.Monad (unless)
-import Data.Aeson (Value, Object, withObject, withArray, parseJSON, (.:))
+import Data.Aeson (Value(..), object, (.=), Object, withObject, withArray, parseJSON, (.:))
 import Data.Aeson.Types (Parser, parseEither)
 import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
@@ -57,3 +57,21 @@ exact :: String -> [Key] -> (Object -> Parser a) -> Value -> Parser a
 exact label expected parse = withObject label $ \o -> do
   unless (sort (Keys.keys o) == sort expected) (fail (label ++ ": unexpected or missing fields"))
   parse o
+
+diagnosticValue :: Diagnostic -> Value
+diagnosticValue (Diagnostic severity code message location) = object
+  ["severity" .= object ["tag" .= show severity],"code" .= code,"message" .= message,
+   "location" .= maybe none (some . place) location]
+  where
+    place (FactLocation collection identity field) = object ["tag" .= String "Fact","value" .= object
+      ["collection" .= collection,"factId" .= identity,"field" .= maybe none (some . String) field]]
+    place (SourceLocation file line column) = object ["tag" .= String "Source","value" .= object
+      ["file" .= file,"line" .= show line,"column" .= show column]]
+    place (ExampleLocation name) = object ["tag" .= String "Example","value" .= name]
+
+
+
+none :: Value
+none = object ["tag" .= String "None"]
+some :: Value -> Value
+some value = object ["tag" .= String "Some","value" .= value]
