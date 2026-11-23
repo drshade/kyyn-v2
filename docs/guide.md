@@ -693,8 +693,9 @@ cannot start children through this capability.
 `awaitFlow` waits durably for a child's `Completed result`, `Failed diagnostics`
 or `Cancelled` outcome. It validates the handle, then suspends through the same
 upstream await mechanism as other waits. Child completion and notification are
-saved together; the child can be cleared after completion without losing the
-parent's pending outcome. `flow show` names the child being awaited. These waits
+saved together. Clearing a child is refused while any ancestor is unfinished,
+so a parent can still inspect or await that child later. Long-running parents
+therefore retain their child instances until they finish or are cancelled. `flow show` names the child being awaited. These waits
 cannot be fulfilled manually or by provider events: only the child's recorded
 terminal outcome resumes them.
 

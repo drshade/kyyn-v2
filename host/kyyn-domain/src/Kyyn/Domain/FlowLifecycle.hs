@@ -6,6 +6,7 @@ import Control.Monad (unless, foldM)
 import Data.Aeson (Value)
 import Data.List (find, nub)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FlowInstance
 
@@ -100,6 +101,8 @@ enqueue delivery wait origin value current = do
     (Just selected,_) | ChildWait{} <- selected.kind -> Left (InvalidTransition "Child waits can only receive the recorded child outcome; manual and provider replies are refused")
     (_,ChildCompletion _) -> Left (InvalidTransition "A child outcome requires its matching child wait")
     _ -> Right ()
+  unless (case origin of ChildCompletion _ -> True; _ -> not ("internal-" `Text.isPrefixOf` delivery))
+    (Left (InvalidTransition "Delivery keys beginning internal- are reserved"))
   receive
   where
    receive = case find ((== delivery) . (.deliveryId)) current.deliveries of
@@ -141,7 +144,9 @@ resolve identity outcome current = do
         , waits = map answer current.waits, deliveries = map recorded current.deliveries }
 
 -- Run inside the same catalog commit as frontier publication or a terminal
--- transition. The outcome is copied before a child may be cleared.
+-- transition. Internal keys cannot be supplied by ingress, so an unrelated
+-- caller-key conflict cannot veto a child's terminal transition. The first
+-- terminal outcome is immutable, making repeated publication idempotent.
 deliverCompletions :: (FlowOutcome -> Value) -> [FlowInstance] -> Either FlowStoreProblem [FlowInstance]
 deliverCompletions encode catalog = traverse notify catalog
   where
@@ -150,7 +155,7 @@ deliverCompletions encode catalog = traverse notify catalog
       ReplyWait -> Right item
       ChildWait child _ -> case find ((== child) . (.instanceId)) catalog of
         Just selected | Finished outcome <- selected.status ->
-          fst <$> enqueue wait.waitId wait.waitId (ChildCompletion child) (encode outcome) item
+          fst <$> enqueue ("internal-child-" <> wait.waitId) wait.waitId (ChildCompletion child) (encode outcome) item
         _ -> Right item
 
 closeWait :: FlowWait -> FlowWait
@@ -168,7 +173,16 @@ clearFinished requested catalog = do
     (Left (InvalidTransition "Only finished instances can be cleared"))
   unless (all (\item -> maybe True (`notElem` ids) item.parent) remaining)
     (Left (InvalidTransition "Clear an instance together with its finished descendants, or clear its children first"))
+  unless (all (ancestorsFinished . (.parent)) removed)
+    (Left (InvalidTransition "Cannot clear an instance beneath an unfinished ancestor; finish or cancel the ancestor first"))
   pure (ids,remaining)
+  where
+    ancestorsFinished Nothing = True
+    ancestorsFinished (Just identity) = case find ((== identity) . (.instanceId)) catalog of
+      Nothing -> True
+      Just ancestor -> case ancestor.status of
+        Finished{} -> ancestorsFinished ancestor.parent
+        _ -> False
 
 -- Resolve from one catalog snapshot. A missing/cleared target is different from
 -- a present handle outside the caller's downward authority.

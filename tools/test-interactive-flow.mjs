@@ -159,9 +159,13 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const childWait=show(awaiting.id).waits.find(x=>x.status==='open');
  const awaitedChild=instances().find(x=>x.parent===awaiting.id);
  assert.equal(childWait.child,awaitedChild.id);assert.equal(childWait.descriptor,null);
- const forged=runtime(['flow','fulfil',awaiting.id,'--reply','17'],1);
+ const forged=runtime(['flow','fulfil',awaiting.id,'--wait',childWait.id,'--reply','17'],1);
  assert.ok(forged.diagnostics.some(x=>x.message.includes('Child waits')));
  assert.deepEqual(show(awaiting.id).deliveries,[],'Refused child outcome was queued');
+ const inferred=runtime(['flow','fulfil',awaiting.id,'--reply','17'],1);
+ assert.ok(inferred.diagnostics.some(x=>x.message.includes('Open reply waits: none')));
+ const collision=runtime(['flow','fulfil',started.id,'--key','internal-child-'+childWait.id,'--reply','1'],1);
+ assert.ok(collision.diagnostics.some(x=>x.message.includes('reserved')));
  await until(()=>show(awaitedChild.id).status==='waiting');
  runtime(['flow','fulfil',awaitedChild.id,'--reply','23']);
  await until(()=>show(awaiting.id).status==='completed');

@@ -177,9 +177,9 @@ descriptors item = [(wait.waitId,either (\message -> object ["unavailable" .= me
 
 selectWait :: Maybe String -> FlowInstance -> Either Diagnostic Text.Text
 selectWait (Just selected) _ = Right (Text.pack selected)
-selectWait Nothing item = case [wait.waitId | wait <- item.waits, wait.waitStatus == Open] of
+selectWait Nothing item = case [wait.waitId | wait <- item.waits, wait.waitStatus == Open, wait.kind == ReplyWait] of
   [identity] -> Right identity
-  identities -> Left (errorDiagnostic "flow.wait" ("Supply --wait WAIT_ID. Open waits: " ++
+  identities -> Left (errorDiagnostic "flow.wait" ("Supply --wait WAIT_ID. Open reply waits: " ++
     if null identities then "none" else Text.unpack (Text.intercalate ", " identities)))
 
 refuseResult :: [Diagnostic] -> Response -> Response

@@ -16,7 +16,7 @@ import Kyyn.Domain.FlowBundleId
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Git (revisionName)
-import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..))
+import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..), RecipeId(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow(..), FlowBundle(..), PreparedFlowEntry(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
@@ -94,6 +94,7 @@ runFlowStore kb = interpret $ \_ operation -> do
           StartInstance parent key launch -> case launch.owner of
             Hosted{} -> pure (Left (InvalidTransition "Hosted instances require a prepared execution bundle"))
             External -> start parent key launch (pure ())
+          StartPreparedInstance _ (Just key) _ | reserved key -> pure (Left reservedProblem)
           StartPreparedInstance parent requestedKey prepared -> do
             key <- maybe (freshKey [item.startKey | item <- catalog, item.parent == parent]) pure requestedKey
             let bytes = Lazy.toStrict (encode (bundleValue prepared.bundle))
@@ -165,12 +166,12 @@ runFlowStore kb = interpret $ \_ operation -> do
               ChildWait child expected -> case Lifecycle.requireDescendant identity child catalog of
                 Left problem -> pure (Left problem)
                 Right selected -> case (find ((== identity) . (.instanceId)) catalog,selected.launch.owner) of
-                  (Just parent,Hosted bundleId recipe) | Hosted parentBundle _ <- parent.launch.owner, bundleId == parentBundle ->
+                  (Just parent,Hosted bundleId recipe) | Hosted parentBundle (RecipeId parentRecipe) <- parent.launch.owner, bundleId == parentBundle ->
                     loadBundle base bundleId >>= \case
                       Left _ -> pure (Left (InvalidTransition "Child wait captured bundle is unavailable"))
                       Right bundle -> pure $ case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
                         [entry] | descriptionOf entry.outputContract == expected -> Right ()
-                        _ -> Left (InvalidTransition ("Child wait output mismatch: parent " <> Text.pack (show parent.launch.owner) <> "; child " <> Text.pack (show recipe)))
+                        _ -> Left (InvalidTransition ("Parent recipe " <> parentRecipe <> " cannot await child recipe " <> (case recipe of RecipeId name -> name) <> ": output contract mismatch"))
                   _ -> pure (Left (InvalidTransition "Child wait does not share its parent's captured bundle"))
             commit $ do
               sequence_ validations
@@ -184,6 +185,7 @@ runFlowStore kb = interpret $ \_ operation -> do
             next <- Lifecycle.cancelTree identity selected catalog >>= Lifecycle.deliverCompletions encodeOutcome
             item <- maybe (Left MissingInstance) Right (find ((== identity) . (.instanceId)) next)
             pure (item,next)
+          QueueDelivery _ (Just key) _ _ _ | reserved key -> pure (Left reservedProblem)
           QueueDelivery identity requestedKey wait origin value -> case find ((== identity) . (.instanceId)) catalog of
             Nothing -> pure (Left MissingInstance)
             Just current -> do
@@ -192,6 +194,8 @@ runFlowStore kb = interpret $ \_ operation -> do
                 (updated,received) <- Lifecycle.enqueue delivery wait origin value current
                 pure (received,replace updated catalog)
           ResolveDelivery identity delivery outcome -> commit (change identity (Lifecycle.resolve delivery outcome))
+    reserved key = any (`Text.isPrefixOf` key) ["internal-","auto-"]
+    reservedProblem = InvalidTransition "Keys beginning internal- or auto- are reserved for host-generated identities"
     notify (item,catalog) = do
       next <- Lifecycle.deliverCompletions encodeOutcome catalog
       selected <- maybe (Left MissingInstance) Right (find ((== item.instanceId) . (.instanceId)) next)

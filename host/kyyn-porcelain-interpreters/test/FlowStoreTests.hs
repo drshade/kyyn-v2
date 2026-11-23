@@ -123,6 +123,9 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   _ <- update (cancelDescendant controller.instanceId controlled.instanceId FlowAndDescendants)
   stoppedGrandchild <- readFlow grandchild.instanceId
   assert (stoppedGrandchild.status == Finished Cancelled) "Subtree cancellation missed a grandchild below a terminal child"
+  prematureClear <- store scope (clearInstances [grandchild.instanceId])
+  assert (case prematureClear of Left InvalidTransition{} -> True; _ -> False) "Clear removed a child below an unfinished ancestor"
+  _ <- update (finishInstance controller.instanceId (Completed Null))
   _ <- update (clearInstances [grandchild.instanceId])
   clearedRead <- store scope (readDescendant controller.instanceId grandchild.instanceId)
   clearedCancel <- store scope (cancelDescendant controller.instanceId grandchild.instanceId ThisFlow)
@@ -153,6 +156,9 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     forM_ [ManualReply "cli",ProviderReply "fixture" "event"] $ \origin -> do
       refused <- store scope (queueDelivery waiter.instanceId "fake" "child-wait" origin (object []))
       assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Child wait accepted a fabricated outcome"
+    forM_ ["internal-child-child-wait","auto-collision"] $ \key -> do
+      refused <- store scope (queueDelivery waiter.instanceId key "unrelated-reply" (ManualReply "cli") Null)
+      assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Caller claimed a reserved delivery identity"
     unless finishedFirst (void complete)
     ready <- readFlow waiter.instanceId
     assert (length ready.deliveries == 1 && all ((== ChildCompletion childTarget.instanceId) . (.origin)) ready.deliveries)
@@ -160,10 +166,14 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     _ <- complete
     repeated <- readFlow waiter.instanceId
     assert (repeated.deliveries == ready.deliveries) "Repeated finish changed the outcome delivery"
-    _ <- update (clearInstances [childTarget.instanceId])
-    _ <- update (resolveDelivery waiter.instanceId "child-wait" Accepted)
+    refusedClear <- store scope (clearInstances [childTarget.instanceId])
+    assert (case refusedClear of Left InvalidTransition{} -> True; _ -> False) "Clear removed a child before its parent finished"
+    _ <- update (resolveDelivery waiter.instanceId "internal-child-child-wait" Accepted)
     resumed <- readFlow waiter.instanceId
-    assert (resumed.status == Runnable) "Clearing the child stranded its waiting parent"
+    assert (resumed.status == Runnable) "Copied child outcome did not resume its parent"
+    _ <- update (finishInstance waiter.instanceId (Completed (object [])))
+    _ <- update (clearInstances [childTarget.instanceId])
+    pure ()
   cancellationWaiter <- start Nothing "cancellation-waiter"
   cancellationChild <- start (Just cancellationWaiter.instanceId) "cancellation-child"
   _ <- update (beginAttempt cancellationWaiter.instanceId)
@@ -171,6 +181,42 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   _ <- update (cancelInstance cancellationChild.instanceId FlowAndDescendants)
   notified <- readFlow cancellationWaiter.instanceId
   assert (length notified.deliveries == 1) "Cancellation did not notify the waiting parent"
+
+  forM_ [False,True] $ \cancelledFirst -> do
+    allItems <- store scope listInstances
+    rootWaiter <- start Nothing ("grandparent-waiter-" <> Text.pack (show (length allItems)))
+    branch <- start (Just rootWaiter.instanceId) "branch"
+    descendant <- start (Just branch.instanceId) "descendant"
+    when cancelledFirst (void (update (cancelInstance branch.instanceId FlowAndDescendants)))
+    _ <- update (beginAttempt rootWaiter.instanceId)
+    _ <- update (reportFrontier rootWaiter.instanceId [("descendant-wait",String "child",ChildWait descendant.instanceId UnitDescription)])
+    _ <- update (cancelInstance branch.instanceId FlowAndDescendants)
+    delivered <- readFlow rootWaiter.instanceId
+    assert (length delivered.deliveries == 1) "Subtree cancellation lost or duplicated the descendant outcome"
+    _ <- update (cancelInstance branch.instanceId FlowAndDescendants)
+    repeated <- readFlow rootWaiter.instanceId
+    assert (repeated.deliveries == delivered.deliveries) "Repeated subtree cancellation changed a pending outcome"
+  joiner <- start Nothing "two-child-join"
+  firstChild <- start (Just joiner.instanceId) "first"
+  secondChild <- start (Just joiner.instanceId) "second"
+  _ <- update (beginAttempt joiner.instanceId)
+  _ <- update (reportFrontier joiner.instanceId [("reply",String "reply",ReplyWait)])
+  _ <- update (queueDelivery joiner.instanceId "first" "reply" (ManualReply "cli") Null)
+  _ <- update (resolveDelivery joiner.instanceId "first" Accepted)
+  _ <- update (beginAttempt joiner.instanceId)
+  _ <- update (reportFrontier joiner.instanceId
+    [("first",String "first",ChildWait firstChild.instanceId UnitDescription),("second",String "second",ChildWait secondChild.instanceId UnitDescription)])
+  _ <- update (finishInstance firstChild.instanceId (Failed [errorDiagnostic "fixture" "Child refused"]))
+  _ <- update (resolveDelivery joiner.instanceId "internal-child-first" Accepted)
+  partiallyReady <- readFlow joiner.instanceId
+  assert (partiallyReady.status == Runnable && length [w | w <- partiallyReady.waits, w.waitStatus == Open] == 1)
+    "Failed child closed its sibling wait or did not wake its parent"
+  _ <- update (beginAttempt joiner.instanceId)
+  _ <- update (reportFrontier joiner.instanceId [("second",String "second",ChildWait secondChild.instanceId UnitDescription)])
+  _ <- update (finishInstance secondChild.instanceId (Completed (object [])))
+  _ <- update (resolveDelivery joiner.instanceId "internal-child-second" Accepted)
+  joined <- readFlow joiner.instanceId
+  assert (joined.status == Runnable && all ((/= Open) . (.waitStatus)) joined.waits) "Second child outcome did not wake the join"
 
   -- Ingress must complete even while a long attempt holds the same instance's journal.
   separate <- start Nothing "separate"
@@ -217,10 +263,10 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   -- Both serializations of child publication versus cancellation are valid.
   replicateM_ 12 $ do
     allItems <- store scope listInstances
-    racer <- start (Just controller.instanceId) ("race-" <> Text.pack (show (length allItems)))
+    racer <- start (Just unrelated.instanceId) ("race-" <> Text.pack (show (length allItems)))
     (created,_) <- concurrently
       (store scope (startPreparedInstance (Just racer.instanceId) "racing-child" preparedFixture))
-      (update (cancelDescendant controller.instanceId racer.instanceId FlowAndDescendants))
+      (update (cancelDescendant unrelated.instanceId racer.instanceId FlowAndDescendants))
     case created of
       Left CancelledAncestor -> pure ()
       Right item -> readFlow item.instanceId >>= \actual -> assert (actual.status == Finished Cancelled) "Racing child escaped cancellation"
