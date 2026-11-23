@@ -3,7 +3,6 @@ module Kyyn.Composition.FlowViewing (viewFlow) where
 
 import Control.Monad (forM)
 import Data.Aeson (object, (.=))
-import Data.Aeson.Types (parseEither)
 import Data.List (find)
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -15,7 +14,7 @@ import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.FlowInstance
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Plumbing.Protocol.Tool (decodeFlowValue)
+import Kyyn.Plumbing.Protocol.Interactive (describeWait)
 import Kyyn.Porcelain.Capability.FlowStore (listInstances)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Porcelain.Interpreter.FlowJournal (tryFlowWriterLock)
@@ -46,6 +45,6 @@ viewFlow host scope route = do
                 pure (Right (flowPage item interrupted values
                   [(child,state) | (child,state) <- items, child.parent == Just identity]
                   [(wait.waitId,either (\message -> object ["unavailable" .= message]) id
-                      (parseEither decodeFlowValue wait.descriptor)) | wait <- item.waits]))
+                      (describeWait wait)) | wait <- item.waits]))
           _ -> pure (Left (refusal [errorDiagnostic "flow.unknown" "Unknown flow route"]))
       pure (either (Left . operationalFailure) id result)

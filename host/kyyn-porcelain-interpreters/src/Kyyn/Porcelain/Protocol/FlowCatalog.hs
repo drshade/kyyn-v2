@@ -1,8 +1,9 @@
 {-# LANGUAGE OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Porcelain.Protocol.FlowCatalog (catalogValue, parseCatalog) where
 
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Monad (unless)
-import Data.Aeson (Key, Value(..), object, (.=), (.:), withObject)
+import Data.Aeson (Key, Value(..), object, toJSON, parseJSON, (.=), (.:), withObject)
 import Data.Aeson.Types (Parser, Object)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (nub, sort)
@@ -40,17 +41,23 @@ statusValue (Finished outcome) = tag "finished" (case outcome of
   Failed errors -> object ["tag" .= String "failed","value" .= map diagnosticValue errors]
   Cancelled -> tag "cancelled" Null)
 waitValue :: FlowWait -> Value
-waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"kind" .= kindValue wait.kind,"status" .= case wait.waitStatus of
+waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"kind" .= kindValue wait.kind,"dispatch" .= fmap dispatchValue wait.dispatch,"status" .= case wait.waitStatus of
   Open -> tag "open" Null
   Closed -> tag "closed" Null
   Answered origin value -> tag "answered" (object ["origin" .= originValue origin,"value" .= value])]
 kindValue :: WaitKind -> Value
 kindValue ReplyWait = tag "reply" Null
 kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanceIdText child,"outputContract" .= output])
-originValue :: ReplyOrigin -> Value
+kindValue (EventWait reference) = tag "event" (toJSON reference)
+dispatchValue :: DispatchState -> Text.Text
+dispatchValue NotRequired = "notRequired"
+dispatchValue Pending = "pending"
+dispatchValue Started = "started"
+dispatchValue DispatchCompleted = "completed"
+originValue :: DeliveryOrigin -> Value
 originValue (ChildCompletion child) = tag "child" (String (flowInstanceIdText child))
-originValue (ManualReply surface) = tag "manual" (String surface)
-originValue (ProviderReply binding event) = tag "provider" (object ["binding" .= binding,"event" .= event])
+originValue (ReceivedFrom (ManualReply surface)) = tag "manual" (String surface)
+originValue (ReceivedFrom (ProviderReply binding (EventIdentity event))) = tag "provider" (object ["binding" .= binding,"event" .= event])
 deliveryValue :: FlowDelivery -> Value
 deliveryValue item = object ["id" .= item.deliveryId,"wait" .= item.waitId,"origin" .= originValue item.origin,
   "value" .= item.value,"outcome" .= fmap outcomeValue item.outcome]
@@ -121,7 +128,7 @@ parseStatus value = tagged value >>= \(name,payload) -> case (name,payload) of
   _ -> fail "Invalid execution status"
 parseWait :: Value -> Parser FlowWait
 parseWait = withObject "wait" $ \fields -> do
-  exact ["id","descriptor","kind","status"] fields
+  exact ["id","descriptor","kind","status","dispatch"] fields
   state <- fields .: "status" >>= tagged >>= \(name,payload) -> case (name,payload) of
     ("open",Null) -> pure Open
     ("closed",Null) -> pure Closed
@@ -129,21 +136,29 @@ parseWait = withObject "wait" $ \fields -> do
       exact ["origin","value"] reply
       Answered <$> (reply .: "origin" >>= parseOrigin) <*> reply .: "value") body
     _ -> fail "Invalid wait status"
-  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> (fields .: "kind" >>= parseKind) <*> pure state
+  kind <- fields .: "kind" >>= parseKind
+  dispatch <- fields .: "dispatch" >>= traverse (\name -> case name :: Text.Text of
+    "notRequired" -> pure NotRequired; "pending" -> pure Pending
+    "started" -> pure Started; "completed" -> pure DispatchCompleted
+    _ -> fail "Invalid dispatch state")
+  unless (case kind of EventWait{} -> dispatch /= Nothing; _ -> dispatch == Nothing)
+    (fail "Dispatch state must belong to an event wait")
+  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure kind <*> pure state <*> pure dispatch
 parseKind :: Value -> Parser WaitKind
 parseKind value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("reply",Null) -> pure ReplyWait
   ("child",body) -> withObject "child wait" (\fields -> do
     exact ["child","outputContract"] fields
     ChildWait <$> (fields .: "child" >>= checkedId) <*> fields .: "outputContract") body
+  ("event",body) -> EventWait <$> parseJSON body
   _ -> fail "Invalid wait kind"
-parseOrigin :: Value -> Parser ReplyOrigin
+parseOrigin :: Value -> Parser DeliveryOrigin
 parseOrigin value = tagged value >>= \(name,payload) -> case (name,payload) of
   ("child",String child) -> ChildCompletion <$> checkedId child
-  ("manual",String surface) -> pure (ManualReply surface)
+  ("manual",String surface) -> pure (ReceivedFrom (ManualReply surface))
   ("provider",body) -> withObject "provider origin" (\fields -> do
     exact ["binding","event"] fields
-    ProviderReply <$> fields .: "binding" <*> fields .: "event") body
+    ReceivedFrom <$> (ProviderReply <$> fields .: "binding" <*> (EventIdentity <$> fields .: "event"))) body
   _ -> fail "Invalid reply origin"
 parseDelivery :: Value -> Parser FlowDelivery
 parseDelivery = withObject "delivery" $ \fields -> do

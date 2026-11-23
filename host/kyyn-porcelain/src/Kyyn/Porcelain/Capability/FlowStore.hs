@@ -37,7 +37,7 @@ data FlowStore :: Effect where
   BlockInstance :: FlowInstanceId -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   CancelInstance :: FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
   -- Ingress holds only the short catalog lock, never the guest's writer lock.
-  QueueDelivery :: FlowInstanceId -> Maybe Text -> Text -> ReplyOrigin -> Value -> FlowStore m (Either FlowStoreProblem FlowDelivery)
+  QueueDelivery :: FlowInstanceId -> Maybe Text -> Text -> DeliveryOrigin -> Value -> FlowStore m (Either FlowStoreProblem FlowDelivery)
   ResolveDelivery :: FlowInstanceId -> Text -> DeliveryOutcome -> FlowStore m (Either FlowStoreProblem FlowInstance)
 type instance DispatchOf FlowStore = Dynamic
 
@@ -57,7 +57,7 @@ blockInstance :: FlowStore :> es => FlowInstanceId -> [Diagnostic] -> Eff es (Ei
 blockInstance identity = send . BlockInstance identity
 cancelInstance :: FlowStore :> es => FlowInstanceId -> CancelScope -> Eff es (Either FlowStoreProblem FlowInstance)
 cancelInstance identity = send . CancelInstance identity
-queueDelivery :: FlowStore :> es => FlowInstanceId -> Text -> Text -> ReplyOrigin -> Value -> Eff es (Either FlowStoreProblem FlowDelivery)
+queueDelivery :: FlowStore :> es => FlowInstanceId -> Text -> Text -> DeliveryOrigin -> Value -> Eff es (Either FlowStoreProblem FlowDelivery)
 queueDelivery identity delivery wait origin = send . QueueDelivery identity (Just delivery) wait origin
 resolveDelivery :: FlowStore :> es => FlowInstanceId -> Text -> DeliveryOutcome -> Eff es (Either FlowStoreProblem FlowInstance)
 resolveDelivery identity delivery = send . ResolveDelivery identity delivery
@@ -80,7 +80,7 @@ retryInstance = send . RetryInstance
 
 startNewPreparedInstance :: FlowStore :> es => Maybe FlowInstanceId -> PreparedFlow -> Eff es (Either FlowStoreProblem FlowInstance)
 startNewPreparedInstance parent = send . StartPreparedInstance parent Nothing
-queueNewDelivery :: FlowStore :> es => FlowInstanceId -> Text -> ReplyOrigin -> Value -> Eff es (Either FlowStoreProblem FlowDelivery)
+queueNewDelivery :: FlowStore :> es => FlowInstanceId -> Text -> DeliveryOrigin -> Value -> Eff es (Either FlowStoreProblem FlowDelivery)
 queueNewDelivery identity wait origin = send . QueueDelivery identity Nothing wait origin
 
 readBundleDescription :: FlowStore :> es => FlowBundleId -> Eff es (Either [Diagnostic] FlowBundle)

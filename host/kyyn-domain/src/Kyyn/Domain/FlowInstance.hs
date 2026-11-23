@@ -1,14 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot #-}
 module Kyyn.Domain.FlowInstance
   ( FlowInstanceId, flowInstanceId, flowInstanceIdText, FlowOwner(..)
-  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), ReplyOrigin(..)
+  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), DeliveryOrigin(..), ReplyOrigin(..), DispatchState(..)
   , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitKind(..), WaitStatus(..)
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
 
 import Kyyn.Domain.RecipeRunId (RecipeRunId)
 import Kyyn.Domain.FlowBundleId (FlowBundleId)
-import Kyyn.Types.KnowledgeBase (RecipeId)
+import Kyyn.Types.KnowledgeBase (RecipeId, EventReference)
+import Kyyn.Types.EventWait (ReplyOrigin(..))
 import Data.Aeson (Value)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
@@ -32,7 +33,7 @@ data FlowProgress = FlowWaiting [(Text,Value,WaitKind)] | FlowReturned Value der
 data FlowOutcome = Completed Value | Failed [Diagnostic] | Cancelled deriving (Eq, Show)
 data ExecutionStatus = Runnable | Running | Waiting | Finished FlowOutcome deriving (Eq, Show)
 data CancelScope = ThisFlow | FlowAndDescendants deriving (Eq, Show)
-data ReplyOrigin = ManualReply Text | ProviderReply Text Text | ChildCompletion FlowInstanceId deriving (Eq, Show)
+data DeliveryOrigin = ReceivedFrom ReplyOrigin | ChildCompletion FlowInstanceId deriving (Eq, Show)
 
 -- The application validates and captures the execution description before start.
 -- This store preserves it verbatim; reading status never loads its guest or secrets.
@@ -45,13 +46,14 @@ data FlowInstance = FlowInstance
   , blocked :: [Diagnostic], retryRequired :: Bool, cancelDescendants :: Bool, waits :: [FlowWait]
   , deliveries :: [FlowDelivery], attempts :: [RecipeRunId]
   } deriving (Eq, Show)
-data WaitKind = ReplyWait | ChildWait FlowInstanceId Description deriving (Eq, Show)
+data WaitKind = ReplyWait | ChildWait FlowInstanceId Description | EventWait EventReference deriving (Eq, Show)
+data DispatchState = NotRequired | Pending | Started | DispatchCompleted deriving (Eq, Show)
 data FlowWait = FlowWait
-  { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus
+  { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus, dispatch :: Maybe DispatchState
   } deriving (Eq, Show)
-data WaitStatus = Open | Answered ReplyOrigin Value | Closed deriving (Eq, Show)
+data WaitStatus = Open | Answered DeliveryOrigin Value | Closed deriving (Eq, Show)
 data FlowDelivery = FlowDelivery
-  { deliveryId :: Text, waitId :: Text, origin :: ReplyOrigin, value :: Value
+  { deliveryId :: Text, waitId :: Text, origin :: DeliveryOrigin, value :: Value
   , outcome :: Maybe DeliveryOutcome
   } deriving (Eq, Show)
 data DeliveryOutcome = Accepted | Duplicate | Conflicting | Invalid Text | ClosedWait

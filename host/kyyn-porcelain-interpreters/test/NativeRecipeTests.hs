@@ -3,10 +3,11 @@
 -- An empty captured evidence index supplies the nested connector callback.
 -- Interactive attempts use fresh guest processes and the native journal; after
 -- suspension any repeated connector read fails the test.
-{-# LANGUAGE GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
+{-# LANGUAGE DuplicateRecordFields, GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference))
+import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Control.Monad (unless, void, when)
@@ -219,6 +220,20 @@ main = do
     parentBundleId <- case parent.launch.owner of Instance.Hosted identity _ -> pure identity; _ -> fail "Parent is not hosted"
     reopenedForChild <- store (readExecutionBundle parentBundleId) >>= right >>= right
     child <- store (startPreparedInstance (Just parent.instanceId) "child-start" (PreparedFlow (R.RecipeId "child") (String "2") reopenedForChild)) >>= right >>= right
+    let eventKind = Instance.EventWait eventReference
+    _ <- store (beginAttempt parent.instanceId) >>= right >>= right
+    deniedFrontier <- store (reportFrontier parent.instanceId
+      [("bare",Null,Instance.ReplyWait),("event",Null,eventKind)]) >>= right
+    case deniedFrontier of Left Instance.InvalidTransition{} -> pure (); _ -> fail "Undeclared event frontier accepted"
+    unchangedParent <- store (readInstance parent.instanceId) >>= right >>= maybe (fail "Missing parent") pure
+    unless (null unchangedParent.waits) (fail "Unauthorized event partially published the frontier")
+    eventInstance <- store (startPreparedInstance Nothing "event-start" declared) >>= right >>= right
+    _ <- store (beginAttempt eventInstance.instanceId) >>= right >>= right
+    eventFrontier <- store (reportFrontier eventInstance.instanceId [("event",Null,eventKind)]) >>= right >>= right
+    unless (map (.dispatch) eventFrontier.waits == [Just Instance.Pending]) (fail "Dispatch was not persisted pending")
+    reopenedInstance <- store (readInstance eventInstance.instanceId) >>= right >>= maybe (fail "Missing event instance") pure
+    unless (reopenedInstance.waits == eventFrontier.waits) (fail "Event dispatch state changed on reopen")
+    _ <- store (cancelInstance eventInstance.instanceId Instance.ThisFlow) >>= right >>= right
     outside <- store (startPreparedInstance (Just parent.instanceId) "undeclared-child"
       (PreparedFlow (R.RecipeId "parent") (String "1") capturedBundle)) >>= right
     case outside of Left Instance.InvalidTransition{} -> pure (); _ -> fail "Started a child outside the declared set"
@@ -338,7 +353,7 @@ main = do
         visitWith fault first selectedIdentity = workerWith fault first (visitInstance selectedIdentity)
         workerWith fault first operation = do
           outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-            . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
+            . runDhallHandling . (if fault == NoGuest then unexpected @GuestExecution else runGuestExecution [("LC_ALL","C.UTF-8")])
             . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . (case fault of PluginFault -> failPlugin True; ProtocolFault -> failPlugin False; _ -> id) . runDocumentPersistenceIO . runFlowStore kb
@@ -351,6 +366,44 @@ main = do
           (readRecipeRun kb selectedIdentity Nothing 1000)))) >>= right
         clearRecording selectedIdentity = runEff (runFailure (runAppendJournalIO (runRecipeRunStore (const (pure ()))
           (clearRecipeRun kb selectedIdentity)))) >>= right
+    eventPrepared <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+      . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
+      . runPluginPreparation . runFlowPreparation $
+        prepareInteractiveFlow (either error id (gitRevision (replicate 40 'a'))) code
+          [Fact (FactId "event") (R.ClosedRecipe (Interactive (InteractionBindings [] [eventReference])) (FlowEntryRef "Flows.eventWaiting"))]
+          (R.RecipeId "event") (Just "\"Question\"")
+    eventReady <- right eventPrepared >>= right
+    Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply eventReference (EventIdentity "provider-event")),
+      ("provider-first",Instance.ProviderReply eventReference (EventIdentity "provider-event"),Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
+      eventHosted <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
+      _ <- visit False eventHosted.instanceId
+      eventWaiting <- inspect eventHosted.instanceId
+      eventWait <- case eventWaiting.waits of [selected] -> pure selected; _ -> fail "Event wait not published"
+      unless (eventWait.dispatch == Just Instance.Pending) (fail "Event dispatch did not remain pending")
+      _ <- store (queueDelivery eventHosted.instanceId "invalid" eventWait.waitId (Instance.ReceivedFrom firstOrigin) (Number 7)) >>= right >>= right
+      _ <- visitWith NoGuest False eventHosted.instanceId >>= right
+      stillWaiting <- inspect eventHosted.instanceId
+      unless (stillWaiting.status == Instance.Waiting && stillWaiting.attempts == eventWaiting.attempts &&
+        (case stillWaiting.deliveries of
+          [delivery] -> case delivery.outcome of Just Instance.Invalid{} -> True; _ -> False
+          _ -> False))
+        (fail "Invalid event payload entered guest execution")
+      _ <- store (queueDelivery eventHosted.instanceId "first" eventWait.waitId (Instance.ReceivedFrom firstOrigin) (String "Answer")) >>= right >>= right
+      _ <- store (queueDelivery eventHosted.instanceId "same" eventWait.waitId (Instance.ReceivedFrom secondOrigin) (String "Answer")) >>= right >>= right
+      _ <- store (queueDelivery eventHosted.instanceId "different" eventWait.waitId (Instance.ReceivedFrom secondOrigin) (String "Different")) >>= right >>= right
+      _ <- visit False eventHosted.instanceId
+      eventFinished <- inspect eventHosted.instanceId
+      unless (map (.outcome) (drop 1 eventFinished.deliveries) == map Just [Instance.Accepted,Instance.Duplicate,Instance.Conflicting])
+        (fail "Event origin affected payload deduplication")
+      unless (map (.waitStatus) eventFinished.waits == [Instance.Answered (Instance.ReceivedFrom firstOrigin) (String "Answer")])
+        (fail "Event duplicate replaced first accepted provenance")
+      unless (map (.origin) (drop 1 eventFinished.deliveries) == map Instance.ReceivedFrom [firstOrigin,secondOrigin,secondOrigin])
+        (fail "Event delivery history lost actual ingress provenance")
+      case eventFinished.status of
+        Instance.Finished (Instance.Completed value) -> do
+          replyValue <- right (parseEither (withObject "received reply" (.: "value")) value)
+          unless (replyValue == String "Answer") (fail "Guest received wrong event reply")
+        _ -> fail "Typed event did not complete"
     let missingId = either error id (Instance.flowInstanceId "never-started")
     missingBusy <- workerWith NoFault False ((\busyWriter -> if busyWriter then WriterBusy else NoWork) <$> writerBusy missingId) >>= right
     missingVisit <- visit False missingId
@@ -383,14 +436,14 @@ main = do
       (fail "Suspended attempt lost its outcome or instance link")
     idle <- visit False hosted.instanceId
     unless (idle == NoWork) (fail "Waiting instance ran without a reply")
-    _ <- store (queueDelivery hosted.instanceId "bad" waitId (Instance.ManualReply "cli") (String "bad")) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "bad" waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "bad")) >>= right >>= right
     rejectedVisit <- visit False hosted.instanceId
     invalid <- inspect hosted.instanceId
     unless (rejectedVisit == NoWork && invalid.status == Instance.Waiting && invalid.attempts == [firstRun])
       (fail "Invalid reply woke or recorded an attempt")
-    _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ManualReply "first") (Number 9)) >>= right >>= right
-    _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ManualReply "second") (Number 9)) >>= right >>= right
-    _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ManualReply "third") (Number 10)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ReceivedFrom (Instance.ManualReply "first")) (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ReceivedFrom (Instance.ManualReply "second")) (Number 9)) >>= right >>= right
+    _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ReceivedFrom (Instance.ManualReply "third")) (Number 10)) >>= right >>= right
     broken <- visitWith RecordingFault False hosted.instanceId
     unless (case broken of Left _ -> True; _ -> False) (fail "Recording failure was swallowed")
     interruptedFlow <- inspect hosted.instanceId
@@ -408,7 +461,7 @@ main = do
     unless (map (.outcome) (drop 1 completedFlow.deliveries) == map Just [Instance.Accepted,Instance.Duplicate,Instance.Conflicting])
       (fail "Worker lost reply deduplication or conflict decisions")
     case completedFlow.waits of
-      [waitDescriptor] | waitDescriptor.waitStatus == Instance.Answered (Instance.ManualReply "first") (Number 9) -> pure ()
+      [waitDescriptor] | waitDescriptor.waitStatus == Instance.Answered (Instance.ReceivedFrom (Instance.ManualReply "first")) (Number 9) -> pure ()
       _ -> fail "Duplicate changed first reply provenance"
     secondRun <- case completedFlow.attempts of [_,_,attemptId] -> pure attemptId; _ -> fail "Missing resumed attempt"
     secondRecording <- recording secondRun
@@ -541,7 +594,7 @@ main = do
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
 fixedCompilation program = interpret $ \_ (CompileGuest source) ->
-  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"],
+  if selectedBuild source `elem` [RecipeEntries [ClosedFlow "Flows.review"], RecipeEntries [InteractiveFlow "Flows.waiting"], RecipeEntries [InteractiveFlow "Flows.eventWaiting"],
     RecipeEntries [InteractiveFlow "Flows.parentWaiting", InteractiveFlow "Flows.waiting"]] then pure (Right program)
   else error "Recipe path attempted a separate plugin or host-generated build"
 
@@ -572,7 +625,7 @@ failRunTerminal = interpose $ \env operation -> case operation of
   ReadRecipeRun kb selected cursor limit -> readRecipeRun kb selected cursor limit
   ClearRecipeRun kb selected -> clearRecipeRun kb selected
 
-data WorkerFault = NoFault | RecordingFault | PluginFault | ProtocolFault deriving Eq
+data WorkerFault = NoFault | NoGuest | RecordingFault | PluginFault | ProtocolFault deriving Eq
 
 failPlugin :: PluginRead :> es => Bool -> Eff es a -> Eff es a
 failPlugin authoritative = interpose $ \_ operation -> case operation of

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec, classifyChildWait) where
+module Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec) where
 
 import Agentic.Codec (Codec(..), primitive)
 import qualified Agentic.Schema as S
@@ -34,10 +34,3 @@ childWaitCodec = primitive (S.SObject
         _ -> Left "Invalid child wait request"
     decode _ = Left "Expected a child wait request"
 
--- Ordinary upstream awaits have no Kyyn routing envelope. An explicit but
--- malformed routing envelope is refused rather than silently treated as a reply.
-classifyChildWait :: Value -> Either Text (Maybe ChildWaitRequest)
-classifyChildWait value@(Object fields)
-  | any ((== "kyynWait") . fst) fields = Just <$> decodeChild value
-  where decodeChild = case childWaitCodec of Codec _ _ decode -> decode
-classifyChildWait _ = Right Nothing

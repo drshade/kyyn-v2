@@ -5,7 +5,6 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (forM, when)
 import Data.List (nub)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
-import Data.Aeson.Types (parseEither)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, liftIO, (:>))
@@ -36,7 +35,7 @@ import Kyyn.Plumbing.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementIO)
 import Kyyn.Plumbing.Interpreter.ModelTurn (runModelTurnIO)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
-import Kyyn.Plumbing.Protocol.Tool (decodeFlowValue)
+import Kyyn.Plumbing.Protocol.Interactive (describeWait)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.Flow (startFlowAt, flowProblem)
 import Kyyn.Porcelain.Capability.FlowStore
@@ -100,7 +99,7 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
               Left problem -> pure (refusal [problem])
               Right wait -> do
                 queued <- maybe (queueNewDelivery identity wait) (\chosen -> queueDelivery identity (Text.pack chosen) wait) key
-                  (ManualReply "cli") value
+                  (ReceivedFrom (ManualReply "cli")) value
                 pure $ either (refusal . pure . flowProblem) deliveryResponse queued
       Cli.CancelFlow identity selected -> cancelInstance identity selected >>= operation
       Cli.RetryFlow identity -> do
@@ -160,11 +159,11 @@ presentValues stopped item values = success
 
 descriptors :: FlowInstance -> [(Text.Text,Value)]
 descriptors item = [(wait.waitId,either (\message -> object ["unavailable" .= message]) id
-  (parseEither decodeFlowValue wait.descriptor)) | wait <- item.waits]
+  (describeWait wait)) | wait <- item.waits]
 
 selectWait :: Maybe String -> FlowInstance -> Either Diagnostic Text.Text
 selectWait (Just selected) _ = Right (Text.pack selected)
-selectWait Nothing item = case [wait.waitId | wait <- item.waits, wait.waitStatus == Open, wait.kind == ReplyWait] of
+selectWait Nothing item = case [wait.waitId | wait <- item.waits, wait.waitStatus == Open, (case wait.kind of ChildWait{} -> False; _ -> True)] of
   [identity] -> Right identity
   identities -> Left (errorDiagnostic "flow.wait" ("Supply --wait WAIT_ID. Open reply waits: " ++
     if null identities then "none" else Text.unpack (Text.intercalate ", " identities)))

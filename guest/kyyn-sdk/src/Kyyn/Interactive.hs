@@ -1,7 +1,9 @@
 module Kyyn.Interactive
-  ( EventRef, EventBinding, event, withEvents, FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
+  ( awaitReply, ReceivedReply(..), ReplyOrigin(..), EventIdentity(..), EventReference(..), EventRef, EventBinding, event, withEvents, FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..), FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped, FlowDefinition, FlowRef, ChildFlow, interactiveRecipe, createInteractiveRecipe, child, withChildren ) where
 
-import Kyyn.Interactive.Event (EventRef, EventBinding(..), event)
+import Kyyn.Types.EventIdentity (EventIdentity(..))
+import Kyyn.Types.EventWait (ReceivedReply(..), ReplyOrigin(..))
+import Kyyn.Interactive.Event (EventRef, EventBinding(..), event, awaitReply)
 import Kyyn.Interactive.Control (FlowHandle, startFlow, inspectFlow, awaitFlow, cancelFlow, flowRef, flowRefTyped)
 import Kyyn.Types.FlowStatus (FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..))
 import Kyyn.Interactive.Internal (FlowDefinition(..), FlowRef, ChildFlow(..))
@@ -9,7 +11,7 @@ import Kyyn.Recipe.Internal (RecipeDefinition(..), KnowledgeBase)
 import Kyyn.Evolution.KnowledgeBase (createRecipe)
 import Kyyn.Edit (Edit)
 import Kyyn.Types.KnowledgeBase
-  (RecipeId, Recipe(..), Lifetime(..), InteractionBindings(..), ChildReference(..))
+  (EventReference(..), RecipeId, Recipe(..), Lifetime(..), InteractionBindings(..), ChildReference(..))
 
 -- | Register a generated source definition in the existing recipe collection.
 -- Shared state is unit; each interactive instance owns its progress.

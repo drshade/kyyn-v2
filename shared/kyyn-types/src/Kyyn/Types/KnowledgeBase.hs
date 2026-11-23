@@ -1,6 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
 module Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(..), Recipe(..), RecipeId(..), FlowEntryRef(..)) where
 
+import GHC.Generics (Generic)
+import Agentic.Contract (Contract)
 import Data.Text (Text)
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, withObject, (.=), (.:))
 import Kyyn.Types.Json (exactObject)
@@ -13,7 +15,8 @@ data InteractionBindings = InteractionBindings { children :: [ChildReference], e
   deriving (Eq, Show)
 data EventReference = EventReference
   { plugin :: Text, connector :: Text, instanceName :: Text, method :: Text }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+instance Contract EventReference
 instance ToJSON EventReference where
   toJSON (EventReference p c i m) = object
     ["plugin" .= p,"connector" .= c,"instance" .= i,"event" .= m]

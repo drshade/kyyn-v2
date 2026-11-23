@@ -4,6 +4,8 @@
 {-# LANGUAGE DataKinds, GADTs, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
+import Kyyn.Types.EventIdentity (EventIdentity(..))
+import Kyyn.Types.KnowledgeBase (EventReference(..))
 import Control.Concurrent.Async (concurrently, withAsync, cancel)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar
@@ -76,7 +78,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   activeChild <- readFlow child.instanceId
   assert (activeChild.status == Runnable) "Parent completion stopped child"
   _ <- wait child.instanceId
-  queued <- update (queueDelivery child.instanceId "manual-1" "one" (ManualReply "cli") (Number 7))
+  queued <- update (queueDelivery child.instanceId "manual-1" "one" (ReceivedFrom (ManualReply "cli")) (Number 7))
   assert (queued.outcome == Nothing) "Ingress fulfilled a reply"
   before <- readFlow child.instanceId
   assert (before.status == Waiting) "Receipt woke a waiting flow before validation"
@@ -85,24 +87,24 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   assert (after.status == Runnable && length [() | w <- after.waits, w.waitStatus == Open] == 1) "Partial reply did not wake independently"
   _ <- update (beginAttempt child.instanceId)
   _ <- update (reportFrontier child.instanceId [("two",String "other",ReplyWait)])
-  _ <- update (queueDelivery child.instanceId "duplicate" "one" (ManualReply "cli") (Number 7))
+  _ <- update (queueDelivery child.instanceId "duplicate" "one" (ReceivedFrom (ManualReply "cli")) (Number 7))
   duplicate <- update (resolveDelivery child.instanceId "duplicate" Accepted)
   assert (duplicate.status == Waiting && any ((== Just Duplicate) . (.outcome)) duplicate.deliveries)
     "Duplicate reply woke an already waiting instance"
-  _ <- update (queueDelivery child.instanceId "new-origin" "one" (ProviderReply "adapter" "another-event") (Number 7))
+  _ <- update (queueDelivery child.instanceId "new-origin" "one" (ReceivedFrom (ProviderReply (EventReference "fixture" "Updates" "updates" "question") (EventIdentity "another-event"))) (Number 7))
   newOrigin <- update (resolveDelivery child.instanceId "new-origin" Accepted)
   assert (newOrigin.status == Waiting && length [() | d <- newOrigin.deliveries, d.outcome == Just Duplicate] == 2)
     "Same reply from another origin remained unresolved"
-  assert (any ((== Answered (ManualReply "cli") (Number 7)) . (.waitStatus)) newOrigin.waits)
+  assert (any ((== Answered (ReceivedFrom (ManualReply "cli")) (Number 7)) . (.waitStatus)) newOrigin.waits)
     "Duplicate changed original reply origin"
-  _ <- update (queueDelivery child.instanceId "conflict" "one" (ManualReply "cli") (Number 8))
+  _ <- update (queueDelivery child.instanceId "conflict" "one" (ReceivedFrom (ManualReply "cli")) (Number 8))
   _ <- update (resolveDelivery child.instanceId "conflict" Conflicting)
   _ <- update (cancelInstance parent.instanceId FlowAndDescendants)
   preserved <- readFlow parent.instanceId
   cancelled <- readFlow child.instanceId
   assert (preserved.status == Finished (Completed Null)) "Subtree cancellation overwrote completed parent"
   assert (cancelled.status == Finished Cancelled) "Subtree cancellation missed active child"
-  late <- update (queueDelivery child.instanceId "late" "two" (ManualReply "mcp") Null)
+  late <- update (queueDelivery child.instanceId "late" "two" (ReceivedFrom (ManualReply "mcp")) Null)
   assert (late.outcome == Just ClosedWait) "Late reply could reopen cancelled child"
 
   controller <- start Nothing "controller"
@@ -153,11 +155,11 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     when finishedFirst (void complete)
     _ <- update (beginAttempt waiter.instanceId)
     _ <- update (reportFrontier waiter.instanceId [("child-wait",String "child descriptor",ChildWait childTarget.instanceId UnitDescription)])
-    forM_ [ManualReply "cli",ProviderReply "fixture" "event"] $ \origin -> do
+    forM_ [ReceivedFrom (ManualReply "cli"),ReceivedFrom (ProviderReply (EventReference "fixture" "Updates" "updates" "question") (EventIdentity "event"))] $ \origin -> do
       refused <- store scope (queueDelivery waiter.instanceId "fake" "child-wait" origin (object []))
       assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Child wait accepted a fabricated outcome"
     forM_ ["internal-child-child-wait","auto-collision"] $ \key -> do
-      refused <- store scope (queueDelivery waiter.instanceId key "unrelated-reply" (ManualReply "cli") Null)
+      refused <- store scope (queueDelivery waiter.instanceId key "unrelated-reply" (ReceivedFrom (ManualReply "cli")) Null)
       assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Caller claimed a reserved delivery identity"
     unless finishedFirst (void complete)
     ready <- readFlow waiter.instanceId
@@ -201,7 +203,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   secondChild <- start (Just joiner.instanceId) "second"
   _ <- update (beginAttempt joiner.instanceId)
   _ <- update (reportFrontier joiner.instanceId [("reply",String "reply",ReplyWait)])
-  _ <- update (queueDelivery joiner.instanceId "first" "reply" (ManualReply "cli") Null)
+  _ <- update (queueDelivery joiner.instanceId "first" "reply" (ReceivedFrom (ManualReply "cli")) Null)
   _ <- update (resolveDelivery joiner.instanceId "first" Accepted)
   _ <- update (beginAttempt joiner.instanceId)
   _ <- update (reportFrontier joiner.instanceId
@@ -227,7 +229,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
       identity = FlowJournalIdentity (flowInstanceIdText separate.instanceId) "revision" Null
   withAsync (execute scope (runFlowJournal kb identity (liftIO (putMVar entered () >> takeMVar release)))) $ \_ -> do
     takeMVar entered
-    received <- timeout 2000000 (update (queueDelivery separate.instanceId "while-running" "one" (ManualReply "cli") Null))
+    received <- timeout 2000000 (update (queueDelivery separate.instanceId "while-running" "one" (ReceivedFrom (ManualReply "cli")) Null))
     putMVar release ()
     assert (maybe False ((== Nothing) . (.outcome)) received) "Ingress blocked on attempt writer lock"
   _ <- update (cancelInstance separate.instanceId ThisFlow)
@@ -237,7 +239,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
 
   withdrawal <- start Nothing "withdrawal"
   _ <- wait withdrawal.instanceId
-  _ <- update (queueDelivery withdrawal.instanceId "not-yet-validated" "two" (ManualReply "cli") Null)
+  _ <- update (queueDelivery withdrawal.instanceId "not-yet-validated" "two" (ReceivedFrom (ManualReply "cli")) Null)
   _ <- update (beginAttempt withdrawal.instanceId)
   withdrawn <- update (reportFrontier withdrawal.instanceId [("one",String "question",ReplyWait)])
   assert (length [() | w <- withdrawn.waits, w.waitStatus == Closed] == 1) "Absent wait remained open"

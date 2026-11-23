@@ -4,8 +4,11 @@ module Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore) where
 import Agentic.Aeson (fromAeson, toAeson)
 import qualified Kyyn.Types.FlowStatus as View
 import Kyyn.Domain.Contract (descriptionOf)
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Porcelain.Protocol.EventBindings (resolveEventBinding)
+import Kyyn.Porcelain.Capability.PluginPreparation (PreparedEvent(..))
 import Data.Aeson (encode, eitherDecodeStrict')
-import Control.Monad (forM, forM_, void, when, unless)
+import Control.Monad (forM_, void, when, unless)
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (find)
@@ -16,7 +19,7 @@ import Kyyn.Domain.FlowBundleId
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Git (revisionName)
-import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..), RecipeId(..))
+import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow(..), FlowBundle(..), PreparedFlowEntry(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
@@ -161,21 +164,36 @@ runFlowStore kb = interpret $ \_ operation -> do
             _ -> Left (InvalidTransition "Attempt recording requires a running instance")))
           BeginAttempt identity -> commit (change identity Lifecycle.begin)
           ReportFrontier identity reached -> do
-            validations <- forM reached $ \(_,_,kind) -> case kind of
-              ReplyWait -> pure (Right ())
-              ChildWait child expected -> case Lifecycle.requireDescendant identity child catalog of
-                Left problem -> pure (Left problem)
-                Right selected -> case (find ((== identity) . (.instanceId)) catalog,selected.launch.owner) of
-                  (Just parent,Hosted bundleId recipe) | Hosted parentBundle (RecipeId parentRecipe) <- parent.launch.owner, bundleId == parentBundle ->
-                    loadBundle base bundleId >>= \case
-                      Left _ -> pure (Left (InvalidTransition "Child wait captured bundle is unavailable"))
-                      Right bundle -> pure $ case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
-                        [entry] | descriptionOf entry.outputContract == expected -> Right ()
-                        _ -> Left (InvalidTransition ("Parent recipe " <> parentRecipe <> " cannot await child recipe " <> (case recipe of RecipeId name -> name) <> ": output contract mismatch"))
-                  _ -> pure (Left (InvalidTransition "Child wait does not share its parent's captured bundle"))
+            captured <- case find ((== identity) . (.instanceId)) catalog of
+              Just current | Hosted bundleId recipe <- current.launch.owner -> loadBundle base bundleId >>= \case
+                Left problems -> pure (Left (InvalidTransition (Text.intercalate "; " (map (.message) problems))))
+                Right bundle -> pure $ case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
+                  [entry] -> Right (bundleId,bundle,entry)
+                  _ -> Left (InvalidTransition "Captured recipe is missing")
+              _ -> pure (Left (InvalidTransition "Wait requires a captured hosted execution"))
+            let validate (key,descriptor,kind) = do
+                  initialDispatch <- case kind of
+                    ReplyWait -> Right Nothing
+                    EventWait reference -> do
+                      (_,bundle,entry) <- captured
+                      let refuse problems = Left (InvalidTransition (Text.intercalate "; " (map (.message) problems)))
+                      unless (reference `elem` entry.declaration.bindings.events)
+                        (Left (InvalidTransition ("Event " <> Text.pack (show reference) <> " is outside this instance's captured declarations")))
+                      PreparedEvent _ _ _ _ _ _ _ dispatch <- either refuse Right (resolveEventBinding reference bundle.plugins)
+                      Right (Just (maybe NotRequired (const Pending) dispatch))
+                    ChildWait child expected -> do
+                      (bundleId,bundle,_) <- captured
+                      selected <- Lifecycle.requireDescendant identity child catalog
+                      recipe <- case selected.launch.owner of
+                        Hosted childBundle recipe | childBundle == bundleId -> Right recipe
+                        _ -> Left (InvalidTransition "Child wait does not share its parent's captured bundle")
+                      case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
+                        [entry] | descriptionOf entry.outputContract == expected -> Right Nothing
+                        _ -> Left (InvalidTransition "Child output contract mismatch")
+                  pure (key,descriptor,kind,initialDispatch)
             commit $ do
-              sequence_ validations
-              changed <- change identity (Lifecycle.frontier reached)
+              checkedFrontier <- traverse validate reached
+              changed <- change identity (Lifecycle.frontier checkedFrontier)
               notify changed
           FinishInstance identity outcome -> commit (change identity (Lifecycle.finish outcome) >>= notify)
           BlockAttempt identity problems -> commit (change identity (Lifecycle.blockAttempt problems))

@@ -1,4 +1,4 @@
-module Flows (review, recursive, invalidRecursive, trace, waiting, waitingOrdinary, parentWaiting) where
+module Flows (review, recursive, invalidRecursive, trace, waiting, waitingOrdinary, parentWaiting, eventWaiting) where
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
@@ -9,7 +9,9 @@ import qualified Agentic.Schema as S
 import qualified Agentic.Value as V
 import Control.Monad.Trans.Except (ExceptT(..))
 import Kyyn.Agentic (Flow)
-import Kyyn.Interactive (FlowHandle, flowRef, startFlow)
+import Kyyn.Interactive (FlowHandle, flowRef, startFlow, awaitReply, ReceivedReply)
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_local_file.Updates as Updates
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Connectors (files)
 import qualified Kyyn.Plugins.P_local_file.Files as Files
@@ -78,3 +80,6 @@ waitingOrdinary = A.arr (\(RecipeInput _ () (State runs)) -> runs)
 
 parentWaiting :: Flow Integer (FlowHandle Integer)
 parentWaiting = startFlow (flowRef (RecipeId "child") waiting)
+
+eventWaiting :: Flow Text (ReceivedReply Text)
+eventWaiting = awaitReply (Updates.question Connectors.updates)
