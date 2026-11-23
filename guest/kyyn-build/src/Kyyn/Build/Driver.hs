@@ -138,6 +138,20 @@ preparePlugins compiler libdir generated basePackages = do
         (defaultReferences,options) <- adapter "sinkDefaults" "sinkDefaultsEntry" defaults
         pure (configReferences ++ publishReferences ++ defaultReferences,
           "sinkConnectorEntry " ++ identity ++ " " ++ config ++ " " ++ publication ++ " " ++ options)
+      P.EventConnector _ _ login events -> do
+        authentication <- traverse (adapter "login" "loginEntry") login
+        selected <- forM events $ \event -> do
+          (pollRefs,pollEntry) <- adapter ("poll." <> event.eventName) "eventPollEntry" event.poll
+          dispatched <- traverse (\(reference,safety) -> do
+            (refs,entry) <- adapter ("dispatch." <> event.eventName) "eventDispatchEntry" reference
+            pure (refs,"(Just (" ++ entry ++ "," ++ show safety ++ "))")) event.dispatch
+          pure (pollRefs ++ maybe [] fst dispatched,
+            "(" ++ show event.eventName ++ "," ++ show event.eventDescription ++ "," ++ show event.minimumPollInterval ++
+            "," ++ pollEntry ++ "," ++ maybe "Nothing" snd dispatched ++ ")")
+        pure (configReferences ++ maybe [] fst authentication ++ concatMap fst selected,
+          "eventConnectorEntry " ++ identity ++ " " ++ config ++ " " ++
+          maybe "Nothing" (\(_,entry) -> "(Just " ++ entry ++ ")") authentication ++
+          " [" ++ intercalate "," (map snd selected) ++ "]")
   pure (roots,packages,entries,registrations)
 
 buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSelection -> IO ()
@@ -378,7 +392,7 @@ writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
     (["module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Plugin (RepeatSafety(..))", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)", "import qualified Kyyn.Runtime.TargetEvolution as TargetEvolution", "import qualified Kyyn.Runtime.Bindings as RuntimeBindings"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
       "    [\"--check-build\"] -> checkEntries selected",

@@ -63,7 +63,7 @@ library runtime
     Kyyn.Runtime.ToolEntry
     Kyyn.Runtime.Transport
     Kyyn.Runtime.Validation
-  other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry Kyyn.Runtime.RecipeEntry Kyyn.Runtime.InteractiveEntry
+  other-modules: Kyyn.Runtime.EventEntry Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry Kyyn.Runtime.RecipeEntry Kyyn.Runtime.InteractiveEntry
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: transformers, base >=4.22 && <4.23, kyyn-sdk:internal, kyyn-types,

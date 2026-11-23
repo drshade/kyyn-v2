@@ -2,7 +2,7 @@
 module Kyyn.Domain.Inspection
   ( SnapshotInspection(..), EvolutionInspection(..), SourceOrigin(..), SourceChange(..)
   , DeclarationRequest(..), DeclarationInspection(..), ImplementationSource(..)
-  , ConfigurationInspection(..), ConnectorDeclarationInspection(..), CatalogueInspection(..)
+  , ConfigurationInspection(..), ConnectorDeclarationInspection(..), ConnectorKind(..), CatalogueInspection(..)
   , ConnectorInspection(..), EvidenceItemInspection(..), LocalInspection(..) ) where
 
 import Kyyn.Domain.Contract (CheckedContract)
@@ -68,6 +68,7 @@ data LocalInspection = LocalInspection
 data ConfigurationInspection = ConfigurationInspection [(PluginName, PluginOrigin)]
 data CatalogueInspection = CatalogueInspection
   (Either [Diagnostic] ConfigurationInspection)
+data ConnectorKind = SourceKind | SinkKind | EventKind deriving (Eq, Show)
 data ConnectorDeclarationInspection = ConnectorDeclarationInspection
-  ConnectorTypeName Bool [(String, CheckedContract)] [(MethodName, String)]
+  ConnectorTypeName ConnectorKind [(String, CheckedContract)] [(MethodName, String)]
   [(ConnectorName, BindingName, CheckedValue)]

@@ -101,6 +101,20 @@ checkConnectorContracts selected = case selected of
     let G.SinkContracts configuration options _ _ = publication.invocationContract
     compatible "configuration" configuration config.invocationContract
     compatible "sink options" options defaults.invocationContract
+  G.EventEntries config login events -> do
+    forM_ login $ \entry -> compatible "configuration" config.invocationContract entry.invocationContract
+    unique "event" (map G.eventName events)
+    forM_ events $ \event -> do
+      either (Left . pure . errorDiagnostic "guest.event") (const (Right ()))
+        (Plugin.methodName (Text.unpack event.eventName))
+      ensure (event.minimumPollInterval > 0) "guest.event-interval" "Event poll interval must be positive"
+      let G.EventContracts configuration request cursor _ = event.eventPoll.invocationContract
+      compatible "configuration" config.invocationContract configuration
+      forM_ event.eventDispatch $ \(dispatch,_) -> do
+        let G.DispatchContracts actualConfig actualRequest actualCursor = dispatch.invocationContract
+        compatible "configuration" configuration actualConfig
+        compatible "event request" request actualRequest
+        compatible "event cursor" cursor actualCursor
   where
     compatible label a b = ensure (contractId a.contract == contractId b.contract)
       "guest.connector-contract" ("Inconsistent connector " ++ label ++ " contracts")

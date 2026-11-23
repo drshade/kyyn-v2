@@ -21,4 +21,5 @@ prepareOutputs queries plugins = traverse $ \definition@(OutputDefinition name _
   (_,configured@(ConfiguredConnector _ _ connector _)) <- selectedInstance plugin instanceName plugins
   case connector of
     PreparedSinkConnector{} -> pure (PreparedOutput definition descriptor configured)
+    PreparedEventConnector{} -> bad "Selected connector is an event connector, not a sink"
     PreparedConnector{} -> bad "Selected connector is a source, not a sink"

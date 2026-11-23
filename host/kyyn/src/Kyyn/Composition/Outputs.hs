@@ -93,6 +93,7 @@ select prepared name = case [o | o@(PreparedOutput (OutputDefinition n _ _ _) _ 
 sinkDetails :: PreparedOutput -> ExceptT [Diagnostic] (Eff es) (CheckedContract,CheckedContract,CheckedContract,CheckedValue,Value)
 sinkDetails (PreparedOutput _ _ (ConfiguredConnector _ _ connector (CheckedValue _ config))) = case connector of
   PreparedSinkConnector {configContract = c,sinkOptionsContract = o,sinkResultContract = r,sinkDefaultOptions = defaults} -> pure (c,o,r,defaults,config)
+  PreparedEventConnector{} -> throwE [errorDiagnostic "output.sink-required" "Output requires a sink connector"]
   PreparedConnector{} -> throwE [errorDiagnostic "output.sink-required" "Output requires a sink connector"]
 
 arguments :: DhallHandling :> es => CheckedContract -> Maybe String -> ExceptT [Diagnostic] (Eff es) CheckedValue
@@ -110,6 +111,7 @@ render prepared (PreparedOutput _ descriptor@(QueryDescriptor _ _ input _) (Conf
   QueryResult (CheckedValue _ value) _ <- ExceptT (queryRoot prepared descriptor args)
   case connector of
     PreparedSinkConnector {sinkInputContract = sinkInput} -> pure (CheckedValue (contractId sinkInput) value)
+    PreparedEventConnector{} -> throwE [errorDiagnostic "output.sink-required" "Output requires a sink connector"]
     PreparedConnector{} -> throwE [errorDiagnostic "output.sink-required" "Output requires a sink connector"]
 
 sinkLabel :: SinkReference -> String

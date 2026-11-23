@@ -75,7 +75,7 @@ main = do
     ["--root-api-built",path] -> checkRootApi (path,[])
     ["--recipe-built",path] -> checkRecipe (path,[])
     ["--tool-built",path] -> checkTool (path,[])
-    ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
+    ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[]) >> checkEvents (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
     ["--api-tools-built",path] -> checkToolApi (path,[])
@@ -593,3 +593,35 @@ checkRootApi executable = do
   unless (any (\entry -> entry.moduleName == "Unfinished" && null entry.moduleExports && entry.moduleSource == "src/Unfinished.hs") description.modules)
     (fail "Root inventory compiled unfinished authored source or lost its name")
   putStrLn "Root API inventories authored modules and describes generated bindings without compiling unfinished bodies."
+
+
+checkEvents :: (FilePath,[String]) -> IO ()
+checkEvents executable = do
+  descriptionValue <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  case [entry | entry@(G.ConnectorEntry _ G.EventEntries{}) <- description.entries] of
+    [G.ConnectorEntry ident (G.EventEntries config login events@[poll,question])] -> do
+      unless (poll.minimumPollInterval == 1 && question.minimumPollInterval == 2 &&
+        maybe False (const True) login && maybe False (const True) question.eventDispatch)
+        (fail "Event declarations lost interval, login or dispatch")
+      let G.EventContracts c request cursor reply = question.eventPoll.invocationContract
+          malformed = question { G.eventPoll = question.eventPoll { G.invocationContract = G.EventContracts c cursor request reply } }
+          replace selected = description { G.entries = G.ConnectorEntry ident (G.EventEntries config login selected) :
+            [e | e <- description.entries, case e of G.ConnectorEntry _ G.EventEntries{} -> False; _ -> True] }
+      unless (isLeft (Host.checkGuest (replace [poll,malformed]))) (fail "Mismatched dispatch request/cursor accepted")
+      unless (isLeft (Host.checkGuest (replace [poll,poll]))) (fail "Duplicate event names accepted")
+      unless (isLeft (Host.checkGuest (replace [poll { G.minimumPollInterval = 0 },question]))) (fail "Zero polling interval accepted")
+      unless (length events == 2) (fail "Missing event")
+    _ -> fail "Expected event connector with polling and dispatched methods"
+  let invokeEvent name input = invoke executable (toJSON (G.Invoke name (object ["config" .= String "10","input" .= input])))
+      complete value = object ["tag" .= String "Completed","result" .= object ["tag" .= String "Right","value" .= value]]
+      request = object ["waitIdentity" .= String "wait","request" .= String "hello"]
+  dispatched <- invokeEvent "$dispatch.question.local-file.Updates" request
+  unless (dispatched == complete (String "19")) (fail "Dispatch did not receive stable wait identity and request")
+  forM_ [(object ["tag" .= String "None"],"10"),(object ["tag" .= String "Some","value" .= String "19"],"29")] $ \(cursor,expected) -> do
+    polled <- invokeEvent "$poll.updates.local-file.Updates" (object
+      ["waitIdentity" .= String "wait","request" .= String "hello","cursor" .= cursor])
+    unless (polled == complete (object ["arrivals" .= [object ["identity" .= String "wait-reply","value" .= String "hello"]],"cursor" .= String expected]))
+      (fail "Poll request/cursor/batch changed across guest transport")
+  putStrLn "Event registration, contracts, dispatch and poll passed."

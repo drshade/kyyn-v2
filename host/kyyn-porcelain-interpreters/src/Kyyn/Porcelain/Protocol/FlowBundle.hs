@@ -131,6 +131,7 @@ parseBundle = exactObject "execution bundle" ["revision","program","guest","flow
       unless (length instanceNames == length (nub instanceNames)) (fail "Duplicate captured connector instances")
       pure (PreparedPlugin (PreparedPackage name identity connectors) instances)
     connectorIdentity (CompiledSource identity _ _ _ _ _) = identity
+    connectorIdentity (CompiledEvent identity _ _ _ _) = identity
     connectorIdentity (CompiledSink identity _ _ _ _) = identity
 
 exactObject :: String -> [Key] -> (Keys.KeyMap Value -> Parser a) -> Value -> Parser a

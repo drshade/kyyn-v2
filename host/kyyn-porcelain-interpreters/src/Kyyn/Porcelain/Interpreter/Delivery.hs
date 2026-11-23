@@ -33,6 +33,8 @@ import Kyyn.Porcelain.Capability.PluginPreparation (ConfiguredConnector(..), Pre
 runDelivery :: (GuestExecution :> es, FileSystem :> es, DhallHandling :> es, Failure :> es)
   => DirectoryScope -> Eff (Delivery : es) a -> Eff es a
 runDelivery base = interpret $ \_ -> \case
+  InvokeSink (ConfiguredConnector _ _ PreparedEventConnector{} _) _ _ ->
+    pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "An event connector cannot publish an output."))
   InvokeSink (ConfiguredConnector _ _ PreparedConnector{} _) _ _ ->
     pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "A source connector cannot publish an output."))
   InvokeSink (ConfiguredConnector _ _ PreparedSinkConnector {configContract = configType,

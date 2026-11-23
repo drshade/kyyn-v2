@@ -57,7 +57,7 @@ main = do
   unless (packageIdentity package == packageIdentity reordered && packageIdentity package /= packageIdentity changed)
     (fail "Package provenance depends on traversal order or ignores changed content")
   let configuration = Text.encodeUtf8 (Text.unlines
-        ["let Connector = < Files : Integer | Options : Integer | State : Integer | StateOptions : Integer | Writer : Integer >",
+        ["let Connector = < Files : Integer | Options : Integer | State : Integer | StateOptions : Integer | Updates : Integer | Writer : Integer >",
          "in [ { name = \"reader\", binding = \"files\", connector = Connector.Files +10 }",
          "   , { name = \"writer\", binding = \"writer\", connector = Connector.Writer +10 } ]"])
   code <- right (fileTree
@@ -93,10 +93,12 @@ main = do
     connectors <- case packages of
       [PreparedPackage _ identity selected] | identity == packageIdentity package -> pure selected
       _ -> fail "Prepared package provenance changed"
-    unless (length connectors == 5) (fail "Missing prepared connector")
+    unless (length connectors == 6) (fail "Missing prepared connector")
     let handles = concatMap (\connector -> getField @"validationEntry" connector : case connector of
           PreparedConnector {fetchEntry = fetch,loginEntry = login,methods = methods} ->
             fetch : maybe [] pure login ++ [entry | PreparedMethod _ _ _ _ entry <- methods]
+          PreparedEventConnector {loginEntry = login,events = events} -> maybe [] pure login ++
+              concat [poll : maybe [] (pure . fst) dispatch | PreparedEvent _ _ _ _ _ _ poll dispatch <- events]
           PreparedSinkConnector {sinkEntry = publish} -> [publish]) connectors
     unless (all ((== program) . entryProgram) handles) (fail "Preparation changed the described executable")
     case [value | PreparedSinkConnector {sinkDefaultOptions = CheckedValue _ value} <- connectors] of

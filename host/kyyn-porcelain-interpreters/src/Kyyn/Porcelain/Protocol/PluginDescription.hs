@@ -38,6 +38,16 @@ connectorDescription selected defaults = case selected of
     value <- maybe (bad ("Missing captured defaults for " ++ Text.unpack identity.connectorType)) Right defaults
     pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract publication
       (CheckedValue (contractId options.contract) value))
+  CompiledEvent identity config validator login events -> do
+    kind <- checked (connectorTypeName (Text.unpack identity.connectorType))
+    selectedEvents <- traverse (\(event,poll,dispatch) -> do
+      name <- checked (methodName (Text.unpack event.eventName))
+      let G.EventContracts _ request cursor reply = event.eventPoll.invocationContract
+      pure (PreparedEvent name (Text.unpack event.eventDescription) event.minimumPollInterval
+        request.contract reply.contract cursor.contract poll ((,) <$> dispatch <*> (snd <$> event.eventDispatch)))) events
+    case defaults of
+      Just _ -> bad "Event connector cannot have sink defaults"
+      Nothing -> pure (PreparedEventConnector kind config.contract validator login selectedEvents)
   where
     checked = either bad Right
     bad message = Left [errorDiagnostic "flow.connector-description" message]

@@ -1,5 +1,8 @@
-module Fixture.Plugin (connectors, count, fetch, fetchOptions, fetchState, fetchStateOptions, validate, login, publish, defaults) where
+module Fixture.Plugin (connectors, count, fetch, fetchOptions, fetchState, fetchStateOptions, validate, login, publish, defaults, pollUpdates, dispatchQuestion) where
 
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Kyyn.Plugin.Event
 import GHC.Generics (Generic)
 import Kyyn.Contract (Contract)
 import Kyyn.Plugin
@@ -18,7 +21,11 @@ connectors = [SourceConnector "Files" "Fixture.Plugin.fetch" "Fixture.Plugin.val
   SourceConnector "Options" "Fixture.Plugin.fetchOptions" "Fixture.Plugin.validate" [] Nothing,
   SourceConnector "State" "Fixture.Plugin.fetchState" "Fixture.Plugin.validate" [] Nothing,
   SourceConnector "StateOptions" "Fixture.Plugin.fetchStateOptions" "Fixture.Plugin.validate" [] Nothing,
-  SinkConnector "Writer" "Fixture.Plugin.validate" "Fixture.Plugin.publish" "Fixture.Plugin.defaults"]
+  SinkConnector "Writer" "Fixture.Plugin.validate" "Fixture.Plugin.publish" "Fixture.Plugin.defaults",
+  EventConnector "Updates" "Fixture.Plugin.validate" (Just "Fixture.Plugin.login")
+    [EventMethod "updates" "New updates" "Fixture.Plugin.pollUpdates" Nothing 1,
+     EventMethod "question" "Ask a question" "Fixture.Plugin.pollUpdates"
+       (Just ("Fixture.Plugin.dispatchQuestion", SafeToRepeat)) 2]]
 
 count :: () -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Integer)
 count () snapshot = fmap (fmap (toInteger . length)) (listEvidenceIds snapshot)
@@ -48,3 +55,12 @@ publish config options input = pure (Right (config + options + input))
 
 defaults :: Integer
 defaults = 3
+
+
+dispatchQuestion :: Integer -> EventDispatch Text -> LiveEvent (Either FetchError Integer)
+dispatchQuestion config (EventDispatch (WaitId identity) question) =
+  pure (Right (config + toInteger (Text.length identity + Text.length question)))
+
+pollUpdates :: Integer -> EventPoll Text Integer -> LiveEvent (Either FetchError (EventBatch Text Integer))
+pollUpdates config (EventPoll (WaitId identity) question prior) =
+  pure (Right (EventBatch [EventArrival (EventIdentity (identity <> "-reply")) question] (config + maybe 0 id prior)))

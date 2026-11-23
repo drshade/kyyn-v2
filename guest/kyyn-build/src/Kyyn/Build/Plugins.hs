@@ -83,6 +83,14 @@ validate connectors = do
           unless (identifier isAsciiLower method.methodName) (Left "Invalid captured method name")
           reference method.implementation
       P.SinkConnector _ _ publish defaults -> reference publish >> reference defaults
+      P.EventConnector _ _ login events -> do
+        mapM_ reference login
+        unique "event" [event.eventName | event <- events]
+        forM_ events $ \event -> do
+          unless (identifier isAsciiLower event.eventName) (Left "Invalid event method name")
+          unless (event.minimumPollInterval > 0) (Left "Event poll interval must be positive")
+          reference event.poll
+          mapM_ (reference . fst) event.dispatch
   where
     reference = void . qualifiedReference False
     unique label names = unless (length names == length (nub names)) (Left ("Duplicate " ++ label ++ " names"))

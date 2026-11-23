@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TypeOperators, OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Plugin
-  ( Connector(..), CapturedMethod(..), Program, concurrently, concurrentlyE, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
+  ( Connector(..), EventMethod(..), RepeatSafety(..), CapturedMethod(..), Program, concurrently, concurrentlyE, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), CapturedText(..), FetchContext(..), FetchResult(..), CapturedRead, Member, listEvidenceIds, readEvidence
   , BlobRef(..), readBlob, readBlobText ) where
 
@@ -11,7 +11,7 @@ import qualified Data.ByteString as Bytes
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (EvidenceRead(..))
-import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..), FetchContext(..), FetchResult(..))
+import Kyyn.Types.Plugin (Connector(..), EventMethod(..), RepeatSafety(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..), FetchContext(..), FetchResult(..))
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
 -- | A plugin method that reads captured evidence without acquiring new source data.

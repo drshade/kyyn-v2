@@ -431,12 +431,12 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     dl_ $ do dt_ "Package identity"; dd_ (toHtml hash)
     forM_ connectors $ \(ConnectorDeclarationInspection (ConnectorTypeName kind) sink contracts methods instances) -> do
       h2_ (toHtml kind)
-      p_ (if sink then "Sink connector" else "Source connector")
+      p_ (case sink of SourceKind -> "Source connector"; SinkKind -> "Sink connector"; EventKind -> "Event connector")
       dl_ $ forM_ contracts $ \(role,contract) -> do
         dt_ (toHtml (Text.replace ":" " · " (Text.pack role)))
         dd_ (typeReference (pluginTypeLink selected (Text.pack (pluginNameText plugin)) (Text.pack kind) (Text.pack role)) (rootType contract))
       unless (null methods) $ do
-        h3_ "Captured methods"
+        h3_ (if sink == EventKind then "Events" else "Captured methods")
         dl_ $ forM_ methods $ \(MethodName method,description) -> dt_ (toHtml method) >> dd_ (toHtml description)
       unless (null instances) $ do
         h3_ "Configured instances"
@@ -446,7 +446,7 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
           case lookup "configuration" contracts of
             Just contract -> renderValue selected (contractShape contract) value
             Nothing -> mempty
-          unless sink $ p_ $ a_ [href_ (inspectionLink Nothing ["connectors",Text.pack (pluginNameText plugin),Text.pack name])] "Local evidence"
+          when (sink == SourceKind) $ p_ $ a_ [href_ (inspectionLink Nothing ["connectors",Text.pack (pluginNameText plugin),Text.pack name])] "Local evidence"
   OutputInspection (OutputDefinition name description query (SinkReference plugin (ConnectorName instanceName) (MethodName method))) (QueryDescriptor _ _ input output) -> do
     p_ (toHtml description)
     dl_ $ do

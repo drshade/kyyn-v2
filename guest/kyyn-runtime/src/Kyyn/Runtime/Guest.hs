@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, targetEvolutionEntry, recipeStateEntry, recipeEntry, interactiveEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
+module Kyyn.Runtime.Guest (Entry, eventConnectorEntry, eventPollEntry, eventDispatchEntry, targetEvolutionEntry, recipeStateEntry, recipeEntry, interactiveEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
 import Kyyn.Types.Wire (decodeWire)
@@ -26,6 +26,8 @@ import Kyyn.Runtime.TargetEvolution (targetEvolutionEntry)
 import Kyyn.Runtime.InteractiveEntry (interactiveEntry)
 import Kyyn.Runtime.RecipeEntry (recipeEntry)
 import Kyyn.Runtime.ToolEntry (toolEntry)
+import Kyyn.Runtime.EventEntry
+import Kyyn.Types.Plugin (RepeatSafety)
 import Kyyn.Runtime.PluginEntry (configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry)
 import Kyyn.Runtime.AcquisitionEntry (acquisitionEntry)
 import Kyyn.Runtime.Entry (Entry(..), Adapter(..), CapturedAdapter(..), entryActions, entryDescriptor, pureEntry, writeReply)
@@ -111,6 +113,28 @@ sinkConnectorEntry ident configuration publication options = do
   Adapter defaultsDescription getDefaults <- options
   pure (ConnectorGroup (ConnectorEntry ident (SinkEntries config publicationDescription defaultsDescription))
     [(config.invocationName,runConfiguration),(publicationDescription.invocationName,run),(defaultsDescription.invocationName,getDefaults)])
+
+eventConnectorEntry :: ConnectorIdentity
+  -> Either ProjectionError (Adapter DescribedContract)
+  -> Maybe (Either ProjectionError (Adapter DescribedContract))
+  -> [(Text,Text,Integer,Either ProjectionError (Adapter (EventContracts DescribedContract)),
+       Maybe (Either ProjectionError (Adapter (DispatchContracts DescribedContract)),RepeatSafety))]
+  -> Either ProjectionError Entry
+eventConnectorEntry ident configuration authentication events = do
+  Adapter config runConfiguration <- configuration
+  auth <- traverse id authentication
+  selected <- traverse (\(name,description,interval,poll,dispatch) -> do
+    Adapter pollDescription runPoll <- poll
+    dispatched <- traverse (\(entry,safety) -> do
+      Adapter entryDescription runDispatch <- entry
+      pure (entryDescription,safety,runDispatch)) dispatch
+    pure (EventEntry name description interval pollDescription
+      (fmap (\(entry,safety,_) -> (entry,safety)) dispatched),
+      (pollDescription.invocationName,runPoll) : [(entry.invocationName,run) | Just (entry,_,run) <- [dispatched]])) events
+  let actions = (config.invocationName,runConfiguration) :
+        [(entry.invocationName,run) | Just (Adapter entry run) <- [auth]] ++ concatMap snd selected
+  pure (ConnectorGroup (ConnectorEntry ident (EventEntries config
+    (fmap (\(Adapter entry _) -> entry) auth) (map fst selected))) actions)
 
 buildEntries :: [Either ProjectionError Entry] -> IO [Entry]
 buildEntries selected = do

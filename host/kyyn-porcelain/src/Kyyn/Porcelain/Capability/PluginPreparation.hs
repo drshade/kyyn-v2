@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginPreparation
-  ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..), PreparedMethod(..)
+  ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), PreparedEvent(..), ConfiguredConnector(..), PreparedMethod(..)
   , preparePackages, preparePluginsFromGuest, preparePlugins, validatePlugins, instanceShape, selectedPackage, selectedPlugin, selectedInstance, sourceDetails ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -14,6 +14,7 @@ import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity, ConnectorTypeName(..), ConnectorName(..), BindingName, MethodName)
+import Kyyn.Types.Plugin (RepeatSafety)
 import Kyyn.Domain.Value (CheckedValue)
 
 data PreparedConnector = PreparedConnector
@@ -38,7 +39,12 @@ data PreparedConnector = PreparedConnector
   , sinkEntry :: CompiledEntry
   , sinkDefaultOptions :: CheckedValue
   }
+  | PreparedEventConnector
+  { connectorType :: ConnectorTypeName, configContract :: CheckedContract
+  , validationEntry :: CompiledEntry, loginEntry :: Maybe CompiledEntry, events :: [PreparedEvent] }
   deriving (Eq, Show)
+data PreparedEvent = PreparedEvent MethodName String Integer CheckedContract CheckedContract CheckedContract
+  CompiledEntry (Maybe (CompiledEntry,RepeatSafety)) deriving (Eq, Show)
 data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledEntry deriving (Eq, Show)
 data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)
 data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConnector] deriving (Eq, Show)
@@ -48,6 +54,7 @@ sourceDetails :: PreparedConnector -> Either [Diagnostic]
   (ConnectorTypeName,CheckedContract,CompiledEntry,[PreparedMethod],Maybe CheckedContract,Maybe CompiledEntry,Maybe CheckedContract,Maybe CheckedContract)
 sourceDetails PreparedConnector {connectorType = kind,payloadContract = payload,fetchEntry = entry,methods = ms,
   fetchOptionsContract = options,loginEntry = login,syncPositionContract = position,reportContract = report} = Right (kind,payload,entry,ms,options,login,position,report)
+sourceDetails PreparedEventConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not an event connector."]
 sourceDetails PreparedSinkConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not a sink."]
 
 data PluginPreparation :: Effect where
