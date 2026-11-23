@@ -1,5 +1,5 @@
 {-# LANGUAGE RoleAnnotations, FlexibleContexts, ScopedTypeVariables, TypeApplications, OverloadedRecordDot, OverloadedStrings #-}
-module Kyyn.Interactive.Control (FlowHandle, flowRef, flowRefTyped, startFlow, inspectFlow, cancelFlow) where
+module Kyyn.Interactive.Control (FlowHandle, flowRef, flowRefTyped, startFlow, inspectFlow, awaitFlow, cancelFlow) where
 
 import qualified Agentic as A
 import qualified Agentic.Contract as Contract
@@ -13,7 +13,8 @@ import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Data.Text (Text)
 import Type.Reflection (Typeable)
 import Kyyn.Interactive.Internal (FlowRef(..))
-import Kyyn.Types.FlowStatus (FlowStatus, CancelScope, statusCodec)
+import Kyyn.Types.FlowStatus (FlowStatus, FlowOutcome, CancelScope, statusCodec, outcomeCodec)
+import Kyyn.Types.ChildWait (ChildWaitRequest(..), childWaitCodec)
 import Kyyn.Types.FlowControl (FlowControl(..))
 import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Types.Program (Program, Member, inject, request)
@@ -58,6 +59,16 @@ inspectFlow = case compileContract (Contract.contract @output) of
     requireHosted key
     status <- ExceptT (request (inject (InspectChild identity output.description)))
     either (throwE . FetchError) pure (traverse output.codec.decode status)
+
+-- Validate through the host before suspending, so author errors remain typed
+-- failures. The host validates again when it stores the resulting frontier.
+awaitFlow :: forall output calls. (Contract.Contract output, Member FlowControl calls)
+  => A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) (FlowOutcome output)
+awaitFlow = case compileContract (Contract.contract @output) of
+  Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
+  Right output -> (inspectFlow A.&&& A.arr id) A.>>> A.arr snd
+    A.>>> A.arr (\(FlowHandle identity) -> ChildWaitRequest identity output.description)
+    A.>>> A.await childWaitCodec (outcomeCodec output.codec)
 
 cancelFlow :: forall output calls. (Contract.Contract output, Member FlowControl calls)
   => CancelScope -> A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) ()

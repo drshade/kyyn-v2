@@ -1,8 +1,11 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables #-}
 module Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore) where
 
+import Agentic.Aeson (fromAeson, toAeson)
+import qualified Kyyn.Types.FlowStatus as View
+import Kyyn.Domain.Contract (descriptionOf)
 import Data.Aeson (encode, eitherDecodeStrict')
-import Control.Monad (forM_, void, when, unless)
+import Control.Monad (forM, forM_, void, when, unless)
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (find)
@@ -13,7 +16,7 @@ import Kyyn.Domain.FlowBundleId
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Git (revisionName)
-import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..))
+import Kyyn.Types.KnowledgeBase (InteractionBindings(..), ChildReference(..), RecipeId(..))
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Capability.FlowPreparation (PreparedFlow(..), FlowBundle(..), PreparedFlowEntry(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
@@ -84,13 +87,14 @@ runFlowStore kb = interpret $ \_ operation -> do
           CancelDescendant caller target selected -> commit $ do
             _ <- Lifecycle.requireDescendant caller target catalog
             Lifecycle.parentAllowsStart (Just caller) catalog
-            next <- Lifecycle.cancelTree target selected catalog
+            next <- Lifecycle.cancelTree target selected catalog >>= Lifecycle.deliverCompletions encodeOutcome
             item <- maybe (Left MissingInstance) Right (find ((== target) . (.instanceId)) next)
             pure (item,next)
           ReadInstance identity -> pure (find ((== identity) . (.instanceId)) catalog)
           StartInstance parent key launch -> case launch.owner of
             Hosted{} -> pure (Left (InvalidTransition "Hosted instances require a prepared execution bundle"))
             External -> start parent key launch (pure ())
+          StartPreparedInstance _ (Just key) _ | reserved key -> pure (Left reservedProblem)
           StartPreparedInstance parent requestedKey prepared -> do
             key <- maybe (freshKey [item.startKey | item <- catalog, item.parent == parent]) pure requestedKey
             let bytes = Lazy.toStrict (encode (bundleValue prepared.bundle))
@@ -156,15 +160,32 @@ runFlowStore kb = interpret $ \_ operation -> do
             Finished{} -> Left AlreadyFinished
             _ -> Left (InvalidTransition "Attempt recording requires a running instance")))
           BeginAttempt identity -> commit (change identity Lifecycle.begin)
-          ReportFrontier identity reached -> commit (change identity (Lifecycle.frontier reached))
-          FinishInstance identity outcome -> commit (change identity (Lifecycle.finish outcome))
+          ReportFrontier identity reached -> do
+            validations <- forM reached $ \(_,_,kind) -> case kind of
+              ReplyWait -> pure (Right ())
+              ChildWait child expected -> case Lifecycle.requireDescendant identity child catalog of
+                Left problem -> pure (Left problem)
+                Right selected -> case (find ((== identity) . (.instanceId)) catalog,selected.launch.owner) of
+                  (Just parent,Hosted bundleId recipe) | Hosted parentBundle (RecipeId parentRecipe) <- parent.launch.owner, bundleId == parentBundle ->
+                    loadBundle base bundleId >>= \case
+                      Left _ -> pure (Left (InvalidTransition "Child wait captured bundle is unavailable"))
+                      Right bundle -> pure $ case [entry | entry <- bundle.closure, entry.declaration.recipe == recipe] of
+                        [entry] | descriptionOf entry.outputContract == expected -> Right ()
+                        _ -> Left (InvalidTransition ("Parent recipe " <> parentRecipe <> " cannot await child recipe " <> (case recipe of RecipeId name -> name) <> ": output contract mismatch"))
+                  _ -> pure (Left (InvalidTransition "Child wait does not share its parent's captured bundle"))
+            commit $ do
+              sequence_ validations
+              changed <- change identity (Lifecycle.frontier reached)
+              notify changed
+          FinishInstance identity outcome -> commit (change identity (Lifecycle.finish outcome) >>= notify)
           BlockAttempt identity problems -> commit (change identity (Lifecycle.blockAttempt problems))
           RetryInstance identity -> commit (change identity Lifecycle.retry)
           BlockInstance identity problems -> commit (change identity (Lifecycle.block problems))
           CancelInstance identity selected -> commit $ do
-            next <- Lifecycle.cancelTree identity selected catalog
+            next <- Lifecycle.cancelTree identity selected catalog >>= Lifecycle.deliverCompletions encodeOutcome
             item <- maybe (Left MissingInstance) Right (find ((== identity) . (.instanceId)) next)
             pure (item,next)
+          QueueDelivery _ (Just key) _ _ _ | reserved key -> pure (Left reservedProblem)
           QueueDelivery identity requestedKey wait origin value -> case find ((== identity) . (.instanceId)) catalog of
             Nothing -> pure (Left MissingInstance)
             Just current -> do
@@ -173,6 +194,16 @@ runFlowStore kb = interpret $ \_ operation -> do
                 (updated,received) <- Lifecycle.enqueue delivery wait origin value current
                 pure (received,replace updated catalog)
           ResolveDelivery identity delivery outcome -> commit (change identity (Lifecycle.resolve delivery outcome))
+    reserved key = any (`Text.isPrefixOf` key) ["internal-","auto-"]
+    reservedProblem = InvalidTransition "Keys beginning internal- or auto- are reserved for host-generated identities"
+    notify (item,catalog) = do
+      next <- Lifecycle.deliverCompletions encodeOutcome catalog
+      selected <- maybe (Left MissingInstance) Right (find ((== item.instanceId) . (.instanceId)) next)
+      pure (selected,next)
+    encodeOutcome outcome = toAeson (View.encodeOutcome fromAeson (case outcome of
+      Completed value -> View.Completed value
+      Failed problems -> View.Failed problems
+      Cancelled -> View.Cancelled))
     loadBundle base identity = do
       path <- checked (relativePath (".kyyn/flows/bundles/" ++ flowBundleIdText identity ++ ".json"))
       stored <- FileSystem.readOptionalBytes base path

@@ -40,11 +40,15 @@ statusValue (Finished outcome) = tag "finished" (case outcome of
   Failed errors -> object ["tag" .= String "failed","value" .= map diagnosticValue errors]
   Cancelled -> tag "cancelled" Null)
 waitValue :: FlowWait -> Value
-waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"status" .= case wait.waitStatus of
+waitValue wait = object ["id" .= wait.waitId,"descriptor" .= wait.descriptor,"kind" .= kindValue wait.kind,"status" .= case wait.waitStatus of
   Open -> tag "open" Null
   Closed -> tag "closed" Null
   Answered origin value -> tag "answered" (object ["origin" .= originValue origin,"value" .= value])]
+kindValue :: WaitKind -> Value
+kindValue ReplyWait = tag "reply" Null
+kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanceIdText child,"outputContract" .= output])
 originValue :: ReplyOrigin -> Value
+originValue (ChildCompletion child) = tag "child" (String (flowInstanceIdText child))
 originValue (ManualReply surface) = tag "manual" (String surface)
 originValue (ProviderReply binding event) = tag "provider" (object ["binding" .= binding,"event" .= event])
 deliveryValue :: FlowDelivery -> Value
@@ -117,7 +121,7 @@ parseStatus value = tagged value >>= \(name,payload) -> case (name,payload) of
   _ -> fail "Invalid execution status"
 parseWait :: Value -> Parser FlowWait
 parseWait = withObject "wait" $ \fields -> do
-  exact ["id","descriptor","status"] fields
+  exact ["id","descriptor","kind","status"] fields
   state <- fields .: "status" >>= tagged >>= \(name,payload) -> case (name,payload) of
     ("open",Null) -> pure Open
     ("closed",Null) -> pure Closed
@@ -125,9 +129,17 @@ parseWait = withObject "wait" $ \fields -> do
       exact ["origin","value"] reply
       Answered <$> (reply .: "origin" >>= parseOrigin) <*> reply .: "value") body
     _ -> fail "Invalid wait status"
-  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure state
+  FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> (fields .: "kind" >>= parseKind) <*> pure state
+parseKind :: Value -> Parser WaitKind
+parseKind value = tagged value >>= \(name,payload) -> case (name,payload) of
+  ("reply",Null) -> pure ReplyWait
+  ("child",body) -> withObject "child wait" (\fields -> do
+    exact ["child","outputContract"] fields
+    ChildWait <$> (fields .: "child" >>= checkedId) <*> fields .: "outputContract") body
+  _ -> fail "Invalid wait kind"
 parseOrigin :: Value -> Parser ReplyOrigin
 parseOrigin value = tagged value >>= \(name,payload) -> case (name,payload) of
+  ("child",String child) -> ChildCompletion <$> checkedId child
   ("manual",String surface) -> pure (ManualReply surface)
   ("provider",body) -> withObject "provider origin" (\fields -> do
     exact ["binding","event"] fields

@@ -29,7 +29,7 @@ data FlowStore :: Effect where
   -- Caller holds the per-instance attempt/journal lock for these worker operations.
   LinkAttempt :: FlowInstanceId -> RecipeRunId -> FlowStore m (Either FlowStoreProblem FlowInstance)
   BeginAttempt :: FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
-  ReportFrontier :: FlowInstanceId -> [(Text,Value)] -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  ReportFrontier :: FlowInstanceId -> [(Text,Value,WaitKind)] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   FinishInstance :: FlowInstanceId -> FlowOutcome -> FlowStore m (Either FlowStoreProblem FlowInstance)
   -- An empty list clears a block after the caller revalidates the pinned execution.
   BlockAttempt :: FlowInstanceId -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem FlowInstance)
@@ -49,7 +49,7 @@ readInstance :: FlowStore :> es => FlowInstanceId -> Eff es (Maybe FlowInstance)
 readInstance = send . ReadInstance
 beginAttempt :: FlowStore :> es => FlowInstanceId -> Eff es (Either FlowStoreProblem FlowInstance)
 beginAttempt = send . BeginAttempt
-reportFrontier :: FlowStore :> es => FlowInstanceId -> [(Text,Value)] -> Eff es (Either FlowStoreProblem FlowInstance)
+reportFrontier :: FlowStore :> es => FlowInstanceId -> [(Text,Value,WaitKind)] -> Eff es (Either FlowStoreProblem FlowInstance)
 reportFrontier identity = send . ReportFrontier identity
 finishInstance :: FlowStore :> es => FlowInstanceId -> FlowOutcome -> Eff es (Either FlowStoreProblem FlowInstance)
 finishInstance identity = send . FinishInstance identity

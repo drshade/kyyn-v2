@@ -2,7 +2,7 @@
 module Kyyn.Domain.FlowInstance
   ( FlowInstanceId, flowInstanceId, flowInstanceIdText, FlowOwner(..)
   , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), ReplyOrigin(..)
-  , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitStatus(..)
+  , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitKind(..), WaitStatus(..)
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
 
@@ -13,6 +13,7 @@ import Data.Aeson (Value)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Kyyn.Types.Contract (Description)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 
 newtype FlowInstanceId = FlowInstanceId Text deriving (Eq, Ord, Show)
@@ -27,11 +28,11 @@ flowInstanceIdText :: FlowInstanceId -> Text
 flowInstanceIdText (FlowInstanceId value) = value
 
 data FlowOwner = Hosted FlowBundleId RecipeId | External deriving (Eq, Show)
-data FlowProgress = FlowWaiting [(Text,Value)] | FlowReturned Value deriving (Eq, Show)
+data FlowProgress = FlowWaiting [(Text,Value,WaitKind)] | FlowReturned Value deriving (Eq, Show)
 data FlowOutcome = Completed Value | Failed [Diagnostic] | Cancelled deriving (Eq, Show)
 data ExecutionStatus = Runnable | Running | Waiting | Finished FlowOutcome deriving (Eq, Show)
 data CancelScope = ThisFlow | FlowAndDescendants deriving (Eq, Show)
-data ReplyOrigin = ManualReply Text | ProviderReply Text Text deriving (Eq, Show)
+data ReplyOrigin = ManualReply Text | ProviderReply Text Text | ChildCompletion FlowInstanceId deriving (Eq, Show)
 
 -- The application validates and captures the execution description before start.
 -- This store preserves it verbatim; reading status never loads its guest or secrets.
@@ -44,8 +45,9 @@ data FlowInstance = FlowInstance
   , blocked :: [Diagnostic], retryRequired :: Bool, cancelDescendants :: Bool, waits :: [FlowWait]
   , deliveries :: [FlowDelivery], attempts :: [RecipeRunId]
   } deriving (Eq, Show)
+data WaitKind = ReplyWait | ChildWait FlowInstanceId Description deriving (Eq, Show)
 data FlowWait = FlowWait
-  { waitId :: Text, descriptor :: Value, waitStatus :: WaitStatus
+  { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus
   } deriving (Eq, Show)
 data WaitStatus = Open | Answered ReplyOrigin Value | Closed deriving (Eq, Show)
 data FlowDelivery = FlowDelivery

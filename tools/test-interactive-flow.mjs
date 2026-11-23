@@ -33,6 +33,9 @@ import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Data.Text (Text)
 import qualified Child
 import Kyyn.Plugin (FetchError(..))
+awaitParent :: Flow Integer Integer
+awaitParent = startFlow (flowRef (RecipeId "child") Child.review) A.>>> I.awaitFlow
+  A.>>> A.arr (\\outcome -> case outcome of I.Completed result -> result; I.Cancelled -> -1; I.Failed _ -> -2)
 observeParent :: Flow Integer Integer
 observeParent = startFlow (flowRef (RecipeId "child") Child.review)
   A.>>> (inspectFlow A.&&& A.arr id)
@@ -86,6 +89,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
   createInteractiveRecipe (RecipeId "refuse") Flows.refuse
   createInteractiveRecipe (RecipeId "multiple") Flows.multiple
   createInteractiveRecipe (RecipeId "child") Child.review
+  createInteractiveRecipe (RecipeId "awaitParent") (withChildren [child (RecipeId "child") Child.review] Flows.awaitParent)
   createInteractiveRecipe (RecipeId "observeParent") (withChildren [child (RecipeId "child") Child.review] Flows.observeParent)
   createInteractiveRecipe (RecipeId "cancelParent") (withChildren [child (RecipeId "child") Child.review] Flows.cancelParent)
   createInteractiveRecipe (RecipeId "parent") (withChildren [child (RecipeId "child") Child.review] Flows.parent)
@@ -113,6 +117,8 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const self=cli(['flow','start','self','--input','+1']).result;
  const observer=cli(['flow','start','observeParent','--input','+2']).result;
  const canceller=cli(['flow','start','cancelParent','--input','+2']).result;
+ const awaiting=cli(['flow','start','awaitParent','--input','+2']).result;
+ const awaitingCancelled=cli(['flow','start','awaitParent','--input','+2']).result;
  const worker=background(['flow','worker']);
  await until(()=>show(started.id).status==='waiting');
  await until(()=>show(cancelled.id).status==='waiting');
@@ -149,6 +155,27 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  assert.equal(show(canceller.id).result.trim(),'+1');
  const cancelledChild=instances().find(x=>x.parent===canceller.id);
  assert.equal(cancelledChild.status,'cancelled');assert.deepEqual(cancelledChild.attempts,[]);
+ await until(()=>show(awaiting.id).status==='waiting');
+ const childWait=show(awaiting.id).waits.find(x=>x.status==='open');
+ const awaitedChild=instances().find(x=>x.parent===awaiting.id);
+ assert.equal(childWait.child,awaitedChild.id);assert.equal(childWait.descriptor,null);
+ const forged=runtime(['flow','fulfil',awaiting.id,'--wait',childWait.id,'--reply','17'],1);
+ assert.ok(forged.diagnostics.some(x=>x.message.includes('Child waits')));
+ assert.deepEqual(show(awaiting.id).deliveries,[],'Refused child outcome was queued');
+ const inferred=runtime(['flow','fulfil',awaiting.id,'--reply','17'],1);
+ assert.ok(inferred.diagnostics.some(x=>x.message.includes('Open reply waits: none')));
+ const collision=runtime(['flow','fulfil',started.id,'--key','internal-child-'+childWait.id,'--reply','1'],1);
+ assert.ok(collision.diagnostics.some(x=>x.message.includes('reserved')));
+ await until(()=>show(awaitedChild.id).status==='waiting');
+ runtime(['flow','fulfil',awaitedChild.id,'--reply','23']);
+ await until(()=>show(awaiting.id).status==='completed');
+ assert.equal(show(awaiting.id).result.trim(),'+23');
+ assert.equal(show(awaiting.id).waits[0].reply.origin.kind,'child');
+ await until(()=>show(awaitingCancelled.id).status==='waiting');
+ const toCancel=instances().find(x=>x.parent===awaitingCancelled.id);
+ runtime(['flow','cancel',toCancel.id]);
+ await until(()=>show(awaitingCancelled.id).status==='completed');
+ assert.equal(show(awaitingCancelled.id).result.trim(),'-1');
  const waiting=show(started.id),wait=waiting.waits.find(x=>x.status==='open');
  assert.equal(wait.descriptor.request,2);assert.equal(waiting.attempts.length,1);
  assert.equal(waiting.attempts[0].path,'/runs/'+waiting.attempts[0].id);
@@ -190,7 +217,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  fs.writeFileSync(bundle,captured);
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);
- runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,observer.id,canceller.id,'--descendants']);
+ runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,observer.id,canceller.id,awaiting.id,awaitingCancelled.id,'--descendants']);
  assert.deepEqual(runtime(['flow','list']).result.instances,[]);
  assert.equal(runtime(['run','show',completed.attempts[1].id]).result.status,'returned','Clearing flow hid its recording');
  assert.equal(invoke('git',['-C',kb,'rev-parse','HEAD']).trim(),brokenRevision,'Runtime changed accepted knowledge');
