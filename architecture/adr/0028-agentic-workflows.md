@@ -7,8 +7,7 @@ title: 'Typed agentic tools and explicitly executable recipes'
 
 ## Context
 
-[Issue #158](https://github.com/drshade/kyyn-v2/issues/158) asks how a KB can
-retain a repeatable model-assisted working method, rather than requiring every
+A KB needs to retain a repeatable model-assisted working method, rather than requiring every
 calling agent to reconstruct it from instructions. The selected library is
 [haskell-agentic](https://github.com/drshade/haskell-agentic), owned by Tom.
 Necessary library changes should be requested upstream, not implemented as a
@@ -313,8 +312,7 @@ interactive execution below.
 
 ### Interactive flows have a durable lifetime
 
-[Issue #345](https://github.com/drshade/kyyn-v2/issues/345) motivates a sales
-portfolio flow which starts opportunity reviews. Each review queries Salesforce,
+A sales portfolio flow starts opportunity reviews. Each review queries Salesforce,
 asks an owner for clarification, waits for a Teams reply and proposes a KB update.
 Captured evidence is optional in this path. A live response need not be published
 into the evidence store before the workflow can use it.
@@ -472,10 +470,9 @@ wait. Reminder and escalation decisions remain authored policy.
 ### Replay reconstructs execution, not the external world
 
 Use the library's durable recording contract, with Kyyn supplying its store.
-[Upstream issue #12](https://github.com/drshade/haskell-agentic/issues/12) owns
-completion-only replay, not suspension. The typed blocked/fulfilment contract
-specified above is a separate upstream dependency, tracked with the implementation
-work in #345. Kyyn does not implement a competing arrow interpreter to obtain it.
+Interactive execution requires both completion replay and the typed
+blocked/fulfilment contract specified above from the library. Kyyn does not
+implement a competing arrow interpreter to obtain them.
 
 Each instance fixes the original request, execution revision (code, codecs and
 provider configuration) and journal namespace. Resumption reuses that execution;
