@@ -91,7 +91,7 @@ try{
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
  assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
- assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
+ assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(flowPage.includes('class="context">Ask for update</span>'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
  const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
  assert((await get('/flows/child-demo')).includes('href="/flows/instance-demo"'));
  assert((await get('/flows/blocked-instance')).includes('explicit retry'));

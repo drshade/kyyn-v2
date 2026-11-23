@@ -14,7 +14,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Effectful.Error.Static (catchError)
 import System.IO (hPutStrLn, stderr)
 import Kyyn.Configuration (Host(..), SelectedKb(..))
-import Kyyn.Composition.FlowValues (FlowValues(..), readFlowValues)
+import Kyyn.Composition.FlowValues (FlowValues(..), readFlowValues, readFlowValuesMany)
 import Kyyn.Composition.Runtime (Base, runBase, runRuntime, withRuntime, finish)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure, operationalDiagnostic)
@@ -79,9 +79,10 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
     _ -> finish $ runPinned host kb scope $ case command of
       Cli.ListFlows -> do
         items <- listInstances
-        states <- forM items $ \item -> do
+        rendered <- readFlowValuesMany items
+        states <- forM (zip items rendered) $ \(item,values) -> do
           interrupted <- if item.status == Running then not <$> writerBusy item.instanceId else pure False
-          Result.Response _ value _ _ <- present interrupted item
+          let Result.Response _ value _ _ = presentValues interrupted item values
           pure (item,interrupted,value)
         pure (success (object ["instances" .= [value | (_,_,value) <- states]])
           (if null states then ["No interactive flows started."] else
@@ -149,14 +150,13 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
             worker scope once (Just messages)
 
 present :: (FlowStore :> es, DhallHandling :> es, Failure :> es) => Bool -> FlowInstance -> Eff es Response
-present stopped item = do
-  values <- readFlowValues item
-  let input = values.input
-      output = values.output
-      problems = values.diagnostics
-      waits = descriptors item
-  pure (success (View.instanceValue item stopped waits input output problems)
-    (View.instanceLines item stopped waits input output problems))
+present stopped item = presentValues stopped item <$> readFlowValues item
+
+presentValues :: Bool -> FlowInstance -> FlowValues -> Response
+presentValues stopped item values = success
+  (View.instanceValue item stopped waits values.input values.output values.diagnostics)
+  (View.instanceLines item stopped waits values.input values.output values.diagnostics)
+  where waits = descriptors item
 
 descriptors :: FlowInstance -> [(Text.Text,Value)]
 descriptors item = [(wait.waitId,either (\message -> object ["unavailable" .= message]) id

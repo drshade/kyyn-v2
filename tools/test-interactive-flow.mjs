@@ -219,9 +219,15 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const captured=fs.readFileSync(bundle);fs.unlinkSync(bundle);
  const absent=show(started.id);assert.equal(absent.status,'completed');assert.equal(absent.result,null);
  assert.equal(absent.inspectionDiagnostics[0].code,'flow.bundle-missing');
+ const unavailablePeers=runtime(['flow','list']).result.instances.filter(x=>x.owner.bundle===completed.owner.bundle);
+ assert(unavailablePeers.length>1,'Fixture must share captured metadata');
+ assert(unavailablePeers.every(x=>x.input===null&&x.inspectionDiagnostics[0].code==='flow.bundle-missing'));
+
  const missingMetadataPage=await (await fetch(webBase+'/flows/'+started.id)).text();
  assert(missingMetadataPage.includes('flow.bundle-missing'));assert(!missingMetadataPage.includes('<summary>Original input</summary>'));
  fs.writeFileSync(bundle,captured);
+ const restoredPeers=runtime(['flow','list']).result.instances.filter(x=>x.owner.bundle===completed.owner.bundle);
+ assert(restoredPeers.every(x=>x.input!==null&&x.inspectionDiagnostics.length===0),'Metadata failure survived a later command');
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);
  runtime(['flow','clear',started.id,cancelled.id,failed.id,multiple.id,fresh.id,freshAgain.id,parent.id,wrong.id,self.id,observer.id,canceller.id,awaiting.id,awaitingCancelled.id,'--descendants']);
