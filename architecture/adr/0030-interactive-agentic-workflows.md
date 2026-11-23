@@ -207,6 +207,16 @@ reported dispatch failure and also requires explicit retry, regardless of repeat
 safety. Neither local persistence nor a stable identity implies exactly-once
 provider delivery. Child completion and bare manual waits require no dispatch.
 
+Only open event waits are dispatched or polled. Polling additionally requires a
+`Completed` or `NotRequired` dispatch state. Answered and closed waits are no
+longer polled. Further arrivals for them, including later arrivals from the same
+batch, retain duplicate, conflicting or closed-wait outcomes; they cannot replace
+the accepted reply or reopen the wait.
+
+Event waits remain manually fulfillable through CLI and MCP, with `ManualReply`
+provenance supplied by that surface. Manual fulfilment does not change dispatch
+state or the adapter cursor. Child-completion waits cannot be manually fulfilled.
+
 Polling is read-only and uses the retained cursor and authored request. Each
 contract declares a positive minimum poll interval. The host persists the poll
 attempt time before invocation and does not poll that wait sooner than the
