@@ -25,7 +25,7 @@ frontier reached current = do
   new <- traverse attach reached
   let close old = if old.waitId `elem` map fst reached then old else closeWait old
       retained = [close old | old <- current.waits, old.waitId `notElem` map fst reached]
-  pure current { status = Waiting, waits = retained ++ new, blocked = [] }
+  pure current { status = Waiting, waits = retained ++ new }
   where
     attach (identity,description) = case find ((== identity) . (.waitId)) current.waits of
       Nothing -> Right (FlowWait identity description Open)
@@ -37,14 +37,12 @@ finish :: FlowOutcome -> FlowInstance -> Either FlowStoreProblem FlowInstance
 finish outcome current = case current.status of
   Finished old | old == outcome -> Right current
                | otherwise -> Left AlreadyFinished
-  _ -> Right current { status = Finished outcome, blocked = [], waits = case outcome of
-    Failed{} -> current.waits
-    _ -> map closeWait current.waits }
+  _ -> Right current { status = Finished outcome, waits = map closeWait current.waits }
 
 block :: [Diagnostic] -> FlowInstance -> Either FlowStoreProblem FlowInstance
 block problems current = case current.status of
   Finished{} -> Left AlreadyFinished
-  _ -> Right current { blocked = problems, status = Runnable }
+  _ -> Right current { blocked = problems }
 
 parentAllowsStart :: Maybe FlowInstanceId -> [FlowInstance] -> Either FlowStoreProblem ()
 parentAllowsStart Nothing _ = Right ()
@@ -103,18 +101,21 @@ resolve identity outcome current = do
     Nothing -> do
       let found = find ((== item.waitId) . (.waitId)) current.waits
           terminal = case current.status of Finished{} -> True; _ -> False
-          actual = if terminal || maybe True ((== Closed) . (.waitStatus)) found then ClosedWait else outcome
-          successful = actual == Accepted || actual == Duplicate
-      case (successful,found) of
-        (True,Just wait) -> case wait.waitStatus of
-          Answered origin value | origin /= item.origin || value /= item.value -> Left (InvalidTransition "Immutable reply differs")
-          _ -> pure ()
-        _ -> pure ()
-      let answer wait = if successful && wait.waitId == item.waitId
+          successful = outcome == Accepted || outcome == Duplicate
+          actual = case (terminal,found) of
+            (True,_) -> ClosedWait
+            (_,Nothing) -> ClosedWait
+            (_,Just wait) -> case wait.waitStatus of
+              Closed -> ClosedWait
+              Open -> if successful then Accepted else outcome
+              Answered _ value
+                | successful -> if value == item.value then Duplicate else Conflicting
+                | otherwise -> outcome
+          answer wait = if actual == Accepted && wait.waitId == item.waitId
             then wait { waitStatus = Answered item.origin item.value } else wait
           recorded delivery = if delivery.deliveryId == identity then delivery { outcome = Just actual } else delivery
       pure current
-        { status = if successful then Runnable else current.status
+        { status = if actual == Accepted then Runnable else current.status
         , waits = map answer current.waits, deliveries = map recorded current.deliveries }
 
 closeWait :: FlowWait -> FlowWait

@@ -20,6 +20,7 @@ data FlowStore :: Effect where
   BeginAttempt :: FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
   ReportFrontier :: FlowInstanceId -> [(Text,Value)] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   FinishInstance :: FlowInstanceId -> FlowOutcome -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  -- An empty list clears a block after the caller revalidates the pinned execution.
   BlockInstance :: FlowInstanceId -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   CancelInstance :: FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
   -- Ingress holds only the short catalog lock, never the guest's writer lock.

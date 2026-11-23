@@ -65,6 +65,16 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   assert (after.status == Runnable && length [() | w <- after.waits, w.waitStatus == Open] == 1) "Partial reply did not wake independently"
   _ <- update (beginAttempt child.instanceId)
   _ <- update (reportFrontier child.instanceId [("two",String "other")])
+  _ <- update (queueDelivery child.instanceId "duplicate" "one" (ManualReply "cli") (Number 7))
+  duplicate <- update (resolveDelivery child.instanceId "duplicate" Accepted)
+  assert (duplicate.status == Waiting && any ((== Just Duplicate) . (.outcome)) duplicate.deliveries)
+    "Duplicate reply woke an already waiting instance"
+  _ <- update (queueDelivery child.instanceId "new-origin" "one" (ProviderReply "adapter" "another-event") (Number 7))
+  newOrigin <- update (resolveDelivery child.instanceId "new-origin" Accepted)
+  assert (newOrigin.status == Waiting && length [() | d <- newOrigin.deliveries, d.outcome == Just Duplicate] == 2)
+    "Same reply from another origin remained unresolved"
+  assert (any ((== Answered (ManualReply "cli") (Number 7)) . (.waitStatus)) newOrigin.waits)
+    "Duplicate changed original reply origin"
   _ <- update (queueDelivery child.instanceId "conflict" "one" (ManualReply "cli") (Number 8))
   _ <- update (resolveDelivery child.instanceId "conflict" Conflicting)
   _ <- update (cancelInstance parent.instanceId FlowAndDescendants)
@@ -101,11 +111,16 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   lateValidation <- update (resolveDelivery withdrawal.instanceId "not-yet-validated" Accepted)
   assert (lateValidation.status == Waiting && all ((== Just ClosedWait) . (.outcome)) lateValidation.deliveries)
     "A withdrawn wait was revived by queued input"
+  _ <- update (beginAttempt withdrawal.instanceId)
+  interrupted <- readFlow withdrawal.instanceId
+  assert (length [() | w <- interrupted.waits, w.waitStatus == Open] == 1) "Unfinished attempt withdrew prior waits"
   failed <- update (finishInstance withdrawal.instanceId (Failed [errorDiagnostic "test.failure" "Fixture failure"]))
-  assert (length [() | w <- failed.waits, w.waitStatus == Open] == 1) "Failed attempt invented a new frontier"
+  assert (null [() | w <- failed.waits, w.waitStatus == Open]) "Terminal failure retained open waits"
 
   blocked <- start Nothing "blocked"
-  _ <- update (blockInstance blocked.instanceId [errorDiagnostic "flow.execution-mismatch" "Pinned execution unavailable"])
+  _ <- wait blocked.instanceId
+  blockedWait <- update (blockInstance blocked.instanceId [errorDiagnostic "flow.execution-mismatch" "Pinned execution unavailable"])
+  assert (blockedWait.status == Waiting) "Blocking changed execution status"
   refused <- store scope (beginAttempt blocked.instanceId)
   assert (refused == Left ExecutionBlocked) "Blocked instance executed"
   _ <- update (cancelInstance blocked.instanceId ThisFlow)

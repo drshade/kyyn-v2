@@ -51,7 +51,7 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
       key = object ["operation" .= String "wait", "index" .= (1 :: Int)]
       value = object ["result" .= String "reply"]
       journal = runFlowJournal kb identity
-      file = directory </> ".kyyn/flows/flow-example/journal.json"
+      file = directory </> ".kyyn/flows/journals/flow-example/journal.json"
   let floating = object ["tag" .= String "Number", "value" .= String "4.0"]
       request = object ["tag" .= String "HostRequest", "id" .= String "1", "capability" .= String "flow-journal",
         "method" .= String "save", "arguments" .= object ["key" .= floating, "value" .= floating]]

@@ -30,7 +30,7 @@ runFlowJournal kb expected action = do
       valid c = isAsciiLower c || isAsciiUpper c || isDigit c || c == '-' || c == '_'
   unless (not (null name) && all valid name) (problem "Invalid flow journal namespace")
   kbScope <- either problem pure (knowledgeBaseScope kb)
-  let directory = scopePath kbScope </> ".kyyn/flows" </> name
+  let directory = scopePath kbScope </> ".kyyn/flows/journals" </> name
   scope <- either problem pure (directoryScope directory)
   file <- either problem pure (relativePath "journal.json")
   ignored <- either problem pure (relativePath ".kyyn")
@@ -55,7 +55,7 @@ runFlowJournal kb expected action = do
     problem :: Failure :> effects => String -> Eff effects b
     problem message = raiseFailure (Failure.StorageUnavailable
       (Failure.StorageDiagnostic Failure.InspectEntry
-        (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows" </> Text.unpack expected.namespace </> "journal.json") message))
+        (either id scopePath (knowledgeBaseScope kb) </> ".kyyn/flows/journals" </> Text.unpack expected.namespace </> "journal.json") message))
     records :: (DocumentAccess :> effects, Failure :> effects) => Eff effects [(Value,Value)]
     records = readCurrent >>= \case
       Nothing -> problem "Flow journal disappeared during execution"
