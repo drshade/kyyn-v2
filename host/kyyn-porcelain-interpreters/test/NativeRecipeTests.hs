@@ -19,7 +19,7 @@ import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, DispatchOf, Dispatch(..), runEff, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, interpose, localSeqUnlift)
-import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink)
+import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink, doesPathExist)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
@@ -28,7 +28,7 @@ import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Domain.Failure as Failure
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
 import Kyyn.Domain.Model (ModelConfiguration(..), ModelProvider(..))
@@ -43,6 +43,8 @@ import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
 import qualified Kyyn.Domain.RecipeRun as Run
 import Kyyn.Porcelain.Capability.FlowWorker
 import Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker)
+import Kyyn.Porcelain.Capability.PluginRead
+import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
@@ -293,22 +295,30 @@ main = do
     finished <- attempt False resume >>= taggedValue "finished"
     unless (finished == String "7") (fail ("Unexpected interactive result: " ++ show finished))
     -- Full hosted lifecycle, reopening a new guest process for each visit.
-    let visit first selectedIdentity = visitWith False first selectedIdentity >>= right
-        visitWith broken first selectedIdentity = do
+    let visit first selectedIdentity = visitWith NoFault first selectedIdentity >>= right
+        visitWith fault first selectedIdentity = workerWith fault first (visitInstance selectedIdentity)
+        workerWith fault first operation = do
           outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
             . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
             . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
-            . runPluginRead . runDocumentPersistenceIO . runFlowStore kb
+            . runPluginRead . (case fault of PluginFault -> failPlugin True; ProtocolFault -> failPlugin False; _ -> id) . runDocumentPersistenceIO . runFlowStore kb
             . runAppendJournalIO . runRecipeRunStore (const (pure ()))
-            . (if broken then failRunTerminal else id) . runFlowWorker kb $
-              visitInstance selectedIdentity
+            . (if fault == RecordingFault then failRunTerminal else id) . runFlowWorker kb $
+              operation
           pure outcome
         inspect selectedIdentity = store (readInstance selectedIdentity) >>= right >>= maybe (fail "Missing instance") pure
         recording selectedIdentity = runEff (runFailure (runAppendJournalIO (runRecipeRunStore (const (pure ()))
           (readRecipeRun kb selectedIdentity Nothing 1000)))) >>= right
         clearRecording selectedIdentity = runEff (runFailure (runAppendJournalIO (runRecipeRunStore (const (pure ()))
           (clearRecipeRun kb selectedIdentity)))) >>= right
+    let missingId = either error id (Instance.flowInstanceId "never-started")
+    missingBusy <- workerWith NoFault False ((\busyWriter -> if busyWriter then WriterBusy else NoWork) <$> writerBusy missingId) >>= right
+    missingVisit <- visit False missingId
+    missingLock <- doesPathExist (directory ++ "/.kyyn/flows/journals/never-started.lock")
+    missingDirectory <- doesPathExist (directory ++ "/.kyyn/flows/journals/never-started")
+    unless (missingBusy == NoWork && missingVisit == NoWork && not missingLock && not missingDirectory)
+      (fail "Inspection or visit allocated a missing instance journal or lock")
     hosted <- store (startPreparedInstance Nothing "worker" interactive) >>= right >>= right
     held <- newEmptyMVar
     releaseWriter <- newEmptyMVar
@@ -342,11 +352,16 @@ main = do
     _ <- store (queueDelivery hosted.instanceId "answer" waitId (Instance.ManualReply "first") (Number 9)) >>= right >>= right
     _ <- store (queueDelivery hosted.instanceId "duplicate" waitId (Instance.ManualReply "second") (Number 9)) >>= right >>= right
     _ <- store (queueDelivery hosted.instanceId "conflict" waitId (Instance.ManualReply "third") (Number 10)) >>= right >>= right
-    broken <- visitWith True False hosted.instanceId
+    broken <- visitWith RecordingFault False hosted.instanceId
     unless (case broken of Left _ -> True; _ -> False) (fail "Recording failure was swallowed")
     interruptedFlow <- inspect hosted.instanceId
     unless (interruptedFlow.status == Instance.Running && length interruptedFlow.waits == 1)
       (fail "Recording failure invented a terminal or removed the previous frontier")
+    refusedRetry <- visit False hosted.instanceId
+    stillInterrupted <- inspect hosted.instanceId
+    unless (refusedRetry == Blocked && stillInterrupted.attempts == interruptedFlow.attempts)
+      (fail "Reported failure was automatically retried")
+    _ <- store (retryInstance hosted.instanceId) >>= right >>= right
     secondVisit <- visit False hosted.instanceId
     completedFlow <- inspect hosted.instanceId
     unless (secondVisit == Advanced && completedFlow.status == Instance.Finished (Instance.Completed (String "9")))
@@ -368,6 +383,26 @@ main = do
     _ <- store (clearInstances [hosted.instanceId]) >>= right >>= right
     orphanRecording <- recording secondRun
     unless (orphanRecording.summary.status == Run.Returned) (fail "Recording required a retained instance")
+    failing <- store (startPreparedInstance Nothing "worker-failing" interactive) >>= right >>= right
+    failedVisit <- visitWith PluginFault True failing.instanceId >>= right
+    failedInstance <- inspect failing.instanceId
+    unless (failedVisit == Advanced && case failedInstance.status of
+        Instance.Finished (Instance.Failed _) -> True; _ -> False)
+      (fail "Returned guest FetchError did not finish the logical instance")
+    failedRun <- case failedInstance.attempts of [attemptId] -> recording attemptId; _ -> fail "Missing failed attempt"
+    unless (failedRun.summary.status == Run.Failed) (fail "Returned failure lost its attempt terminal")
+    protocolFailure <- store (startPreparedInstance Nothing "worker-protocol-failure" interactive) >>= right >>= right
+    protocolVisit <- visitWith ProtocolFault True protocolFailure.instanceId >>= right
+    protocolState <- inspect protocolFailure.instanceId
+    unless (protocolVisit == Blocked && protocolState.retryRequired && protocolState.status == Instance.Running)
+      (fail "Host failure was mistaken for an authoritative guest failure")
+    secondProtocolVisit <- visit False protocolFailure.instanceId
+    sameProtocolState <- inspect protocolFailure.instanceId
+    unless (secondProtocolVisit == Blocked && sameProtocolState.attempts == protocolState.attempts)
+      (fail "Deterministic failure re-executed on polling")
+    _ <- store (cancelInstance protocolFailure.instanceId Instance.ThisFlow) >>= right >>= right
+    cancelledBlocked <- visit False protocolFailure.instanceId
+    unless (cancelledBlocked == NoWork) (fail "Cancelled blocked instance still requested work")
     unavailable <- store (startPreparedInstance Nothing "worker-unavailable" interactive) >>= right >>= right
     removeDirectoryLink retention
     unavailableVisit <- visit False unavailable.instanceId
@@ -411,3 +446,12 @@ failRunTerminal = interpose $ \env operation -> case operation of
   ListRecipeRuns kb selected -> listRecipeRuns kb selected
   ReadRecipeRun kb selected cursor limit -> readRecipeRun kb selected cursor limit
   ClearRecipeRun kb selected -> clearRecipeRun kb selected
+
+data WorkerFault = NoFault | RecordingFault | PluginFault | ProtocolFault deriving Eq
+
+failPlugin :: PluginRead :> es => Bool -> Eff es a -> Eff es a
+failPlugin authoritative = interpose $ \_ operation -> case operation of
+  LoadCapturedInput selected contract -> loadCapturedInput selected contract
+  ExecuteCapturedMethod{} -> pure (if authoritative then Right (Left (FetchError "fixture refusal"))
+    else Left [errorDiagnostic "tool.failed" "Host-side fixture failure with the same diagnostic code"])
+  ResolveCapturedBlobs captures contract value -> resolveCapturedBlobs captures contract value

@@ -1,9 +1,10 @@
 {-# LANGUAGE GADTs, TypeApplications, LambdaCase, OverloadedRecordDot #-}
-module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram, executeInteractiveProgram) where
+module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram, executeInteractiveProgram, ProgramFailure(..), programDiagnostics) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, object)
 import Control.Monad (void)
+import Data.Bifunctor (first)
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournal, FlowJournalIdentity(..), lookupCompletion, saveCompletion)
 import Kyyn.Porcelain.Capability.RecipeRunStore (RecipeRunStore, RecipeRunWriter, appendRunEvent)
 import Kyyn.Domain.RecipeRun (RunEventBody(FlowObserved))
@@ -34,6 +35,13 @@ import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead, loadCapturedInput, executeCapturedMethod)
 import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure, answerEvidence)
 
+-- Keep a returned guest Left distinct from failure to execute/observe it.
+-- Callers deciding logical lifecycle must not classify diagnostic strings.
+data ProgramFailure = GuestFailure FetchError | InvocationFailure [Diagnostic] deriving Show
+programDiagnostics :: ProgramFailure -> [Diagnostic]
+programDiagnostics (GuestFailure (FetchError message)) = [errorDiagnostic "tool.failed" (Text.unpack message)]
+programDiagnostics (InvocationFailure problems) = problems
+
 executeToolProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] Value)
@@ -54,9 +62,9 @@ executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap
 executeInteractiveProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
   GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => FlowJournalIdentity -> (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin]
-  -> Maybe ModelConfiguration -> Value -> Eff es (Either [Diagnostic] Value)
+  -> Maybe ModelConfiguration -> Value -> Eff es (Either ProgramFailure Value)
 executeInteractiveProgram identity observe program plugins model arguments = fmap (fmap fst)
-  (executeProgram (Just observe) (Just answerJournal) program plugins model [] arguments)
+  (executeProgramResult (Just observe) (Just answerJournal) program plugins model [] arguments)
   where
     answerJournal (InitialiseJournal namespace revision)
       | namespace == identity.namespace && revision == identity.revision = pure (object [])
@@ -67,8 +75,14 @@ executeInteractiveProgram identity observe program plugins model arguments = fma
 executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeProgram observe journal program plugins model captured arguments = runExceptT $ do
-  (result,contexts) <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
+executeProgram observe journal program plugins model captured arguments =
+  first programDiagnostics <$> executeProgramResult observe journal program plugins model captured arguments
+
+executeProgramResult :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
+  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  -> Value -> Eff es (Either ProgramFailure (Value, [EvidenceIndex]))
+executeProgramResult observe journal program plugins model captured arguments = runExceptT $ do
+  (result,contexts) <- ExceptT $ fmap (first InvocationFailure) $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
     conversation decodeToolFrame program arguments $ \case
       ToolJournal call -> case journal of
         Nothing -> protocolFailure "flow-journal is only available during interactive recipe execution"
@@ -89,7 +103,7 @@ executeProgram observe journal program plugins model captured arguments = runExc
         (identity,payload,_) <- connector plugins plugin kind instanceName
         current <- capture plugin kind instanceName identity payload
         answerEvidence (Just current) (ReadEvidence "selected" key)
-  value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" (Text.unpack message)]) pure result
+  value <- either (throwE . GuestFailure) pure result
   pure (value,map snd contexts)
   where
     answerPlugin configured plugin kind instanceName methodName value = do

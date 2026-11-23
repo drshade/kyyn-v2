@@ -2,7 +2,7 @@
 module Kyyn.Porcelain.Capability.FlowStore
   ( FlowStore(..), startInstance, listInstances, readInstance, beginAttempt
   , reportFrontier, finishInstance, blockInstance, cancelInstance
-  , queueDelivery, resolveDelivery, startPreparedInstance, readExecutionBundle, clearInstances, linkAttempt
+  , queueDelivery, resolveDelivery, startPreparedInstance, readExecutionBundle, clearInstances, linkAttempt, blockAttempt, retryInstance
   ) where
 
 import Kyyn.Domain.RecipeRunId (RecipeRunId)
@@ -29,6 +29,8 @@ data FlowStore :: Effect where
   ReportFrontier :: FlowInstanceId -> [(Text,Value)] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   FinishInstance :: FlowInstanceId -> FlowOutcome -> FlowStore m (Either FlowStoreProblem FlowInstance)
   -- An empty list clears a block after the caller revalidates the pinned execution.
+  BlockAttempt :: FlowInstanceId -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem FlowInstance)
+  RetryInstance :: FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
   BlockInstance :: FlowInstanceId -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem FlowInstance)
   CancelInstance :: FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
   -- Ingress holds only the short catalog lock, never the guest's writer lock.
@@ -67,3 +69,8 @@ clearInstances = send . ClearInstances
 
 linkAttempt :: FlowStore :> es => FlowInstanceId -> RecipeRunId -> Eff es (Either FlowStoreProblem FlowInstance)
 linkAttempt identity = send . LinkAttempt identity
+
+blockAttempt :: FlowStore :> es => FlowInstanceId -> [Diagnostic] -> Eff es (Either FlowStoreProblem FlowInstance)
+blockAttempt identity = send . BlockAttempt identity
+retryInstance :: FlowStore :> es => FlowInstanceId -> Eff es (Either FlowStoreProblem FlowInstance)
+retryInstance = send . RetryInstance

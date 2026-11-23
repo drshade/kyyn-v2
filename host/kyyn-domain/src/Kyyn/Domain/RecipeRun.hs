@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, DuplicateRecordFields #-}
 module Kyyn.Domain.RecipeRun
   ( RecipeRunId, recipeRunId, runIdText, PreparedRecipeRun(..), RecipeRunHeader(..)
-  , RunEvent(..), RunEventBody(..), SequencedRunEvent(..), RecipeRunSummary(..), RecipeRunPage(..)
+  , RunEvent(..), RunEventBody(..), SequencedRunEvent(..), RecipeRunSummary(..), RecipeRunPage(..), RecipeRunListing(..)
   , RunStatus(..), terminalStatus
   ) where
 
@@ -33,6 +33,7 @@ data SequencedRunEvent = SequencedRunEvent Natural RunEvent deriving (Eq, Show)
 data RunStatus = Active | Interrupted | Completed EvolutionId | Failed | Cancelled | Suspended Natural | Returned deriving (Eq, Show)
 data RecipeRunSummary = RecipeRunSummary { header :: RecipeRunHeader, status :: RunStatus, eventCount :: Natural }
   deriving (Eq, Show)
+data RecipeRunListing = RecipeRunListing { runs :: [RecipeRunSummary], unavailable :: [Diagnostic] } deriving (Eq, Show)
 data RecipeRunPage = RecipeRunPage
   { summary :: RecipeRunSummary, events :: [SequencedRunEvent], next :: Maybe Natural
   , more :: Bool, incompleteTail :: Bool

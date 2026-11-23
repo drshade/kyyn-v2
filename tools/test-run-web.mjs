@@ -23,17 +23,43 @@ assert.notEqual(compact.diagram, fixture.mermaid);
 const failure=JSON.parse(fs.readFileSync(path.join(fixtureDirectory,'failed.json'),'utf8'));
 function git(...args){const r=spawnSync('git',['-C',kb,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();}
 function write(file,contents){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,contents);}
-const header=graph=>({recipe:'demoReview',flow:'Flows.trace',before:'a'.repeat(40),startedAt:'2026-11-13T10:00:00Z',graph,mermaid:fixture.mermaid,
+const header=graph=>({instance:null,recipe:'demoReview',flow:'Flows.trace',before:'a'.repeat(40),startedAt:'2026-11-13T10:00:00Z',graph,mermaid:fixture.mermaid,
  build:{sourcesDigest:'fixture',targetSystem:'fixture',derivationPath:'fixture.drv',outputPath:'/fixture/not-present'}});
 const hostEvent=(records,body)=>({sequence:String(records.length),event:{elapsedNanos:String(BigInt(records.at(-1).event.elapsedNanos)+200000000n),body}});
 const failedTerminal={kind:'failed',diagnostics:[{severity:{tag:'Error'},code:'fixture.failure',message:'The demo model was unavailable.',location:{tag:'None'}}]};
-function save(id,graph,records){const dir=path.join(kb,'.kyyn/runs',id);write(path.join(dir,'header.json'),JSON.stringify(header(graph)));write(path.join(dir,'events.jsonl'),records.map(x=>JSON.stringify(x.event)+'\n').join(''));return dir;}
+function save(id,graph,records,metadata={}){const dir=path.join(kb,'.kyyn/runs',id);write(path.join(dir,'header.json'),JSON.stringify({...header(graph),...metadata}));write(path.join(dir,'events.jsonl'),records.map(x=>JSON.stringify(x.event)+'\n').join(''));return dir;}
 try{
  write(path.join(kb,'root/kb.dhall'),'deliberately broken source: runs must not compile this');
  git('init','-q','-b','main');git('add','.');git('commit','-qm','Fixture');const before=git('rev-parse','HEAD');
  const completed=[...fixture.records,hostEvent(fixture.records,{kind:'completed',draft:'000001-demo'})];
  const failed=[...failure.records,hostEvent(failure.records,failedTerminal)];
  save('completed',fixture.graph,completed);save('failed',failure.graph,failed);
+ const oldDir=save('old-header',fixture.graph,[]), oldHeader=header(fixture.graph);delete oldHeader.instance;
+ fs.writeFileSync(path.join(oldDir,'header.json'),JSON.stringify(oldHeader));
+ const interactiveGraph={root:'run',items:[{id:'run',kind:'box',labels:['Interactive'],items:[
+  {id:'effect',kind:'node',nodeKind:'effect',labels:['Read opportunity']},
+  {id:'wait',kind:'node',nodeKind:'await',labels:['Await reply']}]}],
+  edges:[{from:'effect',to:'wait',style:'flow',label:null,selections:[]}],
+  addressItems:[{address:'flow',item:'run'},{address:'flow/seq/0',item:'effect'},{address:'flow/seq/1',item:'wait'}],bodies:[]};
+ const occurrence=address=>({address,context:[]}), rootOccurrence=occurrence('flow');
+ function interactive(restored){
+  const events=[];
+  const observed=(address,node,event)=>events.push({kind:'flow',summary:{occurrence:occurrence(address),parent:address==='flow'?null:rootOccurrence,node,notes:[],event}});
+  observed('flow','run',{kind:'entered',total:null});
+  observed('flow/seq/0','effect',{kind:'entered',total:null});
+  if(restored)observed('flow/seq/0','effect',{kind:'restored',operation:'effect'});
+  observed('flow/seq/0','effect',{kind:'returned',outcome:'completed'});
+  observed('flow/seq/1','await',{kind:'entered',total:null});
+  if(restored)observed('flow/seq/1','await',{kind:'restored',operation:'wait'});
+  observed('flow/seq/1','await',restored?{kind:'returned',outcome:'completed'}:{kind:'suspended'});
+  observed('flow','run',restored?{kind:'returned',outcome:'completed'}:{kind:'suspended'});
+  events.push(restored?{kind:'returned'}:{kind:'suspended',waitCount:'1'});
+  return events.map((body,index)=>({sequence:String(index),event:{elapsedNanos:String(BigInt(index+1)*100000000n),body}}));
+ }
+ const interactiveMetadata={instance:'deleted-instance',mermaid:'flowchart LR\nsubgraph run[Interactive]\neffect[Read opportunity] --> wait[Await reply]\nend'};
+ save('suspended',interactiveGraph,interactive(false),interactiveMetadata);
+ save('restored',interactiveGraph,interactive(true),interactiveMetadata);
+
  const interrupted=fixture.records.slice(0,Math.floor(fixture.records.length/2));
  const interruptedDir=save('interrupted',fixture.graph,interrupted);fs.appendFileSync(path.join(interruptedDir,'events.jsonl'),'{partial');
  const activeDir=save('active',fixture.graph,fixture.records.slice(0,10));
@@ -43,6 +69,11 @@ try{
  const base=await new Promise((resolve,reject)=>{let out='';web.stdout.on('data',x=>{out+=x;const m=out.match(/Serving (http:\/\/127\.0\.0\.1:\d+)/);if(m)resolve(m[1]);});web.on('exit',()=>reject(Error(errors)));});
  async function get(url,status=200,method='GET'){const r=await fetch(base+url,{method});const body=await r.text();assert.equal(r.status,status,body);assert.equal(r.headers.get('cache-control'),'no-store');return body;}
  assert((await get('/runs')).includes('demoReview'));
+ assert((await get('/runs')).includes('Suspended'));
+ assert((await get('/runs')).includes('Recording unavailable:'));
+ await get('/runs/old-header',500);
+ assert.equal(JSON.parse(await get('/runs/suspended/events')).summary.status,'suspended');
+ assert.equal(JSON.parse(await get('/runs/restored/events')).summary.status,'returned');
  assert((await get('/runs?recipe=missing')).includes('No runs recorded'));
  assert((await get('/runs/completed?evolution=not-an-id')).includes('run-viewer.mjs'));
  const page=JSON.parse(await get('/runs/completed/events?limit=2'));
@@ -53,6 +84,10 @@ try{
  for(const query of ['limit=0','limit=1001','after=-1','after=01','limit=2&limit=3','after'])await get('/runs/completed/events?'+query,400);
  await get('/runs/missing',404);await get('/runs/missing/events',404);await get('/runs/completed/events',405,'POST');
  const cli=spawnSync(executable,['--kb',kb,'--json','run','list'],{env,encoding:'utf8'});assert.equal(cli.status,0,cli.stderr);assert(!JSON.stringify(JSON.parse(cli.stdout).result).includes('addressItems'),'List leaked full graphs');
+ assert.equal(JSON.parse(cli.stdout).result.unavailable.length,1,'Unreadable header was not reported independently');
+ const clearedOld=spawnSync(executable,['--kb',kb,'run','clear','old-header'],{env,encoding:'utf8'});
+ assert.equal(clearedOld.status,0,clearedOld.stderr);assert(!fs.existsSync(oldDir));
+ assert(!(await get('/runs')).includes('Recording unavailable:'));
  save('broken',fixture.graph,[]);fs.writeFileSync(path.join(kb,'.kyyn/runs/broken/events.jsonl'),'not json\n');await get('/runs/broken/events',500);fs.rmSync(path.join(kb,'.kyyn/runs/broken'),{recursive:true});
  const timings=[];
  for(let i=0;i<15;i++){const start=performance.now();await get('/runs/completed/events?after=10&limit=200');timings.push(performance.now()-start);}
@@ -71,6 +106,20 @@ try{
    const fits=await page.locator('.graph-viewport').evaluate(v=>{const a=v.getBoundingClientRect(),b=v.querySelector('svg').getBoundingClientRect();return b.left>=a.left&&b.right<=a.right&&b.top>=a.top&&b.bottom<=a.bottom;});
    assert(fits,'Explicit Fit must show the complete diagram');}
 
+  for(const id of ['suspended','restored']){
+   await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();
+   await page.waitForFunction(()=>document.querySelector('#run-outcome').textContent.includes('Invocation'));
+   assert(!(await page.locator('#run-diagram').getAttribute('class')).includes('motion-running'));
+   if(id==='suspended'){
+    assert((await page.locator('#run-outcome').innerText()).includes('Waiting on 1 reply'));
+    assert.equal(await page.locator('#run-diagram svg [data-item=wait]').getAttribute('data-state'),'suspended');
+   }else{
+    assert.equal(await page.locator('#run-diagram svg [data-item=effect]').getAttribute('data-state'),'restored');
+    await page.locator('#run-diagram svg [data-item=effect]').click();
+    assert((await page.locator('#run-inspector').innerText()).includes('not re-executed'));
+   }
+   await page.screenshot({path:path.join(screenshots,id+'.png'),fullPage:true});
+  }
   await show('active');assert((await page.locator('#run-message').innerText()).includes('Live'));
   await page.locator('#run-zoom-in').click();await page.locator('#run-fit').click();
   await page.screenshot({path:path.join(screenshots,'live.png'),fullPage:true});

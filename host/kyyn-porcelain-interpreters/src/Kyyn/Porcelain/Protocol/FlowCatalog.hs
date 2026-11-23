@@ -23,7 +23,7 @@ instanceValue :: FlowInstance -> Value
 instanceValue item = object
   ["id" .= flowInstanceIdText item.instanceId,"parent" .= fmap flowInstanceIdText item.parent
   ,"startKey" .= item.startKey,"launch" .= launchValue item.launch,"status" .= statusValue item.status
-  ,"blocked" .= map diagnosticValue item.blocked,"cancelDescendants" .= item.cancelDescendants
+  ,"retryRequired" .= item.retryRequired,"blocked" .= map diagnosticValue item.blocked,"cancelDescendants" .= item.cancelDescendants
   ,"attempts" .= map runIdText item.attempts
   ,"waits" .= map waitValue item.waits,"deliveries" .= map deliveryValue item.deliveries]
 launchValue :: FlowLaunch -> Value
@@ -79,7 +79,7 @@ parseCatalog = withObject "flow catalog" $ \fields -> do
         _ -> fail "Duplicate flow parent"
 parseInstance :: Value -> Parser FlowInstance
 parseInstance = withObject "instance" $ \fields -> do
-  exact ["id","parent","startKey","launch","status","blocked","cancelDescendants","waits","deliveries","attempts"] fields
+  exact ["id","parent","startKey","launch","status","blocked","retryRequired","cancelDescendants","waits","deliveries","attempts"] fields
   identity <- fields .: "id" >>= checkedId
   parent <- fields .: "parent" >>= traverse checkedId
   waits <- fields .: "waits" >>= traverse parseWait
@@ -89,7 +89,7 @@ parseInstance = withObject "instance" $ \fields -> do
   unique "wait IDs" (map (.waitId) waits)
   unique "delivery IDs" (map (.deliveryId) deliveries)
   FlowInstance identity parent <$> fields .: "startKey" <*> (fields .: "launch" >>= parseLaunch)
-    <*> (fields .: "status" >>= parseStatus) <*> (fields .: "blocked" >>= diagnostics) <*> fields .: "cancelDescendants"
+    <*> (fields .: "status" >>= parseStatus) <*> (fields .: "blocked" >>= diagnostics) <*> fields .: "retryRequired" <*> fields .: "cancelDescendants"
     <*> pure waits <*> pure deliveries <*> pure attempts
 parseLaunch :: Value -> Parser FlowLaunch
 parseLaunch = withObject "launch" $ \fields -> do

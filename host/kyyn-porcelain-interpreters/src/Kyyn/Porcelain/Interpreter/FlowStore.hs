@@ -72,7 +72,7 @@ runFlowStore kb = interpret $ \_ operation -> do
                         if orphan || any ((== candidate) . (.instanceId)) catalog then fresh else pure candidate
                   identity <- fresh
                   beforeCommit
-                  let item = FlowInstance identity parent key launch Runnable [] False [] [] []
+                  let item = FlowInstance identity parent key launch Runnable [] False False [] [] []
                   commit (Right (item,catalog ++ [item]))
         case operation of
           ListInstances -> pure catalog
@@ -151,6 +151,8 @@ runFlowStore kb = interpret $ \_ operation -> do
           BeginAttempt identity -> commit (change identity Lifecycle.begin)
           ReportFrontier identity reached -> commit (change identity (Lifecycle.frontier reached))
           FinishInstance identity outcome -> commit (change identity (Lifecycle.finish outcome))
+          BlockAttempt identity problems -> commit (change identity (Lifecycle.blockAttempt problems))
+          RetryInstance identity -> commit (change identity Lifecycle.retry)
           BlockInstance identity problems -> commit (change identity (Lifecycle.block problems))
           CancelInstance identity selected -> commit $ do
             next <- Lifecycle.cancelTree identity selected catalog

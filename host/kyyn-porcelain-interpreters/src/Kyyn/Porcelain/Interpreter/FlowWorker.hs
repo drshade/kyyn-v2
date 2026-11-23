@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, LambdaCase, OverloadedRecordDot, ScopedTypeVariables, TypeApplications #-}
 module Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker) where
 
 import Control.Monad (void, forM_)
@@ -8,11 +8,12 @@ import Data.Maybe (isNothing)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Error.Static (catchError)
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.FlowClosure (FlowDeclaration(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..))
 import Kyyn.Domain.Contract (contractShape)
-import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
+import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
 import Kyyn.Domain.Path (scopePath, directoryScope, relativePath)
 import qualified Kyyn.Domain.RecipeRun as Run
@@ -33,7 +34,7 @@ import Kyyn.Porcelain.Capability.RecipeRunStore
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournalLocked)
-import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram)
+import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, ProgramFailure(..), programDiagnostics)
 import qualified Kyyn.Types.Guest as G
 import System.FilePath ((</>))
 
@@ -44,35 +45,57 @@ runFlowWorker :: forall es a. (DocumentPersistence :> es, FlowStore :> es,
   Failure :> es, Judgement :> es, ModelTurn :> es, DhallHandling :> es)
   => KnowledgeBase -> Eff (FlowWorker : es) a -> Eff es a
 runFlowWorker kb = interpret $ \_ -> \case
-  WriterIsBusy identity -> isNothing <$> locked identity (pure ())
-  VisitInstance identity -> do
-    result <- locked identity $ readInstance identity >>= \case
-      Nothing -> pure NoWork
-      Just current | not (eligible current) -> pure NoWork
-      Just current -> case current.launch.owner of
-        External -> pure NoWork
-        Hosted bundleId selected -> readExecutionBundle bundleId >>= \case
-          Left problems -> block identity problems
-          Right bundle -> case find ((== selected) . (.declaration.recipe)) bundle.closure of
-            Nothing -> block identity [errorDiagnostic "flow.entry" "Captured recipe is missing from the execution bundle"]
-            Just entry -> do
-              let journal = FlowJournalIdentity (flowInstanceIdText identity) current.launch.revision current.launch.request
-              -- Cancellation may have arrived while reading the pinned executable.
-              readInstance identity >>= \case
-                Just latest | eligible latest -> do
-                  _ <- blockInstance identity []
-                  outcome <- runFlowJournalLocked journal (work journal bundle entry latest)
-                  case outcome of
-                    Left problem -> block identity [errorDiagnostic "flow.journal" (show problem)]
-                    Right visit -> pure visit
-                _ -> pure NoWork
-    pure (maybe WriterBusy id result)
+  WriterIsBusy identity -> readInstance identity >>= \case
+    Nothing -> pure False
+    Just _ -> isNothing <$> locked identity (pure ())
+  VisitInstance identity -> readInstance identity >>= \case
+    Nothing -> pure NoWork
+    Just _ -> visit identity
   where
+    visit identity = do
+      result <- locked identity $ readInstance identity >>= \case
+        Nothing -> pure NoWork
+        Just current | finished current -> pure NoWork
+        Just current | current.retryRequired -> pure Blocked
+        Just current | not (eligible current) -> pure NoWork
+        Just current -> case current.launch.owner of
+          External -> pure NoWork
+          Hosted bundleId selected -> readExecutionBundle bundleId >>= \case
+            Left problems -> block identity problems
+            Right bundle -> case find ((== selected) . (.declaration.recipe)) bundle.closure of
+              Nothing -> block identity [errorDiagnostic "flow.entry" "Captured recipe is missing from the execution bundle"]
+              Just entry -> do
+                let journal = FlowJournalIdentity (flowInstanceIdText identity) current.launch.revision current.launch.request
+                -- Cancellation may have arrived while reading the pinned executable.
+                readInstance identity >>= \case
+                  Just latest | finished latest -> pure NoWork
+                  Just latest | latest.retryRequired -> pure Blocked
+                  Just latest | eligible latest -> do
+                    _ <- blockInstance identity []
+                    outcome <- catchError @Failure.OperationalFailure
+                      (runFlowJournalLocked journal (work journal bundle entry latest))
+                      (\_ problem -> do
+                        _ <- blockAttempt identity [Failure.operationalDiagnostic problem]
+                        raiseFailure problem)
+                    case outcome of
+                      Left problem -> stop identity [journalDiagnostic problem]
+                      Right outcomeVisit -> pure outcomeVisit
+                  _ -> pure NoWork
+      pure (maybe WriterBusy id result)
     eligible item = case item.status of
       Finished{} -> False
       Waiting -> any (isNothing . (.outcome)) item.deliveries
       _ -> True
-    block identity problems = blockInstance identity problems >> pure Blocked
+    block identity problems = blockInstance identity problems >>= blockedResult
+    stop identity problems = blockAttempt identity problems >>= blockedResult
+    blockedResult (Left AlreadyFinished) = pure NoWork
+    blockedResult _ = pure Blocked
+    journalDiagnostic JournalIdentityMismatch = errorDiagnostic "flow.journal-identity"
+      "The saved journal belongs to a different execution revision or original input."
+    journalDiagnostic JournalCompletionConflict = errorDiagnostic "flow.journal-conflict"
+      "A completed journal operation was presented with a different result. The saved result was preserved."
+    journalDiagnostic (JournalCorrupt message) = errorDiagnostic "flow.journal-corrupt"
+      ("The saved journal cannot be read: " ++ Text.unpack message)
     locked :: FlowInstanceId -> Eff (DocumentAccess : es) b -> Eff es (Maybe b)
     locked identity action = do
       base <- checked (knowledgeBaseScope kb)
@@ -89,8 +112,8 @@ runFlowWorker kb = interpret $ \_ -> \case
             Just pending | pending.waitStatus /= Closed -> do
               answer <- invoke journal bundle entry (const (pure ()))
                 (G.FulfilFlow journal.namespace journal.revision pending.descriptor (encodeFlowValue delivery.value))
-              case answer >>= protocol . parseFulfilment of
-                Left problems -> void (blockInstance initial.instanceId problems)
+              case either (Left . programDiagnostics) Right answer >>= protocol . parseFulfilment of
+                Left problems -> void (blockAttempt initial.instanceId problems)
                 Right resolution -> void (resolveDelivery initial.instanceId delivery.deliveryId resolution)
             _ -> void (resolveDelivery initial.instanceId delivery.deliveryId ClosedWait)
           _ -> pure ()
@@ -115,11 +138,12 @@ runFlowWorker kb = interpret $ \_ -> \case
       result <- invoke journal bundle entry (void . appendRunEvent writer . Run.FlowObserved)
         (G.ResumeFlow journal.namespace journal.revision journal.input)
       case result of
-        Left problems | not (null problems) && all ((== "tool.failed") . (.code)) problems -> do
+        Left failure@GuestFailure{} -> do
+          let problems = programDiagnostics failure
           -- A returned FetchError is authoritative. Transport/recording failures
           -- are not; they leave the previous frontier for a later replay.
           publish writer current (Run.RunFailed problems) (finishInstance current.instanceId (Failed problems))
-        Left problems -> interrupted writer current problems
+        Left (InvocationFailure problems) -> interrupted writer current problems
         Right value -> case protocol (parseProgress journal.namespace journal.revision value) of
           Left problems -> interrupted writer current problems
           Right (FlowWaiting frontier) -> publish writer current
@@ -129,7 +153,7 @@ runFlowWorker kb = interpret $ \_ -> \case
             Right _ -> publish writer current Run.RunReturned (finishInstance current.instanceId (Completed output))
     interrupted writer current problems = do
       _ <- appendRunEvent writer (Run.RunFailed problems)
-      block current.instanceId problems
+      stop current.instanceId problems
     -- Recording failure must stop dispatch before changing the durable frontier.
     -- Cancellation may race with publication; a terminal catalog state wins.
     publish writer current terminal update = do
@@ -140,5 +164,5 @@ runFlowWorker kb = interpret $ \_ -> \case
             Right _ -> pure Advanced
             Left AlreadyFinished -> pure NoWork
             Left MissingInstance -> pure NoWork
-            Left problem -> block current.instanceId [errorDiagnostic "flow.transition" (show problem)]
+            Left problem -> stop current.instanceId [errorDiagnostic "flow.transition" (show problem)]
         _ -> appendRunEvent writer Run.RunCancelled >> pure NoWork

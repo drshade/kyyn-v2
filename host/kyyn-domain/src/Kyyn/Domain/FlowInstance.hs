@@ -41,7 +41,7 @@ data FlowLaunch = FlowLaunch
 data FlowInstance = FlowInstance
   { instanceId :: FlowInstanceId, parent :: Maybe FlowInstanceId
   , startKey :: Text, launch :: FlowLaunch, status :: ExecutionStatus
-  , blocked :: [Diagnostic], cancelDescendants :: Bool, waits :: [FlowWait]
+  , blocked :: [Diagnostic], retryRequired :: Bool, cancelDescendants :: Bool, waits :: [FlowWait]
   , deliveries :: [FlowDelivery], attempts :: [RecipeRunId]
   } deriving (Eq, Show)
 data FlowWait = FlowWait

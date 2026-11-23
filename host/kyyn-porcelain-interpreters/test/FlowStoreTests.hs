@@ -71,6 +71,8 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   changed <- store scope (startPreparedInstance (Just parent.instanceId) "child-occurrence" (PreparedFlow preparedFixture.selected Null preparedFixture.bundle))
   assert (changed == Left StartConflict) "Changed child execution was silently reused"
   _ <- update (finishInstance parent.instanceId (Completed Null))
+  terminalFrontier <- store scope (reportFrontier parent.instanceId [("late",String "late")])
+  assert (terminalFrontier == Left AlreadyFinished) "Frontier after cancellation/completion was not terminal"
   activeChild <- readFlow child.instanceId
   assert (activeChild.status == Runnable) "Parent completion stopped child"
   _ <- wait child.instanceId

@@ -81,7 +81,7 @@ export function eventText(event, graph) {
     case 'outputRejected': return `Output rejected · turn ${event.turn + 1}`;
     case 'drafting': return 'Drafting';
     case 'judged': return 'Judged';
-    case 'suspended': return 'Suspended · waiting for a reply';
+    case 'suspended': return 'Suspended';
     case 'restored': return `Restored · ${typeof event.operation === 'string' ? event.operation : 'model turn ' + (event.operation.turn + 1)} · not re-executed`;
     case 'failed': return 'Failed';
     case 'cancelled': return 'Cancelled';
@@ -205,7 +205,7 @@ async function startViewer(initial) {
       detail.append(el('p', `Entered at ${seconds(scope.entered)}${scope.ended === undefined ? '' : ` · observed duration ${seconds(scope.ended - scope.entered)}`}`));
       if (scope.node === 'each') detail.append(el('p', `Element bodies returned: ${scope.completedBodies} / ${scope.total}`, 'progress-count'));
       if (scope.node === 'repeat') detail.append(el('p', `Iteration bodies returned: ${scope.completedBodies} · total unknown`, 'progress-count'));
-      if (scope.restored !== undefined) detail.append(el('p', 'Restored from the durable journal; not re-executed.'));
+      if (scope.restored !== undefined) detail.append(el('p', 'Restored, not re-executed.'));
       if (scope.outcome) detail.append(el('p', `Return outcome: ${scope.outcome}`));
       const events = el('ul');
       for (const event of scope.events) {
@@ -238,8 +238,8 @@ async function startViewer(initial) {
     if (state.terminal) {
       const terminal = state.terminal;
       outcome.append(el('strong', `Invocation ${terminal.kind}`, `outcome ${terminal.kind}`));
-      if (terminal.kind === 'suspended') outcome.append(el('p', `Waiting on ${terminal.waitCount} replies. The interactive flow remains pending.`));
-      if (terminal.kind === 'returned') outcome.append(el('p', 'The interactive flow returned. Its result belongs to the instance.'));
+      if (terminal.kind === 'suspended') outcome.append(el('p', `Waiting on ${terminal.waitCount} ${terminal.waitCount === '1' ? 'reply' : 'replies'}.`));
+      if (terminal.kind === 'returned') outcome.append(el('p', 'Returned.'));
       if (terminal.kind === 'completed') {
         const link = el('a', `Draft ${terminal.draft}`); link.href = '/evolutions/' + encodeURIComponent(terminal.draft); outcome.append(link);
       }

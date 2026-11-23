@@ -110,7 +110,7 @@ const waiting=replay(graph,waitingRecords,5000000000n);
 assert.equal(waiting.terminal.kind,'suspended');
 assert.equal(nodeState(waiting,'call',true),'suspended');
 assert.equal(nodeState(waiting,'root',true),'suspended');
-assert.match(eventText({kind:'suspended'},waiting.graph),/waiting/);
+assert.match(eventText({kind:'suspended'},waiting.graph),/Suspended/);
 seq=0;
 const resumedRecords=[flow(root,null,'run',{kind:'entered',total:null}),
   flow(call,root,'await',{kind:'entered',total:null}),flow(call,root,'await',{kind:'restored',operation:'wait'}),

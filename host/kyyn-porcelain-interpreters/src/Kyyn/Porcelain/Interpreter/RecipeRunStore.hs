@@ -53,10 +53,14 @@ runRecipeRunStore announce = interpret $ \env -> \case
   ListRecipeRuns kb selected -> do
     directory <- baseDirectory kb
     names <- listJournals directory
-    summaries <- forM names $ \name -> do
-      identity <- checked (relativeName name) (recipeRunId (relativeName name))
-      (.summary) <$> readRun directory identity Nothing 0
-    pure (sortOn (Down . (.header.startedAt)) [s | s <- summaries, maybe True (== s.header.recipe) selected])
+    inspected <- forM names $ \name -> catchError @Failure.OperationalFailure
+      (do
+        identity <- checked (relativeName name) (recipeRunId (relativeName name))
+        Right . (.summary) <$> readRun directory identity Nothing 0)
+      (\_ problem -> pure (Left (Failure.operationalDiagnostic problem)))
+    pure (RecipeRunListing
+      (sortOn (Down . (.header.startedAt)) [s | Right s <- inspected, maybe True (== s.header.recipe) selected])
+      [problem | Left problem <- inspected])
   ReadRecipeRun kb identity cursor limit -> baseDirectory kb >>= \directory -> readRun directory identity cursor limit
   ClearRecipeRun kb identity -> do
     directory <- baseDirectory kb

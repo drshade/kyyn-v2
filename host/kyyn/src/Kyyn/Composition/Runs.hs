@@ -5,6 +5,8 @@ import Data.Aeson (object, (.=))
 import Kyyn.Configuration (Host, SelectedKb(..))
 import Kyyn.Composition.Runtime (finish, runBase)
 import Kyyn.Domain.Recipe (RecipeId(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Plumbing.Protocol.Validation (diagnosticValue)
 import Kyyn.Domain.RecipeRun
 import Kyyn.Domain.Evolution (evolutionIdName)
 import qualified Data.Text as Text
@@ -19,9 +21,10 @@ dispatchRuns :: Host -> Cli.RunCommand -> SelectedKb -> IO Response
 dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppendJournalIO . runRecipeRunStore (const (pure ())) $
   case command of
     Cli.ListRuns selected -> do
-      runs <- listRecipeRuns kb selected
-      pure (success (object ["runs" .= map listValue runs])
-        (if null runs then ["No recipe runs recorded."] else map describe runs))
+      listing <- listRecipeRuns kb selected
+      pure (success (object ["runs" .= map listValue listing.runs,"unavailable" .= map diagnosticValue listing.unavailable])
+        ((if null listing.runs then ["No readable recipe runs recorded."] else map describe listing.runs) ++
+          ["Recording unavailable: " ++ Text.unpack problem.message | problem <- listing.unavailable]))
     Cli.ShowRun identity -> do
       page <- readRecipeRun kb identity Nothing 0
       pure (success (summaryValue page.summary) ([describe page.summary,
@@ -38,5 +41,5 @@ dispatchRuns host command (SelectedKb kb _ _) = finish $ runBase host . runAppen
     status (Completed draft) = "completed → " ++ evolutionIdName draft
     status Failed = "failed"
     status Cancelled = "cancelled"
-    status (Suspended count) = "suspended · waiting on " ++ show count ++ " replies"
+    status (Suspended count) = "suspended · waiting on " ++ show count ++ (if count == 1 then " reply" else " replies")
     status Returned = "returned"

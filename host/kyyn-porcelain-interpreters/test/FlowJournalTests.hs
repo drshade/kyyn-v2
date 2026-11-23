@@ -139,4 +139,9 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
   Bytes.writeFile file "{incomplete"
   corrupted <- runEff (runFailure (runFileSystemIO scope (runDocumentPersistenceIO (journal (lookupCompletion key)))))
   assert "corrupt journal is never an empty store" (isLeft corrupted)
+  heldCorrupt <- execute (tryLockedDocument journalScope journalFile
+    (runFlowJournalLocked identity (lookupCompletion key)))
+  assert "held-lock corruption is typed" (case heldCorrupt of Just (Left JournalCorrupt{}) -> True; _ -> False)
+  retainedCorrupt <- Bytes.readFile file
+  assert "corruption is never silently repaired" (retainedCorrupt == "{incomplete")
   putStrLn "Flow journal identity, immutable completion, restart and writer lock checks passed."

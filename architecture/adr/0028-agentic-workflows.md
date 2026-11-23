@@ -443,7 +443,10 @@ no attempt recording.
 Instance attempt links are appended under the short catalog lock. Both sides are
 independently disposable: a missing recording does not prevent instance inspection,
 and a missing instance does not prevent opening its recording. Neither link is a
-foreign-key deletion constraint, and clearing recordings never touches replay state.
+foreign-key deletion constraint, and clearing recordings never touches replay state. An
+unreadable recording produces a per-recording diagnostic in the list; other
+recordings remain accessible. Explicit clearing does not decode a recording's
+header or events. This provides disposal of invalid data, not a compatibility reader.
 
 The summary excludes inputs, outputs, conversations, model results and exception
 payloads. Projection must neither retain payload closures nor evaluate discarded
