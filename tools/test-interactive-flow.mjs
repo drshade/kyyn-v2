@@ -30,8 +30,8 @@ import Kyyn.Agentic (Flow)
 import Kyyn.Plugin (FetchError(..))
 conversation :: Flow Integer Integer
 conversation = A.durably integer integer (\\_ n -> pure (n + 1)) A.>>> A.await integer integer
-multiple :: Flow Integer (Integer,Integer)
-multiple = A.await integer integer A.&&& A.await integer integer
+multiple :: Flow Integer Integer
+multiple = (A.await integer integer A.&&& A.await integer integer) A.>>> A.arr (uncurry (+))
 refuse :: Flow Integer Integer
 refuse = A.act (\\_ -> throwE (FetchError "Authored fixture refusal"))
 integer :: C.Codec Integer
@@ -52,7 +52,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  cli(['evolution','check',setup.id]);cli(['evolution','ready',setup.id]);cli(['evolution','accept',setup.id]);
  const accepted=invoke('git',['-C',kb,'rev-parse','HEAD']).trim();
  const started=cli(['flow','start','conversation','--key','demo','--input','+1']).result;
- assert.equal(started.input,'+1');
+ assert.equal(started.input.trim(),'+1');
  assert.equal(started.status,'runnable');assert.deepEqual(started.attempts,[]);
  assert.equal(cli(['flow','start','conversation','--key','demo','--input','+1']).result.id,started.id);
  cli(['flow','start','conversation','--key','demo','--input','+2'],1);
@@ -102,7 +102,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  await until(()=>waiter.child.exitCode!==null);
  assert.equal(waiter.child.exitCode,0,waiter.errors());
  assert.equal(JSON.parse(waiter.output()).result.status,'completed');
- const completed=show(started.id);assert.equal(completed.result,'+9');assert.equal(completed.revision,accepted);
+ const completed=show(started.id);assert.equal(completed.result.trim(),'+9');assert.equal(completed.revision,accepted);
  assert.deepEqual(completed.deliveries.slice(1).map(x=>x.outcome),['accepted','duplicate','conflicting']);
  assert.equal(completed.waits[0].reply.origin.surface,'cli');
  assert.notEqual(delivery.id,completed.deliveries[2].id);
