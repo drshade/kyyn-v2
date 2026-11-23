@@ -7,6 +7,7 @@ module Main (main) where
 
 import Control.Monad (unless, forM_)
 import qualified FlowObservationTests
+import qualified EventTests
 import qualified FlowWaitingTests
 import Agentic.Aeson (toAeson)
 import Kyyn.Runtime.ModelWire (valueCodec)
@@ -64,6 +65,7 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
+    ["--event-guest"] -> EventTests.guest
     ["--plugin-guest"] -> pluginGuest
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
@@ -84,6 +86,7 @@ main = do
       FlowWaitingTests.check
       checkModelBridge
       path <- getExecutablePath
+      EventTests.check path
       checkObservationTransport (path,["--flow-observation-guest"])
       check (path,["--guest"])
       checkCaptured (path,["--captured-guest"])
