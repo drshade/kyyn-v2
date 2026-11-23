@@ -24,7 +24,7 @@ import Kyyn.Runtime.AgenticContract (fromWireCodec)
 import qualified Kyyn.Runtime.Json as Wire
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
+import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..), Seconds(..))
 import qualified Kyyn.Plugin as Plugin
 import Kyyn.Plugin.Host (Acquisition, PluginLogin, LoginError)
 import Kyyn.Plugin.Sink (Sink, SinkError)
@@ -602,7 +602,7 @@ checkEvents executable = do
   _ <- right (Host.checkGuest description)
   case [entry | entry@(G.ConnectorEntry _ G.EventEntries{}) <- description.entries] of
     [G.ConnectorEntry ident (G.EventEntries config login events@[poll,question])] -> do
-      unless (poll.minimumPollInterval == 1 && question.minimumPollInterval == 2 &&
+      unless (poll.minimumPollInterval == Seconds 1 && question.minimumPollInterval == Seconds 2 &&
         maybe False (const True) login && maybe False (const True) question.eventDispatch)
         (fail "Event declarations lost interval, login or dispatch")
       let G.EventContracts c request cursor reply = question.eventPoll.invocationContract
@@ -611,7 +611,8 @@ checkEvents executable = do
             [e | e <- description.entries, case e of G.ConnectorEntry _ G.EventEntries{} -> False; _ -> True] }
       unless (isLeft (Host.checkGuest (replace [poll,malformed]))) (fail "Mismatched dispatch request/cursor accepted")
       unless (isLeft (Host.checkGuest (replace [poll,poll]))) (fail "Duplicate event names accepted")
-      unless (isLeft (Host.checkGuest (replace [poll { G.minimumPollInterval = 0 },question]))) (fail "Zero polling interval accepted")
+      zero <- right (eitherDecodeStrict' (Lazy.toStrict (encode (replace [poll { G.minimumPollInterval = Seconds 0 },question]))) :: Either String G.GuestDescription)
+      unless (isLeft (Host.checkGuest zero)) (fail "Zero polling interval accepted")
       unless (length events == 2) (fail "Missing event")
     _ -> fail "Expected event connector with polling and dispatched methods"
   let invokeEvent name input = invoke executable (toJSON (G.Invoke name (object ["config" .= String "10","input" .= input])))

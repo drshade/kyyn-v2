@@ -10,7 +10,7 @@ module Kyyn.Types.Guest
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject, withText)
 import Data.Text (Text)
-import Kyyn.Types.Plugin (RepeatSafety)
+import Kyyn.Types.Plugin (RepeatSafety, Seconds)
 import Kyyn.Types.Contract
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 import Kyyn.Types.SchemaMetadata
@@ -205,7 +205,7 @@ data EventContracts contract = EventContracts contract contract contract contrac
 data DispatchContracts contract = DispatchContracts contract contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 data EventEntry contract = EventEntry
-  { eventName :: Text, eventDescription :: Text, minimumPollInterval :: Integer
+  { eventName :: Text, eventDescription :: Text, minimumPollInterval :: Seconds
   , eventPoll :: Invocation (EventContracts contract)
   , eventDispatch :: Maybe (Invocation (DispatchContracts contract), RepeatSafety) }
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -223,17 +223,12 @@ instance FromJSON contract => FromJSON (DispatchContracts contract) where
     DispatchContracts <$> fields .: "config" <*> fields .: "request" <*> fields .: "cursor"
 instance ToJSON contract => ToJSON (EventEntry contract) where
   toJSON (EventEntry name description interval poll dispatch) = object
-    ["name" .= name,"description" .= description,"minimumPollInterval" .= show interval,
+    ["name" .= name,"description" .= description,"minimumPollInterval" .= interval,
      "poll" .= poll,"dispatch" .= optionalValue dispatch]
 instance FromJSON contract => FromJSON (EventEntry contract) where
   parseJSON = exactObject "event entry" ["name","description","minimumPollInterval","poll","dispatch"] $ \fields ->
-    do
-      raw <- fields .: "minimumPollInterval"
-      interval <- case reads raw of
-        [(n, "")] | show (n :: Integer) == raw && n > 0 -> pure n
-        _ -> fail "Event poll interval must be a positive integer"
-      EventEntry <$> fields .: "name" <*> fields .: "description" <*> pure interval
-        <*> fields .: "poll" <*> (fields .: "dispatch" >>= parseOptionalValue)
+    EventEntry <$> fields .: "name" <*> fields .: "description" <*> fields .: "minimumPollInterval"
+      <*> fields .: "poll" <*> (fields .: "dispatch" >>= parseOptionalValue)
 data ConnectorEntries contract
   = SourceEntries
       { configure :: Invocation contract

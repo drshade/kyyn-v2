@@ -11,6 +11,7 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import qualified Kyyn.Domain.Plugin as Plugin
 import Kyyn.Domain.Path (RelativePath, relativePath)
+import Kyyn.Types.Plugin (Seconds(..))
 import qualified Kyyn.Types.Guest as G
 
 -- Descriptions cross a process boundary. The host checks structure, annotations
@@ -107,7 +108,7 @@ checkConnectorContracts selected = case selected of
     forM_ events $ \event -> do
       either (Left . pure . errorDiagnostic "guest.event") (const (Right ()))
         (Plugin.methodName (Text.unpack event.eventName))
-      ensure (event.minimumPollInterval > 0) "guest.event-interval" "Event poll interval must be positive"
+      ensure (event.minimumPollInterval > Seconds 0) "guest.event-interval" "Event poll interval must be positive"
       let G.EventContracts configuration request cursor _ = event.eventPoll.invocationContract
       compatible "configuration" config.invocationContract configuration
       forM_ event.eventDispatch $ \(dispatch,_) -> do

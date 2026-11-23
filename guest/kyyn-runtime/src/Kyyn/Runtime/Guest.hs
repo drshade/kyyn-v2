@@ -27,7 +27,7 @@ import Kyyn.Runtime.InteractiveEntry (interactiveEntry)
 import Kyyn.Runtime.RecipeEntry (recipeEntry)
 import Kyyn.Runtime.ToolEntry (toolEntry)
 import Kyyn.Runtime.EventEntry
-import Kyyn.Types.Plugin (RepeatSafety)
+import Kyyn.Types.Plugin (RepeatSafety, Seconds)
 import Kyyn.Runtime.PluginEntry (configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry)
 import Kyyn.Runtime.AcquisitionEntry (acquisitionEntry)
 import Kyyn.Runtime.Entry (Entry(..), Adapter(..), CapturedAdapter(..), entryActions, entryDescriptor, pureEntry, writeReply)
@@ -117,7 +117,7 @@ sinkConnectorEntry ident configuration publication options = do
 eventConnectorEntry :: ConnectorIdentity
   -> Either ProjectionError (Adapter DescribedContract)
   -> Maybe (Either ProjectionError (Adapter DescribedContract))
-  -> [(Text,Text,Integer,Either ProjectionError (Adapter (EventContracts DescribedContract)),
+  -> [(Text,Text,Seconds,Either ProjectionError (Adapter (EventContracts DescribedContract)),
        Maybe (Either ProjectionError (Adapter (DispatchContracts DescribedContract)),RepeatSafety))]
   -> Either ProjectionError Entry
 eventConnectorEntry ident configuration authentication events = do

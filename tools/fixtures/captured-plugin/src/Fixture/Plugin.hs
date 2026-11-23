@@ -23,9 +23,9 @@ connectors = [SourceConnector "Files" "Fixture.Plugin.fetch" "Fixture.Plugin.val
   SourceConnector "StateOptions" "Fixture.Plugin.fetchStateOptions" "Fixture.Plugin.validate" [] Nothing,
   SinkConnector "Writer" "Fixture.Plugin.validate" "Fixture.Plugin.publish" "Fixture.Plugin.defaults",
   EventConnector "Updates" "Fixture.Plugin.validate" (Just "Fixture.Plugin.login")
-    [EventMethod "updates" "New updates" "Fixture.Plugin.pollUpdates" Nothing 1,
+    [EventMethod "updates" "New updates" "Fixture.Plugin.pollUpdates" Nothing (Seconds 1),
      EventMethod "question" "Ask a question" "Fixture.Plugin.pollUpdates"
-       (Just ("Fixture.Plugin.dispatchQuestion", SafeToRepeat)) 2]]
+       (Just ("Fixture.Plugin.dispatchQuestion", SafeToRepeat)) (Seconds 2)]]
 
 count :: () -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Integer)
 count () snapshot = fmap (fmap (toInteger . length)) (listEvidenceIds snapshot)

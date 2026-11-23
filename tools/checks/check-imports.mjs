@@ -134,7 +134,7 @@ const domainModules = {
   'Kyyn.Domain.SnapshotReport': ['Control.Monad', 'Data.List', 'Data.Text', 'Kyyn.Domain.StoredSnapshot', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.StoragePath': ['Control.Monad', 'Data.ByteString', 'Data.Char', 'Data.Text', 'Data.Text.Encoding', 'Numeric'],
   'Kyyn.Domain.StoredSnapshot': ['Kyyn.Types.StoredShape', 'Data.Aeson', 'Data.Text', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Recipe', 'Kyyn.Types.Fact'],
-  'Kyyn.Domain.Guest': ['Kyyn.Domain.Plugin', 'Control.Monad', 'Data.List', 'Data.Text', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Types.Guest'],
+  'Kyyn.Domain.Guest': ['Kyyn.Types.Plugin', 'Kyyn.Domain.Plugin', 'Control.Monad', 'Data.List', 'Data.Text', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Types.Guest'],
   'Kyyn.Domain.EvidenceIndex': ['Data.Map.Strict', 'Data.Text', 'Data.ByteString', 'Crypto.Hash.SHA256', 'Numeric', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Blob': ['Kyyn.Types.Contract', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.Text', 'Kyyn.Domain.DataType', 'Kyyn.Types.Blob'],
   'Kyyn.Domain.Recipe': ['Kyyn.Types.Guest', 'Data.Aeson', 'Data.Text', 'Control.Monad', 'Data.List',

@@ -14,7 +14,7 @@ import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity, ConnectorTypeName(..), ConnectorName(..), BindingName, MethodName)
-import Kyyn.Types.Plugin (RepeatSafety)
+import Kyyn.Types.Plugin (RepeatSafety, Seconds)
 import Kyyn.Domain.Value (CheckedValue)
 
 data PreparedConnector = PreparedConnector
@@ -43,7 +43,7 @@ data PreparedConnector = PreparedConnector
   { connectorType :: ConnectorTypeName, configContract :: CheckedContract
   , validationEntry :: CompiledEntry, loginEntry :: Maybe CompiledEntry, events :: [PreparedEvent] }
   deriving (Eq, Show)
-data PreparedEvent = PreparedEvent MethodName String Integer CheckedContract CheckedContract CheckedContract
+data PreparedEvent = PreparedEvent MethodName String Seconds CheckedContract CheckedContract CheckedContract
   CompiledEntry (Maybe (CompiledEntry,RepeatSafety)) deriving (Eq, Show)
 data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledEntry deriving (Eq, Show)
 data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)

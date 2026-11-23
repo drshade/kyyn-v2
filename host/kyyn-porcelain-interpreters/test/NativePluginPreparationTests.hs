@@ -5,6 +5,7 @@
 module Main (main) where
 
 import Control.Monad (unless)
+import Data.Either (isLeft)
 import Data.Aeson (Value(..), object)
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
@@ -59,7 +60,8 @@ main = do
   let configuration = Text.encodeUtf8 (Text.unlines
         ["let Connector = < Files : Integer | Options : Integer | State : Integer | StateOptions : Integer | Updates : Integer | Writer : Integer >",
          "in [ { name = \"reader\", binding = \"files\", connector = Connector.Files +10 }",
-         "   , { name = \"writer\", binding = \"writer\", connector = Connector.Writer +10 } ]"])
+         "   , { name = \"writer\", binding = \"writer\", connector = Connector.Writer +10 }",
+         "   , { name = \"updates\", binding = \"updates\", connector = Connector.Updates +10 } ]"])
   code <- right (fileTree
     ([(path "flake.nix","{}"),(path "flake.lock","{}"),(path "kb.dhall","unfinished manifest"),
       (path "src/Main.hs","unfinished Root"),(path "plugins/config/local-file.dhall",configuration)] ++
@@ -104,7 +106,7 @@ main = do
     case [value | PreparedSinkConnector {sinkDefaultOptions = CheckedValue _ value} <- connectors] of
       [String "3"] -> pure ()
       _ -> fail "Sink defaults did not use the checked guest entry"
-    unless (sum [length instances | PreparedPlugin _ instances <- plugins] == 2) (fail "Configured instances missing")
+    unless (sum [length instances | PreparedPlugin _ instances <- plugins] == 3) (fail "Configured instances missing")
     unless (null report) (fail "Configuration validation failed")
     (plugin,payload,method) <- case [(name,selected,method) |
       PreparedPackage name _ values <- packages,
@@ -133,6 +135,17 @@ main = do
     case published of
       Right (Acknowledged (CheckedValue _ (String "20"))) -> pure ()
       other -> fail ("Native sink broker failed: " ++ show other)
+    eventInstance <- case [value | PreparedPlugin _ instances <- plugins,
+      value@(ConfiguredConnector _ _ PreparedEventConnector{} _) <- instances] of
+        [value] -> pure value
+        _ -> fail "Missing configured event instance"
+    let ConfiguredConnector _ _ eventConnector config = eventInstance
+    unless (isLeft (sourceDetails eventConnector)) (fail "Event connector accepted as a source")
+    refused <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
+      . runGuestExecution [("LC_ALL","C.UTF-8")] . runDelivery scope $ invokeSink eventInstance config config
+    case refused of
+      Right (FailedBeforeDispatch _) -> pure ()
+      other -> fail ("Event connector accepted as a sink: " ++ show other)
   putStrLn "Native plugin preparation, captured-read callbacks and sink publication pass with checked entries."
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a

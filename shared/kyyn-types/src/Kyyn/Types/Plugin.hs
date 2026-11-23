@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
-  ( Connector(..), EventMethod(..), RepeatSafety(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
+  ( Connector(..), EventMethod(..), Seconds(..), RepeatSafety(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject, withText, Value(String))
 import qualified Data.Aeson.KeyMap as Keys
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
@@ -24,7 +25,7 @@ data FetchResult payload position report = FetchResult
 -- | A configured instance of one connector type.
 newtype ConnectorInstance connector = ConnectorInstance Text
 
--- | Register source and sink connectors in the plugin entry module's connectors value.
+-- | Register source, sink and event connectors in the plugin entry module's connectors value.
 data Connector = SourceConnector
   { -- | Unique connector type name: an ASCII uppercase letter followed by letters, digits or underscores.
     name :: Text
@@ -53,9 +54,17 @@ data Connector = SourceConnector
 
 data EventMethod = EventMethod
   { eventName :: Text, eventDescription :: Text, poll :: Text
-  , dispatch :: Maybe (Text, RepeatSafety), minimumPollInterval :: Integer }
+  , dispatch :: Maybe (Text, RepeatSafety), minimumPollInterval :: Seconds }
   deriving (Eq, Show)
 data RepeatSafety = SafeToRepeat | RequireExplicitRetry deriving (Eq, Show)
+
+newtype Seconds = Seconds Integer deriving (Eq, Ord, Show)
+instance ToJSON Seconds where
+  toJSON (Seconds seconds) = toJSON (show seconds)
+instance FromJSON Seconds where
+  parseJSON = withText "seconds" $ \raw -> case reads (Text.unpack raw) of
+    [(n, "")] | show n == Text.unpack raw -> pure (Seconds n)
+    _ -> fail "Expected canonical integer seconds"
 
 instance ToJSON RepeatSafety where
   toJSON SafeToRepeat = String "safe-to-repeat"
@@ -68,15 +77,11 @@ instance FromJSON RepeatSafety where
 instance ToJSON EventMethod where
   toJSON (EventMethod name description poll dispatch interval) = object
     ["name" .= name,"description" .= description,"poll" .= poll,
-     "dispatch" .= optionalValue dispatch,"minimumPollInterval" .= show interval]
+     "dispatch" .= optionalValue dispatch,"minimumPollInterval" .= interval]
 instance FromJSON EventMethod where
   parseJSON = exactObject "event method" ["name","description","poll","dispatch","minimumPollInterval"] $ \fields -> do
-    raw <- fields .: "minimumPollInterval"
-    interval <- case reads raw of
-      [(n, "")] | show (n :: Integer) == raw && n > 0 -> pure n
-      _ -> fail "Event poll interval must be positive"
     EventMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "poll"
-        <*> (fields .: "dispatch" >>= parseOptionalValue) <*> pure interval
+      <*> (fields .: "dispatch" >>= parseOptionalValue) <*> fields .: "minimumPollInterval"
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.
 data CapturedMethod = CapturedMethod

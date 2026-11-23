@@ -88,7 +88,7 @@ validate connectors = do
         unique "event" [event.eventName | event <- events]
         forM_ events $ \event -> do
           unless (identifier isAsciiLower event.eventName) (Left "Invalid event method name")
-          unless (event.minimumPollInterval > 0) (Left "Event poll interval must be positive")
+          unless (event.minimumPollInterval > P.Seconds 0) (Left "Event poll interval must be positive")
           reference event.poll
           mapM_ (reference . fst) event.dispatch
   where

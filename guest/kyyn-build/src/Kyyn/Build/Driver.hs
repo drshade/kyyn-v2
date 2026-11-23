@@ -392,7 +392,7 @@ writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
     (["module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Plugin (RepeatSafety(..))", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Plugin (RepeatSafety(..), Seconds(..))", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)", "import qualified Kyyn.Runtime.TargetEvolution as TargetEvolution", "import qualified Kyyn.Runtime.Bindings as RuntimeBindings"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
       "    [\"--check-build\"] -> checkEntries selected",
