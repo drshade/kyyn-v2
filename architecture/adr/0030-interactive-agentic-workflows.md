@@ -5,7 +5,7 @@ title: 'Interactive agentic workflows'
 
 # Interactive agentic workflows
 
-## Interactive flows have a durable lifetime
+## Context
 
 A sales portfolio flow starts opportunity reviews. Each review queries Salesforce,
 asks an owner for clarification, waits for a Teams reply and proposes a KB update.
@@ -20,6 +20,10 @@ contract in [ADR 0028](0028-agentic-workflows.md). Interactive closed entries ha
 the existing recipe declaration is their registration point, not a second registry.
 Their effect context additionally supplies the capabilities below. Pure queries,
 renderers, evolution functions and ordinary investigation tools do not gain them.
+
+## Decision
+
+### Interactive flows have a durable lifetime
 
 The library owns flow interpretation, model/tool orchestration, durable operation
 identity and generic suspension/resumption semantics. Kyyn owns persistent
@@ -77,7 +81,7 @@ one wait makes it Runnable; the authored composition still determines whether
 other replies are needed before a join can progress. Runtime storage/dispatch
 failures retain ADR 0019's operational failure boundary.
 
-## Parents author how they manage children
+### Parents author how they manage children
 
 A start made by a hosted flow records that instance as parent. Parentage is
 immutable provenance and navigation, not a requirement to join children before
@@ -103,7 +107,7 @@ undone or even interrupted. Late replies are retained as unmatched/closed-wait
 outcomes and never restart a cancelled instance. Existing draft evolutions remain
 available; cancellation neither accepts nor deletes them.
 
-## Live plugin capabilities and waiting
+### Live plugin capabilities and waiting
 
 Plugins expose typed live queries, actions and incoming event contracts alongside
 captured sources and sinks, using the same vendored package, instance configuration
@@ -209,7 +213,7 @@ business timer or launch a daily scanner on its own. An author needing a deadlin
 must configure a source for that event; the passage of time alone does not wake a
 wait. Reminder and escalation decisions remain authored policy.
 
-## Replay reconstructs execution, not the external world
+### Replay reconstructs execution, not the external world
 
 Use the library's durable recording contract, with Kyyn supplying its store.
 Interactive execution requires both completion replay and the typed
@@ -256,7 +260,7 @@ local receipt alone does not close the send/save crash window. Do not promise
 exactly-once delivery or add an implicit retry of an uncertain send. Message
 adapters must state and test their delivery semantics before enabling replay.
 
-## Knowledge access and proposals remain explicit
+### Knowledge access and proposals remain explicit
 
 Interactive execution composes selected-snapshot reads and evolution application
 operations; it does not gain filesystem mutation of accepted facts.
@@ -313,7 +317,7 @@ accepted evolution committed to Git under ADR 0010. `Rationale.evidence` contain
 only actual captured EvidenceRefs and may be empty. No new citation store is
 required. The explanation remains meaningful if local execution state is removed.
 
-## Runtime ownership and observation
+### Runtime ownership and observation
 
 `kyyn-v2 flow worker`, exposed by [ADR 0018](0018-surfaces.md#interactive-flow-operations),
 explicitly runs a foreground worker for the selected KB. It
@@ -361,7 +365,7 @@ A completed parent can therefore visibly have active children.
 Run identity checks for resumption do not
 turn recording inspection into historical compatibility enforcement.
 
-## Interactive verification
+## Verification
 
 Use deterministic provider/event fixtures to exercise query, await, frontier
 persistence, send, process stop, reply, resume and proposal creation. Prove the
