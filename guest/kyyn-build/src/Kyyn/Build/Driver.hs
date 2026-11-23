@@ -239,12 +239,18 @@ buildRecipes compiler libdir generated basePackages destination references = do
       (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
       pure ([Text.unpack (referenceModule selected)],"describeEntry @" ++ Text.unpack name ++ " " ++ show ("$state." <> name) ++
         " (SchemaMetadata [] [] []) " ++ show sources)
+    InteractiveFlow name -> do
+      selected <- either (fail . (("Interactive flow " ++ Text.unpack name ++ ": ") ++)) pure (qualifiedReference False name)
+      (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
+      pure ([Text.unpack (referenceModule selected)],"interactiveEntry " ++ show name ++ " " ++ show sources ++
+        " KyynGuestDispatch.dispatch KyynFlowRuntime.runtimeObserved KyynToolCalls.JournalCall " ++ Text.unpack name ++
+        " (Agentic.Describe.describe " ++ Text.unpack name ++ ")")
     ClosedFlow name -> do
       selected <- either (fail . (("Recipe flow " ++ Text.unpack name ++ ": ") ++)) pure (qualifiedReference False name)
       (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
       pure ([Text.unpack (referenceModule selected)],"recipeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++
         " " ++ show name ++ " (" ++ Text.unpack (referenceName manifest.schemaMetadata) ++ "," ++ show rootSources ++ ") " ++ show sources ++
-        " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch KyynFlowRuntime.runtimeObserved KyynToolCalls.JournalCall " ++ Text.unpack name ++ " " ++
+        " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch KyynFlowRuntime.runtimeObserved " ++ Text.unpack name ++ " " ++
         "(Agentic.Describe.describe " ++ Text.unpack name ++ ")")
   let modules = nub (map (Text.unpack . referenceModule) (manifest.schemaType : manifest.schemaMetadata : concatMap fst plugins)
         ++ concatMap fst entries ++ ["KyynFactEditCodec","KyynGuestDispatch","KyynFlowRuntime","KyynToolCalls","Agentic.Describe"])
@@ -286,7 +292,7 @@ buildEvolutionFull compiler libdir generated basePackages destination references
   let modules = map fst headers
       imports = concatMap snd headers ++ maybe [] (map Text.unpack) discovery
       namedModules = nub [Text.unpack (referenceModule selected) | reference <- references,
-        let name = case reference of OpenState value -> value; ClosedFlow value -> value,
+        let name = case reference of OpenState value -> value; ClosedFlow value -> value; InteractiveFlow value -> value,
         Right selected <- [qualifiedReference (case reference of OpenState _ -> True; _ -> False) name],
         Text.unpack (referenceModule selected) `elem` modules]
   needs <- requiredBindings libdir (roots ++ [generated]) packages
@@ -302,12 +308,13 @@ buildEvolutionFull compiler libdir generated basePackages destination references
     pure [case reference of
       OpenState stateName -> "Kyyn.Workspace.Target.RecipeTypes." ++ Text.unpack stateName
       ClosedFlow _ -> "Kyyn.Workspace.Target.RecipeFlows." ++ name
+      InteractiveFlow _ -> "Kyyn.Workspace.Target.RecipeFlows." ++ name
       | reference <- references,
-        let selected = case reference of OpenState value -> value; ClosedFlow value -> value,
+        let selected = case reference of OpenState value -> value; ClosedFlow value -> value; InteractiveFlow value -> value,
         Right parsed <- [qualifiedReference (case reference of OpenState _ -> True; _ -> False) selected],
         Text.unpack (referenceModule parsed) == name,
         let symbol = Text.takeWhileEnd (/= '.') selected,
-        (symbol,case reference of OpenState _ -> ExportType; ClosedFlow _ -> ExportValue) `elem` symbols]
+        (symbol,case reference of OpenState _ -> ExportType; ClosedFlow _ -> ExportValue; InteractiveFlow _ -> ExportValue) `elem` symbols]
   let handles = handleImportsWithStored imports resolved
   (importedModules,importedEntries,recipeBindings) <- writeRecipeHandles libdir generated packages roots manifest.schemaType handles
   selectedState <- case recipe of
@@ -318,6 +325,7 @@ buildEvolutionFull compiler libdir generated basePackages destination references
         OpenState name -> do
           selected <- either fail pure (qualifiedReference True name)
           pure (Text.unpack name,[Text.unpack (referenceModule selected)])
+        InteractiveFlow _ -> pure ("()",[])
         ClosedFlow name -> do
           selected <- either fail pure (qualifiedReference False name)
           writeFile (generated </> "KyynRecipeState.hs") (unlines
