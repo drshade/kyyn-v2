@@ -23,7 +23,8 @@ or automation is complete. Preserve unknown and disputed domain values rather
 than forcing every accepted fact to mean “verified true”. External schedulers
 and agent harnesses call ordinary Kyyn operations.
 [ADR 0028](0028-agentic-workflows.md) defines explicitly invoked KB-authored
-flows, including interactive instances and authored child coordination. Kyyn
+flows; [ADR 0030](0030-interactive-agentic-workflows.md) adds interactive instances
+and authored child coordination. Kyyn
 executes that authored policy rather than inventing goals or business schedules.
 
 ## Boundaries and alternatives
