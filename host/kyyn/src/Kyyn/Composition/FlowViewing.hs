@@ -9,6 +9,7 @@ import Data.Maybe (isJust)
 import Data.Text (Text)
 import Lucid (Html)
 import Kyyn.Configuration (Host, SelectedKb(..), selectKnowledgeBase)
+import Kyyn.Composition.FlowValues (readFlowValues)
 import Kyyn.Composition.Runtime (runBase)
 import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -21,7 +22,8 @@ import Kyyn.Porcelain.Interpreter.FlowJournal (tryFlowWriterLock)
 import Kyyn.Surfaces.Result (Response, refusal, operationalFailure)
 import Kyyn.Web.Flows (flowIndex, flowPage)
 
--- Catalog and try-lock reads only: no current root, bundle, guest or secrets.
+-- Catalog, captured contract metadata and try-lock reads only: no current
+-- root source, guest executable or secrets.
 viewFlow :: Host -> DirectoryScope -> [Text] -> IO (Either Response (Html ()))
 viewFlow host scope route = do
   selected <- selectKnowledgeBase host scope
@@ -33,15 +35,17 @@ viewFlow host scope route = do
         items <- forM catalog $ \item -> do
           interrupted <- if item.status == Running then isJust <$> tryFlowWriterLock kb item.instanceId (pure ()) else pure False
           pure (item,interrupted)
-        pure $ case route of
-          ["flows"] -> Right (flowIndex items)
+        case route of
+          ["flows"] -> pure (Right (flowIndex items))
           ["flows",name] -> case flowInstanceId name of
-            Left message -> Left (refusal [errorDiagnostic "flow.request" message])
+            Left message -> pure (Left (refusal [errorDiagnostic "flow.request" message]))
             Right identity -> case find ((== identity) . (.instanceId) . fst) items of
-              Nothing -> Left (refusal [errorDiagnostic "flow.unknown" "This instance does not exist or has been cleared"])
-              Just (item,interrupted) -> Right (flowPage item interrupted
-                [(child,state) | (child,state) <- items, child.parent == Just identity]
-                [(wait.waitId,either (\message -> object ["unavailable" .= message]) id
-                    (parseEither decodeFlowValue wait.descriptor)) | wait <- item.waits, wait.kind == ReplyWait])
-          _ -> Left (refusal [errorDiagnostic "flow.unknown" "Unknown flow route"])
+              Nothing -> pure (Left (refusal [errorDiagnostic "flow.unknown" "This instance does not exist or has been cleared"]))
+              Just (item,interrupted) -> do
+                values <- readFlowValues item
+                pure (Right (flowPage item interrupted values
+                  [(child,state) | (child,state) <- items, child.parent == Just identity]
+                  [(wait.waitId,either (\message -> object ["unavailable" .= message]) id
+                      (parseEither decodeFlowValue wait.descriptor)) | wait <- item.waits]))
+          _ -> pure (Left (refusal [errorDiagnostic "flow.unknown" "Unknown flow route"]))
       pure (either (Left . operationalFailure) id result)

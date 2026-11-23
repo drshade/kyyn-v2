@@ -11,7 +11,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.RecipeRunId (runIdText)
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Surfaces.Flows (statusText, deliveryOutcomeText)
+import Kyyn.Surfaces.Flows (FlowValues(..), statusText, deliveryOutcomeText, waitLabel)
 import Kyyn.Web.Inspection (pageDocument)
 
 flowLink :: FlowInstanceId -> Text.Text
@@ -19,33 +19,28 @@ flowLink identity = "/flows/" <> flowInstanceIdText identity
 
 flowIndex :: [(FlowInstance,Bool)] -> Html ()
 flowIndex items = document "Interactive flows" $ do
-  p_ "Durable instances and their latest activity. Refresh to see changes."
-  if null items then p_ "No interactive flows started." else instanceTable items
+  if null items then p_ "No interactive flows started." else instanceTable True items
 
-flowPage :: FlowInstance -> Bool -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()
-flowPage item interrupted children descriptions = document (recipe item) $ do
+flowPage :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()
+flowPage item interrupted values children descriptions = document (recipe item) $ do
   p_ [class_ "context"] (toHtml (flowInstanceIdText item.instanceId <> " · " <> statusText item interrupted))
-  p_ $ a_ [href_ (flowLink item.instanceId)] "Refresh activity"
   forM_ item.parent $ \identity -> p_ $ do
     "Parent: "; instanceLink identity
   if item.retryRequired then p_ [class_ "diagnostic"] "Execution is blocked until an explicit retry." else mempty
   diagnostics item.blocked
   case item.status of Finished (Failed problems) -> diagnostics problems; _ -> mempty
-  details_ $ do
-    summary_ "Original input"
-    json item.launch.request
-  case item.status of
-    Finished (Completed value) -> details_ $ summary_ "Result" >> json value
-    _ -> mempty
+  diagnostics values.diagnostics
+  forM_ values.input $ \value -> details_ $ summary_ "Original input" >> pre_ (toHtml value)
+  forM_ values.output $ \value -> details_ $ summary_ "Result" >> pre_ (toHtml value)
   h2_ "Children"
-  if null children then p_ "No child instances." else instanceTable children
+  if null children then p_ "No child instances." else instanceTable False children
   h2_ "Waits"
-  if null item.waits then p_ "No waits recorded." else forM_ item.waits $ \wait -> section_ $ do
-    h3_ (toHtml (waitName wait.waitStatus <> " · " <> wait.waitId))
+  if null item.waits then p_ "No waits recorded." else forM_ (zip [1..] item.waits) $ \(index,wait) -> section_ $ do
+    h3_ (toHtml (waitLabel index descriptions wait <> " · " <> waitName wait.waitStatus))
+    details_ $ summary_ "Wait identity" >> code_ (toHtml wait.waitId)
     case wait.kind of
       ChildWait child _ -> p_ $ "Child outcome: " >> instanceLink child
       ReplyWait -> do
-        p_ "Reply wait"
         forM_ (lookup wait.waitId descriptions) $ \value -> details_ $ summary_ "Request and reply contract" >> json value
     case wait.waitStatus of
       Answered origin value -> do
@@ -74,15 +69,15 @@ flowPage item interrupted children descriptions = document (recipe item) $ do
       dt_ "Execution revision"; dd_ (toHtml item.launch.revision)
       dt_ "Owner"; dd_ (case item.launch.owner of Hosted{} -> "Hosted"; External -> "External")
 
-instanceTable :: [(FlowInstance,Bool)] -> Html ()
-instanceTable items = table_ $ do
-  thead_ $ tr_ $ mapM_ th_ ["Recipe / instance","Status","Parent","Open waits","Attempts"]
+instanceTable :: Bool -> [(FlowInstance,Bool)] -> Html ()
+instanceTable showParent items = table_ $ do
+  thead_ $ tr_ $ mapM_ th_ (["Recipe / instance","Status"] ++ ["Parent" | showParent] ++ ["Open waits","Attempts"])
   tbody_ $ forM_ items $ \(item,interrupted) -> tr_ $ do
     td_ $ a_ [href_ (flowLink item.instanceId)] (toHtml (recipe item <> " · " <> flowInstanceIdText item.instanceId))
     td_ $ do
       toHtml (statusText item interrupted)
       if item.retryRequired || not (null item.blocked) then " · blocked" else mempty
-    td_ $ maybe "—" instanceLink item.parent
+    if showParent then td_ (maybe "—" instanceLink item.parent) else mempty
     td_ (toHtml (show (length [wait | wait <- item.waits, wait.waitStatus == Open])))
     td_ (toHtml (show (length item.attempts)))
 

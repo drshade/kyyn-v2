@@ -209,11 +209,18 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  assert.equal(completed.waits[0].reply.origin.surface,'cli');
  assert.notEqual(delivery.id,completed.deliveries[2].id);
  assert.deepEqual(runtime(['flow','worker','--once']).result.visits,[]);
+ const web=background(['web','serve','--port','0']);
+ await until(()=>/Serving http:\/\/127\.0\.0\.1:\d+/.test(web.output()));
+ const webBase=web.output().match(/Serving (http:\/\/127\.0\.0\.1:\d+)/)[1];
+ const webPage=await (await fetch(webBase+'/flows/'+started.id)).text();
+ assert(webPage.includes('+1')&&webPage.includes('+9'),'Instance page did not render typed Dhall input/result');
  // Missing metadata degrades rendering, never hides lifecycle state.
  const bundle=path.join(kb,'.kyyn/flows/bundles',completed.owner.bundle+'.json');
  const captured=fs.readFileSync(bundle);fs.unlinkSync(bundle);
  const absent=show(started.id);assert.equal(absent.status,'completed');assert.equal(absent.result,null);
  assert.equal(absent.inspectionDiagnostics[0].code,'flow.bundle-missing');
+ const missingMetadataPage=await (await fetch(webBase+'/flows/'+started.id)).text();
+ assert(missingMetadataPage.includes('flow.bundle-missing'));assert(!missingMetadataPage.includes('<summary>Original input</summary>'));
  fs.writeFileSync(bundle,captured);
  assert.equal(completed.attempts.length,2);
  runtime(['flow','retry',started.id],1);

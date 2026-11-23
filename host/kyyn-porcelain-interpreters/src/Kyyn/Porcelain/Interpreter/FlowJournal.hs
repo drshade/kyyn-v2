@@ -47,6 +47,8 @@ runFlowJournal kb expected action = do
 
 -- Shared nonblocking lock for execution and read-only activity probes. A probe
 -- passes pure (), and never initializes a journal or evaluates guest code.
+-- A worker may lose this instant try-lock race and skip a pass: keep inspection
+-- critical sections empty so probing never turns into an execution delay.
 tryFlowWriterLock :: (DocumentPersistence :> es, Failure :> es)
   => KnowledgeBase -> FlowInstanceId -> Eff (DocumentAccess : es) a -> Eff es (Maybe a)
 tryFlowWriterLock kb identity action = do

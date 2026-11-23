@@ -61,11 +61,12 @@ try{
  save('restored',interactiveGraph,interactive(true),interactiveMetadata);
 
  const tag=(tag,value=null)=>({tag,value});
+ const wire=value=>value===null?{tag:'Null'}:typeof value==='string'?{tag:'String',value}:Array.isArray(value)?{tag:'Array',value:value.map(wire)}:{tag:'Object',value:Object.entries(value).map(([key,value])=>({key,value:wire(value)}))};
  const instance=(id,status,parent=null)=>({id,parent,startKey:id,launch:{revision:'b'.repeat(40),request:'<script>input</script>',owner:{tag:'hosted',bundle:'c'.repeat(64),recipe:'reviewOpportunity'}},status,retryRequired:false,blocked:[],cancelDescendants:false,attempts:[],waits:[],deliveries:[]});
  const coordinator=instance('instance-demo',tag('waiting'));
  coordinator.attempts=['suspended','restored'];
  coordinator.waits=[{id:'child-wait',kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
-   {id:'manual-wait',kind:tag('reply'),descriptor:{fixture:true},status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
+   {id:'manual-wait',kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
  coordinator.deliveries=[{id:'manual-delivery',wait:'manual-wait',origin:tag('manual','cli'),value:'captured reply',outcome:tag('accepted')},
    {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:'fixture',event:'event-1'}),value:'changed',outcome:tag('conflict')}];
  const childInstance=instance('child-demo',tag('finished',tag('completed','<script>result</script>')),'instance-demo');
@@ -90,7 +91,8 @@ try{
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
  assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
- assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('&lt;script&gt;input&lt;/script&gt;'));
+ assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
+ const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
  assert((await get('/flows/child-demo')).includes('href="/flows/instance-demo"'));
  assert((await get('/flows/blocked-instance')).includes('explicit retry'));
  assert((await get('/runs/suspended')).includes('href="/flows/instance-demo"'));
