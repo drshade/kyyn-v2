@@ -1,15 +1,18 @@
 -- Native catalog lifecycle: restart, parent/child independence, subtree races,
 -- immutable start/reply identities, authoritative frontiers and ingress while a
 -- guest journal lock is held. No guest build or provider service is involved.
-{-# LANGUAGE DataKinds, OverloadedStrings, OverloadedRecordDot #-}
+{-# LANGUAGE DataKinds, GADTs, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
 import Control.Concurrent.Async (concurrently, withAsync)
 import Control.Concurrent.MVar
 import Control.Monad (unless, replicateM_, forM_)
+import qualified Data.ByteString as Bytes
+import qualified Effectful.State.Static.Local as State
+import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import Data.Aeson (Value(..), object)
 import qualified Data.Text as Text
-import Effectful (Eff, IOE, runEff, liftIO)
+import Effectful (Eff, IOE, runEff, liftIO, (:>), UnliftStrategy(..))
 import System.IO.Temp (withSystemTempDirectory)
 import GHC.Clock (getMonotonicTimeNSec)
 import Text.Printf (printf)
@@ -19,7 +22,7 @@ import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (DirectoryScope, directoryScope)
-import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
+import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
@@ -41,6 +44,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   scope <- right (directoryScope directory)
   let launch = FlowLaunch "revision" (String "request") (object []) Hosted
       start parent key = store scope (startInstance parent key launch) >>= right
+      update :: Eff (FlowStore : Host) (Either FlowStoreProblem a) -> IO a
       update op = store scope op >>= right
       readFlow identity = store scope (readInstance identity) >>= maybe (fail "Missing instance") pure
       wait identity = do
@@ -138,6 +142,16 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
       Left CancelledAncestor -> pure ()
       Right item -> readFlow item.instanceId >>= \actual -> assert (actual.status == Finished Cancelled) "Racing child escaped cancellation"
       other -> fail ("Unexpected race result: " ++ show other)
+  collision <- runEff . runFailure . runFileSystemIO scope . State.evalState @CollisionRecord (Nothing,0)
+    . collisionDocuments . runFlowStore kb $ do
+      first <- startInstance Nothing "first" launch
+      second <- startInstance Nothing "second" launch
+      pure (first,second)
+  (firstResult,secondResult) <- right collision
+  first <- right firstResult
+  second <- right secondResult
+  assert (flowInstanceIdText first.instanceId == "00000001" && flowInstanceIdText second.instanceId == "00000002")
+    "Colliding generated instance identity was published"
   -- A concrete baseline for the deliberately simple whole-journal replacement.
   -- 500 synthetic 1 KiB results; no timing assertion or provider latency.
   started <- getMonotonicTimeNSec
@@ -151,3 +165,21 @@ assert :: Bool -> String -> IO ()
 assert valid message = unless valid (fail message)
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
+
+-- Force the allocator to return the first ID twice before supplying a new one.
+-- The store must retry within its catalog transaction, not publish duplicate IDs.
+type CollisionRecord = (Maybe Bytes.ByteString,Int)
+collisionDocuments :: State.State CollisionRecord :> es => Eff (DocumentPersistence : es) a -> Eff es a
+collisionDocuments = interpret $ \env (WithLockedDocument _ _ action) ->
+  localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
+    unlift (interpret (\_ operation -> liftLocal (collisionDocument operation)) action)
+collisionDocument :: State.State CollisionRecord :> es => DocumentAccess m a -> Eff es a
+collisionDocument operation = do
+  (document,count) <- State.get @CollisionRecord
+  case operation of
+    ReadCurrent -> pure document
+    ReplaceCurrent bytes -> State.put (Just bytes,count)
+    FreshStamp -> do
+      State.put (document,count + 1)
+      pure (DocumentStamp (if count < 2 then "00000001" else "00000002") "fixture")
+    ClearCurrent -> error "Unexpected catalog deletion"

@@ -170,5 +170,5 @@ test-suite flow-instances
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
   build-depends: base, kyyn-domain, kyyn-porcelain, kyyn-porcelain-interpreters,
-    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core, aeson, text,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core, aeson, bytestring, text,
     temporary, async

@@ -50,8 +50,11 @@ runFlowStore kb = interpret $ \_ operation -> do
         Nothing -> case Lifecycle.parentAllowsStart parent catalog of
           Left refused -> pure (Left refused)
           Right () -> do
-            stamp <- freshStamp
-            identity <- checked (flowInstanceId (Text.pack stamp.identity))
+            let fresh = do
+                  stamp <- freshStamp
+                  candidate <- checked (flowInstanceId (Text.pack stamp.identity))
+                  if any ((== candidate) . (.instanceId)) catalog then fresh else pure candidate
+            identity <- fresh
             let item = FlowInstance identity parent key launch Runnable [] False [] []
             commit (Right (item,catalog ++ [item]))
       BeginAttempt identity -> commit (change identity Lifecycle.begin)
