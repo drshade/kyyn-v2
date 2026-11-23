@@ -59,7 +59,9 @@ recipeTests = do
   check "Duplicate child accepted" (case checkRecipeDefinitions [duplicateParent,child] of Left _ -> True; Right _ -> False)
   let eventRef = EventReference "fixture" "Updates" "updates" "question" "request" "reply"
       duplicateEvents = Fact (FactId "events") (ClosedRecipe (Interactive (InteractionBindings [] [eventRef,eventRef])) (FlowEntryRef "Flows.events"))
-  check "Duplicate event declarations accepted" (refused [duplicateEvents])
+  check "Duplicate event declarations accepted" (case checkRecipeDefinitions [duplicateEvents] of
+    Left diagnostics -> "duplicate event declarations" `Text.isInfixOf` Text.pack (show diagnostics)
+    Right _ -> False)
   check "Self reference refused" (checkRecipeDefinitions [self] == Right [self])
   check "Missing child accepted" (refused [parent])
   check "Noninteractive child accepted" (refused [parent,Fact (FactId "child") (ClosedRecipe Ordinary (FlowEntryRef "Flows.child"))])
