@@ -17,7 +17,10 @@ import Kyyn.Types.SchemaMetadata
 -- One request codec is used by the host and the executable it describes.
 data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
 data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
-data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
+data RecipeInvocation = RunRecipe Value Value Value
+  | ResumeRecipe Text Text Value Value Value
+  | FulfilRecipe Text Text Value Value
+  | RenderRecipe DescriptionFormat | CaptureRecipeGraph deriving (Eq, Show)
 instance ToJSON DescriptionFormat where
   toJSON format = String (case format of Tree -> "tree"; Dot -> "dot"; Mermaid -> "mermaid")
 instance FromJSON DescriptionFormat where
@@ -28,6 +31,12 @@ instance FromJSON DescriptionFormat where
     _ -> fail "Unknown recipe description format"
 instance ToJSON RecipeInvocation where
   toJSON (RunRecipe root input state) = object ["operation" .= String "run","root" .= root,"input" .= input,"state" .= state]
+  toJSON (ResumeRecipe namespace revision root input state) = object
+    ["operation" .= String "resume","namespace" .= namespace,"revision" .= revision,
+     "root" .= root,"input" .= input,"state" .= state]
+  toJSON (FulfilRecipe namespace revision pending reply) = object
+    ["operation" .= String "fulfil","namespace" .= namespace,"revision" .= revision,
+     "pending" .= pending,"reply" .= reply]
   toJSON CaptureRecipeGraph = object ["operation" .= String "graph"]
   toJSON (RenderRecipe format) = object ["operation" .= String "render","format" .= format]
 instance FromJSON RecipeInvocation where
@@ -36,6 +45,12 @@ instance FromJSON RecipeInvocation where
     case operation :: Text of
       "run" -> exactObject "recipe run" ["operation","root","input","state"]
         (\request -> RunRecipe <$> request .: "root" <*> request .: "input" <*> request .: "state") value
+      "resume" -> exactObject "recipe resume" ["operation","namespace","revision","root","input","state"]
+        (\request -> ResumeRecipe <$> request .: "namespace" <*> request .: "revision"
+          <*> request .: "root" <*> request .: "input" <*> request .: "state") value
+      "fulfil" -> exactObject "recipe fulfil" ["operation","namespace","revision","pending","reply"]
+        (\request -> FulfilRecipe <$> request .: "namespace" <*> request .: "revision"
+          <*> request .: "pending" <*> request .: "reply") value
       "graph" -> exactObject "recipe graph" ["operation"] (const (pure CaptureRecipeGraph)) value
       "render" -> exactObject "recipe render" ["operation","format"]
         (\request -> RenderRecipe <$> request .: "format") value

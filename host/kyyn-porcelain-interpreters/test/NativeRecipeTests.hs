@@ -1,11 +1,15 @@
 -- Real Nix recipe guest and native preparation/execution/rendering. The supplied
 -- executable fixes compilation; selecting any other guest mode is rejected.
 -- An empty captured evidence index supplies the nested connector callback.
+-- Interactive attempts use fresh guest processes and the native journal; after
+-- suspension any repeated connector read fails the test.
 {-# LANGUAGE GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), object, (.=), toJSON)
+import qualified Data.Aeson.KeyMap as Keys
+import qualified Data.Foldable as Foldable
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import Effectful (Eff, DispatchOf, Dispatch(..), runEff)
@@ -17,7 +21,12 @@ import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.CompiledEntry (entryProgram)
+import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
+import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(..))
+import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue)
+import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveRecipeProgram)
 import Kyyn.Porcelain.Capability.RecipeRunStore (withRecipeRun)
 import Kyyn.Porcelain.Interpreter.RecipeRunStore (runRecipeRunStore)
 import Kyyn.Plumbing.Interpreter.AppendJournal (runAppendJournalIO)
@@ -123,6 +132,42 @@ main = do
       Right (FactProposal [FactProposalStep _ [_]] (CheckedValue identity value))
         | identity == contractId state && value == object ["runs" .= String "5"] -> pure ()
       other -> fail ("Wrong native recipe result: " ++ show other)
+    waitingEntry <- case filter ((== "$recipe.Flows.waiting") . invocationName) (compiledEntries program description) of
+      [entry] -> pure entry
+      _ -> fail "Missing waiting recipe"
+    let kb = KnowledgeBase (Repository scope) WholeTree
+        rootValue = object ["items" .= ([] :: [Value])]
+        initial = object ["runs" .= String "4"]
+        resume = G.ResumeRecipe "interactive-test" "pinned-fixture" rootValue (object []) initial
+        identity = FlowJournalIdentity "interactive-test" "pinned-fixture" (toJSON resume)
+        attempt first invocation = do
+          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+            . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
+            . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+            . (if first then capturedEvidence index else unexpected @EvidenceStore)
+            . runPluginRead . runDocumentPersistenceIO . runFlowJournal kb identity $
+              executeInteractiveRecipeProgram identity (\_ -> case invocation of
+                G.FulfilRecipe{} -> error "Fulfilment unexpectedly observed execution"
+                _ -> pure ()) waitingEntry plugins Nothing (toJSON invocation)
+          right outcome >>= right
+    frontier <- attempt True resume >>= taggedValue "waiting"
+    pending <- case frontier of
+      Array values | [value] <- Foldable.toList values -> pure value
+      _ -> fail "Expected one waiting point"
+    let fulfil reply = G.FulfilRecipe "interactive-test" "pinned-fixture" pending (encodeFlowValue reply)
+    rejected <- attempt False (fulfil (String "not an integer"))
+    _ <- taggedValue "refused" rejected >>= taggedValue "invalid"
+    accepted <- attempt False (fulfil (Number 7))
+    unless (accepted == object ["tag" .= String "accepted"]) (fail "Valid reply refused")
+    duplicate <- attempt False (fulfil (Number 7))
+    unless (duplicate == accepted) (fail "Identical fulfilment changed result")
+    conflict <- attempt False (fulfil (Number 8))
+    conflictBody <- taggedValue "refused" conflict
+    unless (conflictBody == object ["tag" .= String "conflict"]) (fail "Conflict lost its refusal code")
+    finished <- attempt False resume >>= taggedValue "finished"
+    case finished of
+      Object fields | Keys.lookup "state" fields == Just (object ["runs" .= String "7"]) -> pure ()
+      _ -> fail ("Unexpected resumed proposal: " ++ show finished)
   putStrLn "Native recipe execution and rendering use the described guest, private state and nested captured connector."
 
 fixedCompilation :: CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
@@ -139,3 +184,8 @@ unexpected :: DispatchOf effect ~ Dynamic => Eff (effect : es) a -> Eff es a
 unexpected = interpret (\_ _ -> error "Unexpected external interaction in recipe fixture")
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
+
+taggedValue :: Text.Text -> Value -> IO Value
+taggedValue tag (Object fields)
+  | Keys.lookup "tag" fields == Just (String tag), Just value <- Keys.lookup "value" fields = pure value
+taggedValue tag value = fail ("Expected " ++ Text.unpack tag ++ ": " ++ show value)

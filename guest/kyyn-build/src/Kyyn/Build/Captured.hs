@@ -10,6 +10,7 @@ import Language.Haskell.TH
 import Agentic.Contract (Contract)
 import Agentic.Questions (JudgeRequest, Answer)
 import qualified Agentic.Runtime as Agentic
+import Kyyn.Types.FlowJournal (JournalRequest)
 import Kyyn.Types.Evidence (EvidenceId, Evidence)
 import Kyyn.Types.Program (Program, Member, inject, request, (:+:))
 import Kyyn.Types.Plugin (ConnectorInstance, EvidenceSnapshot, EvidenceRead, FetchError)
@@ -52,7 +53,10 @@ toolCalls calls connectors methods = do
       model = gadt (mkName "ModelCall") [] [ConT ''Agentic.Conversation]
         (AppT (AppT (ConT ''Either) (ConT ''String)) (ConT ''Agentic.Turn))
       observation = gadt (mkName "ObserveFlow") [] [ConT ''Agentic.Summary] (TupleT 0)
-      additional = judgement : model : observation : concatMap fst evidence
+      journal = ForallC [PlainTV (mkName "result") SpecifiedSpec] []
+        (GadtC [mkName "JournalCall"] [(Bang NoSourceUnpackedness NoSourceStrictness, AppT (ConT ''JournalRequest) (VarT (mkName "result")))]
+          (AppT (ConT calls) (VarT (mkName "result"))))
+      additional = judgement : model : observation : journal : concatMap fst evidence
       append declaration = case declaration of
         DataD context name variables kind constructors derivingClauses | name == calls ->
           DataD context name variables kind (additional ++ constructors) derivingClauses

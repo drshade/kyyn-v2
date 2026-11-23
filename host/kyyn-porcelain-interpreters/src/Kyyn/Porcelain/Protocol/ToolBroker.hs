@@ -1,9 +1,10 @@
-{-# LANGUAGE GADTs, TypeApplications, LambdaCase #-}
-module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram) where
+{-# LANGUAGE GADTs, TypeApplications, LambdaCase, OverloadedRecordDot #-}
+module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured, executeRecordedRecipeProgram, executeInteractiveRecipeProgram) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, object)
 import Control.Monad (void)
+import Kyyn.Porcelain.Capability.FlowJournal (FlowJournal, FlowJournalIdentity(..), lookupCompletion, saveCompletion)
 import Kyyn.Porcelain.Capability.RecipeRunStore (RecipeRunStore, RecipeRunWriter, appendRunEvent)
 import Kyyn.Domain.RecipeRun (RunEventBody(FlowObserved))
 import Data.Coerce (coerce)
@@ -28,7 +29,7 @@ import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
 import qualified Kyyn.Plumbing.Capability.ModelTurn as Model
 import qualified Kyyn.Plumbing.Protocol.ModelTurn as Model
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginCall(..), success, failure)
-import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame)
+import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), encodeJournalLookup, decodeToolFrame)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead, loadCapturedInput, executeCapturedMethod)
 import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure, answerEvidence)
@@ -42,20 +43,36 @@ executeToolProgram program plugins model captured arguments = fmap (fmap fst)
 executeToolProgramCaptured :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeToolProgramCaptured = executeProgram Nothing
+executeToolProgramCaptured = executeProgram Nothing Nothing
 
 executeRecordedRecipeProgram :: (RecipeRunStore :> es, EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => RecipeRunWriter -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration
   -> Value -> Eff es (Either [Diagnostic] Value)
 executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap fst)
-  (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) program plugins model [] arguments)
+  (executeProgram (Just (\summary -> void (appendRunEvent writer (FlowObserved summary)))) Nothing program plugins model [] arguments)
+
+executeInteractiveRecipeProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
+  GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
+  => FlowJournalIdentity -> (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin]
+  -> Maybe ModelConfiguration -> Value -> Eff es (Either [Diagnostic] Value)
+executeInteractiveRecipeProgram identity observe program plugins model arguments = fmap (fmap fst)
+  (executeProgram (Just observe) (Just answerJournal) program plugins model [] arguments)
+  where
+    answerJournal (InitialiseJournal namespace revision)
+      | namespace == identity.namespace && revision == identity.revision = pure (object [])
+      | otherwise = protocolFailure "Guest journal identity differs from the locked instance"
+    answerJournal (LookupJournal key) = encodeJournalLookup <$> lookupCompletion key
+    answerJournal (SaveJournal key value) = saveCompletion key value >> pure (object [])
 
 executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (Value -> Eff es ()) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
-executeProgram observe program plugins model captured arguments = runExceptT $ do
+executeProgram observe journal program plugins model captured arguments = runExceptT $ do
   (result,contexts) <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
     conversation decodeToolFrame program arguments $ \case
+      ToolJournal call -> case journal of
+        Nothing -> protocolFailure "flow-journal is only available during interactive recipe execution"
+        Just respond -> raise (raise (respond call))
       ToolFlowObserved summary -> case observe of
         Nothing -> protocolFailure "flow/observe is only available during a recorded recipe invocation"
         Just record -> raise (raise (record summary)) >> pure (object [])
