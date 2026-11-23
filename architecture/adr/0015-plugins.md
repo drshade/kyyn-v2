@@ -1,8 +1,8 @@
 ---
 id: 0015
-title: 'Locally built plugins group source and sink connectors'
+title: 'Locally built plugins group source, sink and event connectors'
 ---
-# Locally built plugins group source and sink connectors
+# Locally built plugins group source, sink and event connectors
 
 ## Context
 
@@ -613,6 +613,82 @@ Captured source methods retain their existing evidence-only context. Live method
 are explicit operations, not a hidden acquisition inside a captured read. Config,
 login and pure provider helpers can be shared across connector kinds without
 introducing another package or authentication framework.
+
+### Event connector contract
+
+An `EventConnector` registers incoming event contracts without a fetch entry or
+an evidence payload. It uses the same configured instance, validation, optional
+login and vendored package ownership as the other connector kinds. Registration
+names qualified Haskell exports; guest GHC inspection checks their signatures.
+
+```haskell
+data EventConnector = EventConnector
+  { name :: ConnectorTypeName
+  , validateConfig :: QualifiedExport
+  , login :: Maybe QualifiedExport
+  , events :: [EventMethod]
+  }
+
+data EventMethod = EventMethod
+  { name :: MethodName
+  , description :: Text
+  , poll :: QualifiedExport
+  , dispatch :: Maybe (QualifiedExport, RepeatSafety)
+  , minimumPollInterval :: Seconds
+  }
+
+data RepeatSafety = SafeToRepeat | RequireExplicitRetry
+
+type LiveEvent = Program (Http :+: (Secrets :+: Waiting))
+
+data EventDispatch request = EventDispatch
+  { waitIdentity :: WaitId, request :: request }
+
+data EventPoll request cursor = EventPoll
+  { waitIdentity :: WaitId, request :: request, cursor :: Maybe cursor }
+
+data EventArrival reply = EventArrival
+  { identity :: EventIdentity, value :: reply }
+
+data EventBatch reply cursor = EventBatch
+  { arrivals :: [EventArrival reply], cursor :: cursor }
+
+-- Checked qualified exports, with the connector's one Config type.
+validateConfig :: Config -> ValidationReport
+dispatch :: Config -> EventDispatch request
+         -> LiveEvent (Either FetchError cursor)
+poll :: Config -> EventPoll request cursor
+     -> LiveEvent (Either FetchError (EventBatch reply cursor))
+```
+
+`EventConnector` is the event case of the connector registration sum; the record
+above shows its fields. The declared poll interval is positive. Request, reply
+and cursor contracts are checked separately. An optional dispatch and its poll
+must agree on configuration, request and cursor types. A dispatch returns the
+initial cursor, allowing the plugin to carry the provider's message or thread
+identity into subsequent polling. Only an event without dispatch receives
+`Nothing` on its first poll. The cursor is adapter-owned state; the flow author
+does not construct it.
+
+The concrete capability row provides HTTP, named secrets and waiting. It does
+not install captured-evidence or KB-write handlers. Native guests remain trusted;
+this is an API boundary, not an IO sandbox. Provider-specific correlation,
+authentication and filtering belong to the plugin. Event identities describe
+provider arrivals, not host-generated receipt counters.
+
+Generated `EventRef request reply` values identify a specific configured instance
+and declared event. An interactive definition declares its permitted event
+bindings; preparation checks and captures their contracts, configuration and
+executable entries with that instance's program. `awaitReply` uses these refs and
+returns `ReceivedReply reply` as specified by
+[ADR 0030](0030-interactive-agentic-workflows.md#live-plugin-capabilities-and-waiting). It is not a string-based
+provider RPC interface.
+
+`SafeToRepeat` declares that repeating an uncertain dispatch using the same wait
+identity is safe according to the provider contract. A stable host key alone is
+not evidence of that property. Provider mapping and idempotency remain the
+adapter's responsibility. ADR 0030 owns persisted dispatch state, polling pace,
+retry, delivery and concurrency.
 
 ### Microsoft Graph source family
 
