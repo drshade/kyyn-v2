@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Types.FlowStatus
   ( FlowStatus(..), ExecutionStatus(..), FlowOutcome(..), CancelScope(..)
-  , statusCodec, encodeStatus, decodeStatus ) where
+  , statusCodec, encodeStatus, decodeStatus, outcomeCodec, encodeOutcome, decodeOutcome ) where
 
 import Agentic.Codec (Codec(..))
 import qualified Agentic.Schema as S
@@ -30,10 +30,7 @@ encodeStatus :: (a -> Value) -> FlowStatus a -> Value
 encodeStatus output (FlowStatus state waits) = Object
   [("execution",case state of
       Runnable -> tag "runnable"; Running -> tag "running"; Waiting -> tag "waiting"
-      Finished result -> tagged "finished" $ case result of
-        Completed value -> tagged "completed" (output value)
-        Failed problems -> tagged "failed" (Array (map encodeDiagnostic problems))
-        Cancelled -> tag "cancelled"),
+      Finished result -> tagged "finished" (encodeOutcome output result)),
    ("outstandingWaits",Array (map String waits))]
 
 decodeStatus :: (Value -> Either Text a) -> Value -> Either Text (FlowStatus a)
@@ -43,13 +40,25 @@ decodeStatus output value = do
     ("runnable",Nothing) -> Right Runnable
     ("running",Nothing) -> Right Running
     ("waiting",Nothing) -> Right Waiting
-    ("finished",Just body) -> Finished <$> (variant body >>= \outcome -> case outcome of
-      ("completed",Just resultValue) -> Completed <$> output resultValue
-      ("failed",Just problems) -> Failed <$> list decodeDiagnostic problems
-      ("cancelled",Nothing) -> Right Cancelled
-      _ -> Left "Invalid flow outcome")
+    ("finished",Just body) -> Finished <$> decodeOutcome output body
     _ -> Left "Invalid flow execution status"
   FlowStatus state <$> (field "outstandingWaits" fields >>= list text)
+
+outcomeCodec :: Codec a -> Codec (FlowOutcome a)
+outcomeCodec output = Codec (outcomeSchema output.schema) (encodeOutcome output.encode) (decodeOutcome output.decode)
+
+encodeOutcome :: (a -> Value) -> FlowOutcome a -> Value
+encodeOutcome output result = case result of
+  Completed value -> tagged "completed" (output value)
+  Failed problems -> tagged "failed" (Array (map encodeDiagnostic problems))
+  Cancelled -> tag "cancelled"
+
+decodeOutcome :: (Value -> Either Text a) -> Value -> Either Text (FlowOutcome a)
+decodeOutcome output value = variant value >>= \outcome -> case outcome of
+  ("completed",Just result) -> Completed <$> output result
+  ("failed",Just problems) -> Failed <$> list decodeDiagnostic problems
+  ("cancelled",Nothing) -> Right Cancelled
+  _ -> Left "Invalid flow outcome"
 
 encodeDiagnostic :: Diagnostic -> Value
 encodeDiagnostic (Diagnostic severity code message location) = Object
@@ -87,8 +96,10 @@ decodeDiagnostic value = do
 
 executionSchema :: S.Schema -> S.Schema
 executionSchema output = sumSchema
-  [("runnable",Nothing),("running",Nothing),("waiting",Nothing),("finished",Just (sumSchema
-    [("completed",Just output),("failed",Just (listSchema diagnosticSchema)),("cancelled",Nothing)]))]
+  [("runnable",Nothing),("running",Nothing),("waiting",Nothing),("finished",Just (outcomeSchema output))]
+outcomeSchema :: S.Schema -> S.Schema
+outcomeSchema output = sumSchema
+  [("completed",Just output),("failed",Just (listSchema diagnosticSchema)),("cancelled",Nothing)]
 diagnosticSchema :: S.Schema
 diagnosticSchema = recordSchema [("severity",S.schemaOf (S.SEnum [("warning",Nothing),("error",Nothing)])),
   ("code",textSchema),("message",textSchema),("location",optionalSchema (sumSchema
