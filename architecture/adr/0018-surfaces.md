@@ -793,6 +793,17 @@ wrong port. Exercise the helper's query errors, encoded
 view links, undeclared-name failure and URL-parameter behavior. These checks do
 not require the workbench, static publishing or a view/query type-link checker.
 
+### Interactive flow operations
+
+The `kyyn-v2 flow` command group and matching MCP operations expose interactive
+instance start, inspection, fulfilment, awaiting outcomes, cancellation and
+external-harness completion. [ADR 0028](0028-agentic-workflows.md#interactive-flows-have-a-durable-lifetime)
+owns their typed contracts, authority, parent/child behaviour and persistence.
+`kyyn-v2 flow worker` runs the selected KB's foreground worker; it does not start
+Web or accept evolutions. These operations follow the ordinary KB-selection and
+checked-input conventions above. Manual fulfilment records its actual CLI/MCP
+origin. Web only observes instance state and execution attempts.
+
 ### MCP and inspection pages
 
 The CLI's `plugin connector method list/show` resolves registered readers and

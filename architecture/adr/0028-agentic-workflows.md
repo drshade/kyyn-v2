@@ -576,7 +576,8 @@ required. The explanation remains meaningful if local execution state is removed
 
 ### Runtime ownership and observation
 
-`kyyn flow worker` explicitly runs a foreground worker for the selected KB. It
+`kyyn-v2 flow worker`, exposed by [ADR 0018](0018-surfaces.md#interactive-flow-operations),
+explicitly runs a foreground worker for the selected KB. It
 executes runnable hosted instances and resumes them when fulfilled waits permit
 progress. A process-scoped per-instance writer lock prevents two execution attempts
 writing the same instance; process exit releases the lock without inventing a
