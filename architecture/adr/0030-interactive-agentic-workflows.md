@@ -42,11 +42,13 @@ type InteractiveFlow input output = Agentic InteractiveProgram input output
 data FlowRef input output
 newtype FlowHandle output = FlowHandle FlowInstanceId
 
-data FlowStatus output
-  = Runnable
-  | Running
-  | Waiting [WaitId]
-  | Finished (FlowOutcome output)
+data FlowStatus output = FlowStatus
+  { execution :: ExecutionStatus output
+  , outstandingWaits :: [WaitId]
+  }
+
+data ExecutionStatus output
+  = Runnable | Running | Waiting | Finished (FlowOutcome output)
 
 data FlowOutcome output = Completed output | Failed [Diagnostic] | Cancelled
 
@@ -68,7 +70,12 @@ Runtime state lives locally under `.kyyn/flows/`, outside accepted
 facts and recipe state. Operations validate handles against the selected KB and
 stored contracts. Inspection is read-only; `awaitFlow` returns a terminal outcome
 or durably waits. Failure is observable data, not automatic sibling cancellation.
-Runtime storage/dispatch failures retain ADR 0019's operational failure boundary.
+Outstanding waits are visible independently of execution status: an instance can
+be Running with earlier unanswered waits. Waiting means an attempt returned a
+waiting frontier and there is no currently scheduled execution. Fulfilling any
+one wait makes it Runnable; the authored composition still determines whether
+other replies are needed before a join can progress. Runtime storage/dispatch
+failures retain ADR 0019's operational failure boundary.
 
 ## Parents author how they manage children
 
@@ -112,9 +119,6 @@ liveQuery :: LiveQueryRef input output -> InteractiveFlow input output
 performAction :: ActionRef input output -> InteractiveFlow input output
 
 data EventRef request reply
-newtype WaitHandle reply = WaitHandle WaitId
-
-openWait :: EventRef request reply -> InteractiveFlow request (WaitHandle reply)
 data ReplyOrigin
   = ProviderReply PluginInstanceRef EventIdentity
   | ManualReply InvocationSurface
@@ -122,7 +126,16 @@ data ReplyOrigin
 data ReceivedReply reply = ReceivedReply
   { origin :: ReplyOrigin, value :: reply }
 
-awaitReply :: InteractiveFlow (WaitHandle reply) (ReceivedReply reply)
+awaitReply :: EventRef request reply
+           -> InteractiveFlow request (ReceivedReply reply)
+
+-- Upstream primitives, not a second Kyyn interpreter.
+await :: Codec request -> Codec reply -> Agentic m request reply
+resumable :: Monad m => Runtime m -> Agentic m input output
+          -> input -> m (Progress output)
+data Progress output = RunFinished output | RunWaiting (NonEmpty PendingWait)
+fulfil :: Monad m => Runtime m -> Agentic m input output -> PendingWait -> Value
+       -> m (Either ReplyRefused ())
 
 -- Host application operation; ingress sets origin, never the submitted payload.
 fulfilWait :: (FlowStore :> es, Failure :> es)
@@ -144,19 +157,46 @@ the actual surface; it cannot claim provider origin. Origin is saved with the
 value, returned to the flow and retained in any supporting proposal rationale.
 It describes ingestion provenance, not proof that a remote person's assertion is true.
 
-Opening a wait persists its typed request and expected reply contract and returns
-a stable handle. An author can establish the wait before sending a question, so
-a fast reply is not lost before execution reaches `awaitReply`. Replay returns
-the same handle. Awaiting an unfulfilled wait requires an upstream suspension
-contract distinct from completion-only replay: a typed blocked outcome, pending
-occurrence/request/result contracts, preserved concurrent waits, validated
-fulfilment and an observation distinct from failure. The execution attempt may
-then end; the next attempt replays from the beginning using fulfilled results.
-This design depends on that upstream contract, not on serialising continuations
-or treating an exception as a successful suspension. The runtime releases the
-process while retaining outstanding waits. A received reply is durable before acknowledgement and
-before making the instance runnable. Duplicate wakeups do not start concurrent
-writers for one instance. Time-based triggers enter through explicit external
+The generated awaitReply binding supplies explicit persistence codecs to upstream
+await. Its typed request carries the selected event binding and authored question,
+recipient and correlation metadata; the library does not interpret those fields.
+No separate openWait operation or explicit send before await is required.
+
+An unanswered await stops its branch. Independent branches continue until each
+has finished or suspended; sequential waits become reachable one at a time. The
+library returns RunWaiting with the reached frontier, whose descriptors contain
+journal identity, stable key, encoded request, request/reply schemas and path notes.
+An unbounded sibling can prevent an outcome; this is an authored-flow concern.
+The attempt can then release its process. This works over the existing pure guest
+request program under ExceptT; no native exception or MonadIO capability is added.
+A real failure remains a failure, not a partial successful waiting outcome.
+
+Kyyn persists the frontier before asking the plugin to dispatch its questions.
+Dispatch is keyed by the stable wait identity: re-reporting an unanswered wait
+does not resend it. The wait therefore exists before any fast reply can arrive.
+A known completed dispatch is retained; an uncertain send follows the adapter's
+repeat-safety policy, never a claim that local persistence makes delivery exactly
+once. Some waits require no outbound message (manual input or child completion).
+
+Ingress may queue a received delivery without loading guest code; it is not yet a
+fulfilled reply. Under the instance writer lock, the worker loads the retained
+flow and calls upstream fulfil, which finds the actual reply codec structurally
+without executing actions, models, observers or replay. It canonicalises, decodes
+and commits the reply. ReplyRefused is an actionable refusal; journal failures
+remain operational errors. Unavailable builds prevent fulfilment with a diagnostic.
+Kyyn checks origin and whether the wait is still open before that call. Only a
+validated committed reply makes the instance Runnable; receipt alone does not.
+The next attempt calls resumable again from the original input, restoring saved
+results. Identical duplicate replies are accepted, conflicting replies refused.
+
+Only a successful RunFinished/RunWaiting outcome is authoritative for withdrawing
+previously reported waits absent from that frontier; failed/interrupted attempts
+leave prior waits intact. Attempts and fulfilment mutations share one writer lock.
+The library does not revoke withdrawn keys: Kyyn refuses late replies to closed
+waits before fulfilment. Whole-instance cancellation prevents future execution;
+no library cancellation verb is needed. A domain timeout can be a value in the
+authored reply type, distinct from whole-instance cancellation. Duplicate wakeups
+do not start concurrent writers for one instance. Time-based triggers enter through explicit external
 CLI/MCP input or a declared plugin event source. The worker does not supply a
 business timer or launch a daily scanner on its own. An author needing a deadline
 must configure a source for that event; the passage of time alone does not wake a
@@ -183,7 +223,7 @@ leaves the instance blocked from execution, with cancellation still available;
 it cannot silently resume against another contract.
 
 The interactive authoring bindings for liveQuery, performAction, selectKnowledge,
-queryKnowledge, startFlow, inspectFlow, cancelFlow, openWait, prepareProposal
+queryKnowledge, startFlow, inspectFlow, cancelFlow, prepareProposal
 and inspectProposal are durable Agentic
 combinators with explicit persistence codecs. They record their returned values
 at the library occurrence. Their lower-level guest requests alone do not journal
@@ -198,7 +238,7 @@ An unfinished tool re-enters its body, whose completed durable sub-actions repla
 Plain `act` still runs: values affecting control flow must come from fixed inputs
 or recorded operations. Refreshing external or KB data is a new durable operation,
 not replacement of an earlier read result during replay. Kyyn-owned operations
-which start children, open waits or prepare proposals return their existing handles
+which start children or prepare proposals return their existing handles
 when repeated under the same operation key.
 
 The journal stores completed results only. An action that ran but failed to save
@@ -302,8 +342,11 @@ outcome or bypass a cancellation. Disconnection alone does not mark it Completed
 
 Durable instance state, reply values and the replay journal are distinct from
 the disposable viewer recordings in [ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback). Each execution attempt has its own
-recording namespace; restoring work is reported using the library's replay
-observations. A waiting attempt is not a completed logical flow. An instance links
+recording namespace. The library reports Suspended for a wait and enclosing
+scopes exiting because of it, and Restored for an answered wait on replay. Those
+terminals belong to an attempt, not the logical instance; an enclosing parallel
+scope can still fail because another branch failed. Restoring work uses these
+upstream observations rather than inferred host events. A waiting attempt is not a completed logical flow. An instance links
 its attempts and draft evolutions. Clearing viewer recordings does not delete
 replay state or abandon waiting work. The instance view shows logical status and child statuses separately; the run
 list/viewer continues to show individual attempts, linked to their instance.
@@ -313,9 +356,9 @@ turn recording inspection into historical compatibility enforcement.
 
 ## Interactive verification
 
-Use deterministic provider/event fixtures to exercise query, open-wait, send,
-process stop, reply, resume and proposal creation. Prove the completed send is
-not re-executed, a reply arriving before await is retained, and malformed or
+Use deterministic provider/event fixtures to exercise query, await, frontier
+persistence, send, process stop, reply, resume and proposal creation. Prove the
+completed send is not re-executed, a reply arriving immediately after send is retained, and malformed or
 conflicting replies cannot advance the flow; manual replies retain their actual origin. Exercise incomplete-action repeat
 semantics without claiming to solve an unsupported provider crash window.
 
