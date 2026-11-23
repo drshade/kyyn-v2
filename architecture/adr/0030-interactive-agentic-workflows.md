@@ -119,6 +119,8 @@ liveQuery :: LiveQueryRef input output -> InteractiveFlow input output
 performAction :: ActionRef input output -> InteractiveFlow input output
 
 data EventRef request reply
+-- Generated persistence envelope; authors use the typed EventRef binding.
+data EventRequest request = EventRequest EventBindingRef request
 data ReplyOrigin
   = ProviderReply PluginInstanceRef EventIdentity
   | ManualReply InvocationSurface
@@ -160,6 +162,11 @@ It describes ingestion provenance, not proof that a remote person's assertion is
 The generated awaitReply binding supplies explicit persistence codecs to upstream
 await. Its typed request carries the selected event binding and authored question,
 recipient and correlation metadata; the library does not interpret those fields.
+EventBindingRef identifies the captured plugin/instance/event declaration; its
+configured request/reply contracts are checked against the EventRef. The generated
+wrapper passes EventRequest request to await, so the host routes the persisted
+request by this binding, not by schema shape, labels or question text. The worker
+rejects bindings outside the instance's captured declarations before dispatch.
 No separate openWait operation or explicit send before await is required.
 
 An unanswered await stops its branch. Independent branches continue until each
