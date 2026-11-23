@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedRecordDot #-}
-module Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings, resolveEventBinding, checkEventWait) where
+module Kyyn.Porcelain.Protocol.EventBindings (checkEventBindings, resolveEventBinding, resolveEventInstance, checkEventWait) where
 
 import Control.Monad (unless, void, forM_)
 import Kyyn.Types.EventWait (EventWaitRequest(..))
@@ -14,18 +14,21 @@ checkEventBindings :: [EventReference] -> [PreparedPlugin] -> Either [Diagnostic
 checkEventBindings refs plugins = forM_ refs (\ref -> void (resolveEventBinding ref plugins))
 
 resolveEventBinding :: EventReference -> [PreparedPlugin] -> Either [Diagnostic] PreparedEvent
-resolveEventBinding ref plugins = do
+resolveEventBinding ref plugins = snd <$> resolveEventInstance ref plugins
+
+resolveEventInstance :: EventReference -> [PreparedPlugin] -> Either [Diagnostic] (ConfiguredConnector,PreparedEvent)
+resolveEventInstance ref plugins = do
   let label = Text.unpack (ref.plugin <> "/" <> ref.instanceName <> "/" <> ref.method)
       bad message = Left [errorDiagnostic "flow.event-binding" (label ++ ": " ++ message)]
       named = either bad Right
   pluginKey <- named (pluginName (Text.unpack ref.plugin))
   selectedName <- named (connectorName (Text.unpack ref.instanceName))
-  (_,ConfiguredConnector _ _ selectedConnector _) <- selectedInstance pluginKey selectedName plugins
+  (_,configured@(ConfiguredConnector _ _ selectedConnector _)) <- selectedInstance pluginKey selectedName plugins
   case selectedConnector of
     PreparedEventConnector {connectorType = ConnectorTypeName kind,events = events} -> do
       unless (Text.pack kind == ref.connector) (bad "Configured connector type differs from the declared event")
       case [selectedMethod | selectedMethod@(PreparedEvent (MethodName name) _ _ _ _ _ _ _) <- events, Text.pack name == ref.method] of
-        [selectedMethod] -> pure selectedMethod
+        [selectedMethod] -> pure (configured,selectedMethod)
         _ -> bad "No unique declared event in the configured connector"
     _ -> bad "Configured connector is not an event connector"
 

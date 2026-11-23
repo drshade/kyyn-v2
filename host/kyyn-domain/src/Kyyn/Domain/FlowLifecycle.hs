@@ -33,7 +33,7 @@ frontier reached current = do
       unless (case kind of EventWait{} -> initialDispatch /= Nothing; _ -> initialDispatch == Nothing)
         (Left (InvalidTransition "Dispatch state must belong to an event wait"))
       case find ((== identity) . (.waitId)) current.waits of
-        Nothing -> Right (FlowWait identity description kind Open initialDispatch)
+        Nothing -> Right (FlowWait identity description kind Open (fmap (\phase -> EventAdapter phase Nothing []) initialDispatch))
         Just old | old.descriptor /= description || old.kind /= kind -> Left (InvalidTransition "Wait descriptor changed")
                  | old.waitStatus /= Open -> Left (InvalidTransition "Reported wait is already closed or answered")
                  | otherwise -> Right old
@@ -60,7 +60,12 @@ blockAttempt problems current = case current.status of
 retry :: FlowInstance -> Either FlowStoreProblem FlowInstance
 retry current = case current.status of
   Finished{} -> Left AlreadyFinished
-  _ -> Right current { blocked = [], retryRequired = False }
+  _ -> Right current { blocked = [], retryRequired = False, waits = map reset current.waits }
+  where
+    reset wait = wait { adapter = fmap (\state -> state
+      { dispatchProblems = [], dispatch = case state.dispatch of
+          Started -> Pending
+          other -> other }) wait.adapter }
 
 parentAllowsStart :: Maybe FlowInstanceId -> [FlowInstance] -> Either FlowStoreProblem ()
 parentAllowsStart Nothing _ = Right ()

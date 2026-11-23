@@ -254,9 +254,30 @@ interrupted dispatch rather than another worker's live operation. Polling reads
 and advances its cursor under the same ownership. Only short catalog transactions
 are nested under the adapter lock; it is never held while acquiring the journal
 lock. Ingress and guest execution can proceed independently, including when the
-instance is Running with older open waits. Clearing must acquire the adapter lock
-before removing instance state, so an in-flight adapter cannot publish into a
-cleared instance. No lease, expiry or background service is used to establish
+instance is Running with older open waits. Clearing finished instances first probes each adapter lock, releasing it, then
+acquires all selected journal locks nonblockingly in stable instance-ID order.
+If any lock is busy, it refuses without removing anything. It revalidates terminal
+status and tree constraints under the catalog lock, removes the catalog entries,
+and removes their journals while still owning the journal locks. Adapter and
+journal locks are never held together.
+
+Two invariants make the probe sufficient: an adapter pass reloads the instance
+after acquiring its lock and before every call, starting nothing for a finished
+or missing instance; every adapter result commits before releasing that lock.
+A result for a missing instance is a no-op, never a resurrection. Terminal status
+is immutable. Thus an in-flight call makes the probe fail, and no new call capable
+of publishing can start after a successful probe of a terminal instance. A guest
+still unwinding after cancellation is caught by the journal try-lock. Cancellation
+itself never waits for the adapter. Dispatch results are retained even if a manual
+reply or cancellation closes the wait during the call.
+
+Reported dispatch failures and uncertain dispatches requiring operator action
+block only that wait's adapter, not manual fulfilment or unrelated waits.
+`flow retry` clears those dispatch blocks as well as the instance's attempt block.
+An uncertain `RequireExplicitRetry` diagnostic explicitly warns that the provider
+may already have received the request and that retry sends it again.
+
+No lease, expiry or background service is used to establish
 ownership.
 
 Ingress may queue a received delivery without loading guest code; it is not yet a

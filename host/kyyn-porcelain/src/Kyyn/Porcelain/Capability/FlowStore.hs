@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.FlowStore
-  ( FlowStore(..), readDescendant, cancelDescendant, startInstance, listInstances, readInstance, beginAttempt
+  ( FlowStore(..), beginDispatch, completeDispatch, blockDispatch, readDescendant, cancelDescendant, startInstance, listInstances, readInstance, beginAttempt
   , reportFrontier, finishInstance, blockInstance, cancelInstance
   , queueDelivery, queueNewDelivery, resolveDelivery, startPreparedInstance, startNewPreparedInstance, readExecutionBundle, readBundleDescription, clearInstances, linkAttempt, blockAttempt, retryInstance
   ) where
@@ -22,6 +22,10 @@ data FlowStore :: Effect where
   ReadBundleDescription :: FlowBundleId -> FlowStore m (Either [Diagnostic] FlowBundle)
   ReadExecutionBundle :: FlowBundleId -> FlowStore m (Either [Diagnostic] FlowBundle)
   ClearInstances :: [FlowInstanceId] -> FlowStore m (Either FlowStoreProblem [FlowInstanceId])
+  -- Caller owns the adapter lock; a missing instance is a benign no-op.
+  BeginDispatch :: FlowInstanceId -> Text -> FlowStore m (Either FlowStoreProblem Bool)
+  CompleteDispatch :: FlowInstanceId -> Text -> Value -> FlowStore m (Either FlowStoreProblem ())
+  BlockDispatch :: FlowInstanceId -> Text -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem ())
   ListInstances :: FlowStore m [FlowInstance]
   ReadDescendant :: FlowInstanceId -> FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
   CancelDescendant :: FlowInstanceId -> FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
@@ -90,3 +94,10 @@ readDescendant :: FlowStore :> es => FlowInstanceId -> FlowInstanceId -> Eff es 
 readDescendant caller = send . ReadDescendant caller
 cancelDescendant :: FlowStore :> es => FlowInstanceId -> FlowInstanceId -> CancelScope -> Eff es (Either FlowStoreProblem FlowInstance)
 cancelDescendant caller target = send . CancelDescendant caller target
+
+beginDispatch :: FlowStore :> es => FlowInstanceId -> Text -> Eff es (Either FlowStoreProblem Bool)
+beginDispatch identity = send . BeginDispatch identity
+completeDispatch :: FlowStore :> es => FlowInstanceId -> Text -> Value -> Eff es (Either FlowStoreProblem ())
+completeDispatch identity wait = send . CompleteDispatch identity wait
+blockDispatch :: FlowStore :> es => FlowInstanceId -> Text -> [Diagnostic] -> Eff es (Either FlowStoreProblem ())
+blockDispatch identity wait = send . BlockDispatch identity wait

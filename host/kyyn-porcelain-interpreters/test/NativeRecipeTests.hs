@@ -230,7 +230,7 @@ main = do
     eventInstance <- store (startPreparedInstance Nothing "event-start" declared) >>= right >>= right
     _ <- store (beginAttempt eventInstance.instanceId) >>= right >>= right
     eventFrontier <- store (reportFrontier eventInstance.instanceId [("event",Null,eventKind)]) >>= right >>= right
-    unless (map (.dispatch) eventFrontier.waits == [Just Instance.Pending]) (fail "Dispatch was not persisted pending")
+    unless (map (fmap (.dispatch) . (.adapter)) eventFrontier.waits == [Just Instance.Pending]) (fail "Dispatch was not persisted pending")
     reopenedInstance <- store (readInstance eventInstance.instanceId) >>= right >>= maybe (fail "Missing event instance") pure
     unless (reopenedInstance.waits == eventFrontier.waits) (fail "Event dispatch state changed on reopen")
     _ <- store (cancelInstance eventInstance.instanceId Instance.ThisFlow) >>= right >>= right
@@ -379,7 +379,7 @@ main = do
       _ <- visit False eventHosted.instanceId
       eventWaiting <- inspect eventHosted.instanceId
       eventWait <- case eventWaiting.waits of [selected] -> pure selected; _ -> fail "Event wait not published"
-      unless (eventWait.dispatch == Just Instance.Pending) (fail "Event dispatch did not remain pending")
+      unless (fmap (.dispatch) eventWait.adapter == Just Instance.Pending) (fail "Event dispatch did not remain pending")
       _ <- store (queueDelivery eventHosted.instanceId "invalid" eventWait.waitId (Instance.ReceivedFrom firstOrigin) (Number 7)) >>= right >>= right
       _ <- visitWith NoGuest False eventHosted.instanceId >>= right
       stillWaiting <- inspect eventHosted.instanceId
