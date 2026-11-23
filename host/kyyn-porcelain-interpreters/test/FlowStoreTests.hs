@@ -7,7 +7,7 @@ module Main (main) where
 import Control.Concurrent.Async (concurrently, withAsync, cancel)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar
-import Control.Monad (unless, replicateM_, forM_)
+import Control.Monad (when, void, unless, replicateM_, forM_)
 import qualified Data.ByteString as Bytes
 import qualified Effectful.State.Static.Local as State
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
@@ -61,7 +61,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
       readFlow identity = store scope (readInstance identity) >>= maybe (fail "Missing instance") pure
       wait identity = do
         _ <- update (beginAttempt identity)
-        update (reportFrontier identity [("one",String "question"),("two",String "other")])
+        update (reportFrontier identity [("one",String "question",ReplyWait),("two",String "other",ReplyWait)])
   parent <- start Nothing "parent"
   child <- start (Just parent.instanceId) "child-occurrence"
   replay <- start (Just parent.instanceId) "child-occurrence"
@@ -71,7 +71,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   changed <- store scope (startPreparedInstance (Just parent.instanceId) "child-occurrence" (PreparedFlow preparedFixture.selected Null preparedFixture.bundle))
   assert (changed == Left StartConflict) "Changed child execution was silently reused"
   _ <- update (finishInstance parent.instanceId (Completed Null))
-  terminalFrontier <- store scope (reportFrontier parent.instanceId [("late",String "late")])
+  terminalFrontier <- store scope (reportFrontier parent.instanceId [("late",String "late",ReplyWait)])
   assert (terminalFrontier == Left AlreadyFinished) "Frontier after cancellation/completion was not terminal"
   activeChild <- readFlow child.instanceId
   assert (activeChild.status == Runnable) "Parent completion stopped child"
@@ -84,7 +84,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   after <- readFlow child.instanceId
   assert (after.status == Runnable && length [() | w <- after.waits, w.waitStatus == Open] == 1) "Partial reply did not wake independently"
   _ <- update (beginAttempt child.instanceId)
-  _ <- update (reportFrontier child.instanceId [("two",String "other")])
+  _ <- update (reportFrontier child.instanceId [("two",String "other",ReplyWait)])
   _ <- update (queueDelivery child.instanceId "duplicate" "one" (ManualReply "cli") (Number 7))
   duplicate <- update (resolveDelivery child.instanceId "duplicate" Accepted)
   assert (duplicate.status == Waiting && any ((== Just Duplicate) . (.outcome)) duplicate.deliveries)
@@ -140,6 +140,38 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
     snapshot <- update (readDescendant retired.instanceId surviving.instanceId)
     assert (snapshot.status == Runnable) "Terminal caller cancellation changed its child"
 
+  -- Both event orderings enqueue in the same publication as the frontier or
+  -- outcome. Clearing the child cannot discard its already-copied outcome.
+  forM_ [False,True] $ \finishedFirst -> do
+    allItems <- store scope listInstances
+    waiter <- start Nothing ("waiter-" <> Text.pack (show (length allItems)))
+    childTarget <- start (Just waiter.instanceId) "awaited"
+    let complete = update (finishInstance childTarget.instanceId (Completed (object [])))
+    when finishedFirst (void complete)
+    _ <- update (beginAttempt waiter.instanceId)
+    _ <- update (reportFrontier waiter.instanceId [("child-wait",String "child descriptor",ChildWait childTarget.instanceId UnitDescription)])
+    forM_ [ManualReply "cli",ProviderReply "fixture" "event"] $ \origin -> do
+      refused <- store scope (queueDelivery waiter.instanceId "fake" "child-wait" origin (object []))
+      assert (case refused of Left InvalidTransition{} -> True; _ -> False) "Child wait accepted a fabricated outcome"
+    unless finishedFirst (void complete)
+    ready <- readFlow waiter.instanceId
+    assert (length ready.deliveries == 1 && all ((== ChildCompletion childTarget.instanceId) . (.origin)) ready.deliveries)
+      "Child completion did not atomically enqueue exactly one outcome"
+    _ <- complete
+    repeated <- readFlow waiter.instanceId
+    assert (repeated.deliveries == ready.deliveries) "Repeated finish changed the outcome delivery"
+    _ <- update (clearInstances [childTarget.instanceId])
+    _ <- update (resolveDelivery waiter.instanceId "child-wait" Accepted)
+    resumed <- readFlow waiter.instanceId
+    assert (resumed.status == Runnable) "Clearing the child stranded its waiting parent"
+  cancellationWaiter <- start Nothing "cancellation-waiter"
+  cancellationChild <- start (Just cancellationWaiter.instanceId) "cancellation-child"
+  _ <- update (beginAttempt cancellationWaiter.instanceId)
+  _ <- update (reportFrontier cancellationWaiter.instanceId [("cancel-wait",String "child descriptor",ChildWait cancellationChild.instanceId UnitDescription)])
+  _ <- update (cancelInstance cancellationChild.instanceId FlowAndDescendants)
+  notified <- readFlow cancellationWaiter.instanceId
+  assert (length notified.deliveries == 1) "Cancellation did not notify the waiting parent"
+
   -- Ingress must complete even while a long attempt holds the same instance's journal.
   separate <- start Nothing "separate"
   _ <- wait separate.instanceId
@@ -161,7 +193,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   _ <- wait withdrawal.instanceId
   _ <- update (queueDelivery withdrawal.instanceId "not-yet-validated" "two" (ManualReply "cli") Null)
   _ <- update (beginAttempt withdrawal.instanceId)
-  withdrawn <- update (reportFrontier withdrawal.instanceId [("one",String "question")])
+  withdrawn <- update (reportFrontier withdrawal.instanceId [("one",String "question",ReplyWait)])
   assert (length [() | w <- withdrawn.waits, w.waitStatus == Closed] == 1) "Absent wait remained open"
   lateValidation <- update (resolveDelivery withdrawal.instanceId "not-yet-validated" Accepted)
   assert (lateValidation.status == Waiting && all ((== Just ClosedWait) . (.outcome)) lateValidation.deliveries)

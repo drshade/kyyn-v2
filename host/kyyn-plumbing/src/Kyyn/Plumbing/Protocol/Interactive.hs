@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 module Kyyn.Plumbing.Protocol.Interactive (parseProgress, parseFulfilment) where
 
@@ -6,12 +7,13 @@ import Data.Aeson (Value)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.List (nub)
+import Kyyn.Types.ChildWait (ChildWaitRequest(..), classifyChildWait)
 import qualified Agentic.Wait as Wait
 import qualified Agentic.Journal as Journal
 import Agentic.Runtime (PendingWait(..))
 import qualified Kyyn.Runtime.Json as Wire
 import Kyyn.Runtime.ModelWire (valueCodec)
-import Kyyn.Domain.FlowInstance (FlowProgress(..), DeliveryOutcome(..))
+import Kyyn.Domain.FlowInstance (FlowProgress(..), DeliveryOutcome(..), WaitKind(..), flowInstanceId)
 
 -- Preserve descriptors in their original tagged transport form. Upstream owns
 -- their identity/key/schema validation and canonical durable-key text.
@@ -23,7 +25,7 @@ parseProgress namespace revision value = do
     ("waiting",Just encoded) -> do
       pending <- Wire.decodeWith (Wire.listCodec (Wire.Codec id Right)) encoded
       waits <- traverse descriptor pending
-      unless (not (null waits) && length (nub (map fst waits)) == length waits)
+      unless (not (null waits) && length (nub ([identity | (identity,_,_) <- waits])) == length waits)
         (Left "Waiting frontier must contain distinct waits")
       pure (FlowWaiting waits)
     _ -> Left "Invalid interactive outcome"
@@ -33,7 +35,10 @@ parseProgress namespace revision value = do
       pending <- either (Left . Text.unpack) Right (Wait.pendingWaitFromValue wire)
       unless (pending.identity == Journal.JournalIdentity namespace revision)
         (Left "Wait belongs to another instance or revision")
-      pure (Journal.durableKeyText pending.key,encoded)
+      kind <- either (Left . Text.unpack) Right (classifyChildWait pending.request) >>= \case
+        Nothing -> Right ReplyWait
+        Just (ChildWaitRequest identity output) -> ChildWait <$> flowInstanceId identity <*> pure output
+      pure (Journal.durableKeyText pending.key,encoded,kind)
 
 parseFulfilment :: Value -> Either String DeliveryOutcome
 parseFulfilment value = do

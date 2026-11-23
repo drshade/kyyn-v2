@@ -690,6 +690,14 @@ returns a typed failure and ends the parent as Failed. The diagnostic identifies
 the recipes and the mismatched input or result side. Ordinary recipes and tools
 cannot start children through this capability.
 
+`awaitFlow` waits durably for a child's `Completed result`, `Failed diagnostics`
+or `Cancelled` outcome. It validates the handle, then suspends through the same
+upstream await mechanism as other waits. Child completion and notification are
+saved together; the child can be cleared after completion without losing the
+parent's pending outcome. `flow show` names the child being awaited. These waits
+cannot be fulfilled manually or by provider events: only the child's recorded
+terminal outcome resumes them.
+
 `inspectFlow` reads a child's typed status: `Runnable`, `Running`, `Waiting`, or
 `Finished` with `Completed result`, `Failed diagnostics`, or `Cancelled`. The
 status also contains its outstanding wait IDs. Inspection is durable: replay
