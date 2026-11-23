@@ -3,10 +3,11 @@ module Kyyn.Surfaces.Cli
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
-  , RunCommand(..), TapCommand(..), GuideSelection(..)
+  , RunCommand(..), FlowCommand(..), TapCommand(..), GuideSelection(..)
   , SchemaCommand(..), CollectionCommand(..), FactCommand(..), QueryCommand(..), OutputCommand(..)
   ) where
 
+import Kyyn.Domain.FlowInstance (FlowInstanceId, flowInstanceId, CancelScope(..))
 import Kyyn.Domain.RecipeRun (RecipeRunId, recipeRunId)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
@@ -34,7 +35,11 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = WebServe Int (Maybe EvolutionId) | Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand | Run RunCommand deriving (Eq, Show)
+data Command = WebServe Int (Maybe EvolutionId) | Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand | Run RunCommand | Flow FlowCommand deriving (Eq, Show)
+data FlowCommand = StartFlow RecipeId String (Maybe String) | ListFlows | ShowFlow FlowInstanceId
+  | FulfilFlow FlowInstanceId String String String | AwaitFlow FlowInstanceId
+  | CancelFlow FlowInstanceId CancelScope | RetryFlow FlowInstanceId
+  | ClearFlows [FlowInstanceId] | WorkFlows Bool deriving (Eq, Show)
 data RunCommand = ListRuns (Maybe RecipeId) | ShowRun RecipeRunId | ClearRun RecipeRunId deriving (Eq, Show)
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
@@ -102,6 +107,7 @@ cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError <> subparserInline)
 
 progressMessage :: Command -> Maybe String
 progressMessage request = case request of
+  Flow StartFlow{} -> Just "Preparing the interactive flow..."
   Kb InitKb -> Just "Checking and initializing the knowledge base..."
   Plugin (InstallPlugin selectedId _ _) -> Just ("Installing plugin source into evolution " ++ evolutionIdName selectedId ++ "...")
   Evidence (FetchConnector plugin connector _ _) -> Just
@@ -138,9 +144,31 @@ invocation = Invocation <$> selectionParser
           (ReadPluginGuide <$> argument (eitherReader guideSelection) (metavar "PLUGIN|TAP/PLUGIN") <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
     <> group "evidence" "Fetch and inspect current evidence" (Evidence <$> evidenceParser)
+    <> group "flow" "Start and manage durable interactive flows" (Flow <$> flowParser)
     <> group "run" "Inspect and clear local recipe recordings" (Run <$> runParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
+
+flowParser :: Parser FlowCommand
+flowParser = hsubparser
+  (group "start" "Prepare and queue an accepted interactive recipe; does not run it"
+    (StartFlow <$> argument (eitherReader recipeId) (metavar "RECIPE") <*> key
+      <*> optional (strOption (long "input" <> metavar "DHALL")))
+  <> group "list" "List stored instances without compiling the KB" (pure ListFlows)
+  <> group "show" "Inspect an instance, pending waits and attempt links" (ShowFlow <$> ident)
+  <> group "fulfil" "Queue a reply for validation by the worker"
+    (FulfilFlow <$> ident <*> strOption (long "wait" <> metavar "WAIT_ID") <*> key
+      <*> strOption (long "reply" <> metavar "JSON" <> help "Reply value checked by the actual await codec"))
+  <> group "await" "Wait for a terminal outcome; stop with diagnostics if blocked" (AwaitFlow <$> ident)
+  <> group "cancel" "Cancel this instance; optionally include descendants"
+    (CancelFlow <$> ident <*> flag ThisFlow FlowAndDescendants (long "descendants"))
+  <> group "retry" "Explicitly allow a blocked attempt to run again" (RetryFlow <$> ident)
+  <> group "clear" "Clear finished instances together with any referenced children" (ClearFlows <$> some ident)
+  <> group "worker" "Run the foreground worker; does not start Web or accept evolutions"
+    (WorkFlows <$> switch (long "once" <> help "Visit each current instance once, then exit")))
+  where
+    ident = argument (eitherReader (flowInstanceId . Text.pack)) (metavar "FLOW_ID")
+    key = strOption (long "key" <> metavar "KEY" <> help "Stable caller key: retrying the same request is idempotent")
 
 runParser :: Parser RunCommand
 runParser = hsubparser

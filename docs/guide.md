@@ -497,7 +497,7 @@ Prefer composing existing helpers to reproducing their integration logic.
 
 ### Recipes and model flows
 
-Recipes have a definition and mandatory state; use `()` if nothing needs to be
+Ordinary recipes have a definition and mandatory state; use `()` if nothing needs to be
 remembered. Create/update/remove them through the evolution combinators, providing
 initial or transformed state. Do not hand-author `recipes.dhall` or recipe state
 files in `target/`: those are evaluated data.
@@ -508,7 +508,7 @@ that recipe's state. Use `recipeEdit`, `editFacts` and recipe-state operations f
 its generated facade. Use an ad hoc evolution for schema, code, configuration or
 recipe-definition changes.
 
-Closed recipes run an authored flow with this shape:
+Ordinary closed recipes run an authored flow with this shape:
 
 ```haskell
 review :: Flow (RecipeInput Root Request ReviewState)
@@ -555,6 +555,91 @@ a recording ends; a returned flow does not imply that its draft was persisted.
 The browser never starts or cancels a run. Recipe pages link to matching runs.
 
 
+
+#### Interactive flows
+
+A closed interactive recipe has checked input and output types and can suspend
+while awaiting replies. It has no authored recipe-state argument or implicit
+proposal result. For example, in `target/src/Conversations.hs`:
+
+```haskell
+module Conversations where
+import qualified Agentic as A
+import qualified Agentic.Codec as C
+import qualified Agentic.Schema as S
+import qualified Agentic.Value as V
+import Kyyn.Agentic (Flow)
+
+conversation :: Flow Integer Integer
+conversation = A.await integer integer
+  where
+    integer = C.primitive S.SInteger V.Integer $ \value -> case value of
+      V.Integer number -> Right number
+      _ -> Left "Expected an integer reply"
+```
+
+Register it in an ad hoc evolution using the generated typed definition:
+
+```haskell
+import Kyyn.Interactive (createInteractiveRecipe)
+import qualified Kyyn.Workspace.Target.InteractiveFlows.Conversations as Flows
+
+-- Inside the evolution's edit block:
+createInteractiveRecipe (RecipeId "conversation") Flows.conversation
+```
+
+Accept the declaration, then start a durable instance. Starting prepares its
+checked input, executable and configuration but does not run its actions:
+
+```sh
+kyyn-v2 flow start conversation --key demo-1 --input '+1'
+kyyn-v2 flow list
+kyyn-v2 --json flow show FLOW_ID
+kyyn-v2 flow worker
+```
+
+The worker runs in the foreground. In another terminal, inspect the flow and copy
+an open wait's `id` from the JSON response. Its `descriptor` contains the request
+and reply schema. Queue a JSON reply; the worker checks it with the actual guest
+codec before resuming:
+
+```sh
+kyyn-v2 flow fulfil FLOW_ID --wait 'WAIT_ID' --key reply-1 --reply '9'
+kyyn-v2 flow await FLOW_ID
+```
+
+A fulfilment acknowledgement says `queued`, not `accepted`. `flow show` exposes
+the eventual accepted, duplicate, conflicting, invalid or closed outcome and the
+actual reply origin. Invalid replies leave the wait open. Caller keys are
+required: reuse a key to retry the same start or delivery, and choose a new key
+for a new request. A reused key with changed contents is refused.
+
+`flow worker --once` visits each current instance once and exits. Stopping the
+worker does not cancel instances. Resumption uses the captured executable,
+original input and journal even if current KB source is broken; inspection and
+resumption do not need Nix. Completed durable operations are restored. An
+incomplete action may repeat after an unreported process loss. A reported attempt
+failure blocks dispatch until explicitly retried after its cause is resolved:
+
+```sh
+kyyn-v2 flow retry FLOW_ID
+kyyn-v2 flow cancel FLOW_ID
+kyyn-v2 flow cancel FLOW_ID --descendants
+kyyn-v2 flow clear FLOW_ID
+```
+
+`flow await` returns the terminal outcome, or diagnostics if execution is blocked.
+Cancellation and inspection work without the captured executable. Clearing only
+removes finished instances; include any retained finished children in the same
+`clear` command. It does not delete drafts or viewer recordings.
+
+Each resume attempt has a run ID and `/runs/RUN_ID` link. Suspended attempts show
+the pending reply count; replayed steps appear as restored. A returned interactive
+attempt does not imply a draft evolution. Clearing a recording leaves the flow's
+journal and attempt link intact, and clearing an instance leaves its recordings
+readable. Use `root recipe run` for ordinary proposal-producing recipes.
+
+#### Model calls
 
 For model work, use Agentic through generated `Kyyn.Agentic`; the same flow can
 be exposed as a tool or composed into a closed recipe. Configure provider/model

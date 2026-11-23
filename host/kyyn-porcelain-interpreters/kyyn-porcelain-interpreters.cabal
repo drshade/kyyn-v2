@@ -48,7 +48,7 @@ library
     Kyyn.Porcelain.Interpreter.RecipeStore
     Kyyn.Porcelain.Interpreter.RecipeRunStore
     Kyyn.Porcelain.Interpreter.FlowWorker
-    Kyyn.Porcelain.Interpreter.FlowStore
+    Kyyn.Porcelain.Interpreter.Flow Kyyn.Porcelain.Interpreter.FlowStore
     Kyyn.Porcelain.Interpreter.FlowPreparation
     Kyyn.Porcelain.Protocol.FlowCatalog
     Kyyn.Porcelain.Protocol.FlowBundle

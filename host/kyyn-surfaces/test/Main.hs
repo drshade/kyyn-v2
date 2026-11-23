@@ -6,6 +6,7 @@ module Main (main) where
 
 import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
+import Kyyn.Domain.FlowInstance (flowInstanceId, CancelScope(..))
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionId)
 import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
@@ -34,6 +35,21 @@ main = do
         Failure failure -> let (_,status) = renderFailure failure "kyyn"
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
+  let flowId = either error id (flowInstanceId "a123")
+  succeeds ["flow","start","review","--key","demo","--input","+1"]
+    (Invocation selected Human (Flow (StartFlow (RecipeId "review") "demo" (Just "+1"))))
+  succeeds ["flow","fulfil","a123","--wait","opaque-key","--key","reply-1","--reply","7"]
+    (Invocation selected Human (Flow (FulfilFlow flowId "opaque-key" "reply-1" "7")))
+  succeeds ["flow","cancel","a123"] (Invocation selected Human (Flow (CancelFlow flowId ThisFlow)))
+  succeeds ["flow","cancel","a123","--descendants"] (Invocation selected Human (Flow (CancelFlow flowId FlowAndDescendants)))
+  succeeds ["flow","retry","a123"] (Invocation selected Human (Flow (RetryFlow flowId)))
+  succeeds ["flow","clear","a123","a123"] (Invocation selected Human (Flow (ClearFlows [flowId,flowId])))
+  succeeds ["flow","worker","--once"] (Invocation selected Human (Flow (WorkFlows True)))
+  succeeds ["flow","worker"] (Invocation selected Human (Flow (WorkFlows False)))
+  refuses ["flow","start","review"]
+  refuses ["flow","fulfil","a123","--reply","7"]
+  refuses ["flow","show","../outside"]
+  refuses ["flow","clear"]
   succeeds ["guide"] (Invocation selected Human Guide)
   succeeds ["guide","--json"] (Invocation selected Json Guide)
   refuses ["guide","unexpected"]
