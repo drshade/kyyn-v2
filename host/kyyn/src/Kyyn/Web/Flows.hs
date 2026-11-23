@@ -2,6 +2,7 @@
 module Kyyn.Web.Flows (flowIndex, flowPage, flowLink) where
 
 import Control.Monad (forM_)
+import Data.List (find)
 import Data.Aeson (Value, encode)
 import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.Text as Text
@@ -54,7 +55,10 @@ flowPage item interrupted values children descriptions = document (recipe item) 
       td_ $ do
         toHtml delivery.deliveryId
         br_ []
-        span_ [class_ "context"] (toHtml delivery.waitId)
+        let label = case find ((== delivery.waitId) . (.waitId) . snd) (zip [1..] item.waits) of
+              Just (index,wait) -> waitLabel index descriptions wait
+              Nothing -> delivery.waitId
+        span_ [class_ "context"] (toHtml label)
       td_ (originHtml delivery.origin)
       td_ $ do
         toHtml (maybe "Queued" deliveryOutcomeText delivery.outcome)
