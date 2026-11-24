@@ -26,7 +26,7 @@ import System.Posix.Types (ProcessID)
 import qualified System.Timeout as Timeout
 import Kyyn.Plumbing.Capability.Deadline (Deadline(..), withinMicroseconds)
 import Kyyn.Plumbing.Interpreter.Deadline (runDeadlineIO)
-import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
+import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportWith)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Interpreter.PluginInteraction (runWaitingIO)
 import Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent)
@@ -496,10 +496,10 @@ main = do
         (fail "Poll result overwrote cancellation or manual reply")
       noClosedPoll <- eventPassAt 10 SafeToRepeat "forbidden" pollIdentity >>= right
       unless (noClosedPoll.activity == NoWork) (fail "Closed wait was polled")
-    -- Real subprocesses exercise both silence and a long host Waiting callback.
+    -- Real subprocesses exercise silence, long Waiting and a blocked HTTP callback.
     -- The deadline is shortened by an injected interpreter only in this test.
     Foldable.forM_ [False,True] $ \pollingDeadline ->
-      Foldable.forM_ ["silent","waiting"] $ \mode -> do
+      Foldable.forM_ ["silent","waiting","http"] $ \mode -> do
         let deadlineKey = Text.pack ("deadline-" ++ show pollingDeadline ++ "-" ++ mode)
         (timedIdentity,_) <- newEvent deadlineKey
         (followingIdentity,_) <- newEvent (deadlineKey <> "-next")
@@ -507,22 +507,31 @@ main = do
           _ <- adapterPass SafeToRepeat "success" timedIdentity >>= right
           _ <- adapterPass SafeToRepeat "success" followingIdentity >>= right
           pure ()
+        httpEntered <- newEmptyMVar
+        httpBlocked <- newEmptyMVar
         let childPath = directory ++ "/" ++ Text.unpack deadlineKey ++ ".sh"
             pidPath = childPath ++ ".pid"
-            waitingFrame = Text.unpack (TextEncoding.decodeUtf8 (Bytes.concat (encodeFrame (jsonFrame (Lazy.toStrict (encode
-              (object ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "waiting",
-                "method" .= String "seconds","arguments" .= object ["seconds" .= String "3600"]])))))))
+            callback = if mode == "http"
+              then object ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "http",
+                "method" .= String "send","arguments" .= object ["method" .= String "GET","url" .= String "https://synthetic.invalid",
+                  "headers" .= ([] :: [Value])]]
+              else object ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "waiting",
+                "method" .= String "seconds","arguments" .= object ["seconds" .= String "3600"]]
+            waitingFrame = Text.unpack (TextEncoding.decodeUtf8 (Bytes.concat (encodeFrame (jsonFrame (Lazy.toStrict (encode callback))))))
         writeFile childPath ("#!/bin/sh\nprintf '%s' \"$$\" > '" ++ pidPath ++ "'\n" ++
-          (if mode == "waiting" then "printf '%s' '" ++ waitingFrame ++ "'\n" else "") ++
+          (if mode /= "silent" then "printf '%s' '" ++ waitingFrame ++ "'\n" else "") ++
           "while read line; do :; done\n")
         permissions <- getPermissions childPath
         setPermissions childPath (setOwnerExecutable True permissions)
         deadlineResult <- Timeout.timeout 10000000 $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-          . runDeadlineIO . shortDeadlines . runWaitingIO . unexpected @SecretStore . unexpected @HttpTransport
+          . runDeadlineIO . shortDeadlines . runWaitingIO . unexpected @SecretStore
+          . runHttpTransportWith (\_ -> putMVar httpEntered () >> takeMVar httpBlocked)
           . runGuestExecution [("LC_ALL","C.UTF-8")] . rerouteGuest timedIdentity childPath
           . runDhallHandling . fixedClock fixtureTime . runDocumentPersistenceIO . runFlowStore kb
           . dispatchMetadata RequireExplicitRetry "success" . runPluginEvent . runFlowEvents kb $
             forM [timedIdentity,followingIdentity] serviceEvents
+        reachedHttp <- not <$> isEmptyMVar httpEntered
+        unless (reachedHttp == (mode == "http")) (fail "Deadline did not exercise the expected HTTP callback")
         visits <- maybe (fail "Deadline failed to bound callback and process cleanup") right deadlineResult
         unless (map (.activity) visits == [if pollingDeadline then PollRetry (addUTCTime 2 fixtureTime) else Blocked,Advanced])
           (fail ("Deadline did not continue to next instance: " ++ show visits))
