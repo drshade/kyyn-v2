@@ -83,3 +83,9 @@ const retryOperation=[...state.operations.values()].find(x=>x.episodes.length===
 const retryOnly={...state,operations:new Map([[retryOperation.identity,retryOperation]]),episodes:retryOperation.episodes};
 assert.equal(flowNodeState(retryOnly,'node'),'returned','A successful retry changes current status while preserving failure history');
 assert.equal(retryOperation.episodes[0].terminal,'failed');
+
+const openScope=newFlowProjection('conversation');addAttempt(openScope,'open',header);
+reduceAttempt(openScope,'open',{sequence:'0',event:{elapsedNanos:'0',body:{kind:'flow',operation:null,summary:{occurrence:{address:'flow',context:[]},parent:null,node:'run',notes:[],event:entered}}}});
+assert.equal(flowNodeState(openScope,'node'),'open');assert.equal(openScope.episodes.length,0);
+finishAttempt(openScope,'open',{summary:{status:'interrupted'},more:false,incompleteTail:false});
+assert.equal(flowNodeState(openScope,'node'),'unknown');

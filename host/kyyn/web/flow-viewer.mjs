@@ -88,6 +88,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
   function draw() {
     for (const [id, elements] of nodes) for (const node of elements) {
       node.dataset.state = flowNodeState(projection, id);
+      node.classList.toggle('live-operation', projection.episodes.some(episode => episode.item === id && !episode.terminal && !projection.attempts.get(episode.attempt).closed));
       node.classList.toggle('selected-node', id === selected);
     }
     diagram.classList.add('motion-enabled');

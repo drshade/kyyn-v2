@@ -12,6 +12,12 @@ const executable=fs.realpathSync(process.argv[2]);
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'kyyn-interactive-cli-')),kb=path.join(temporary,'kb');
 const env={...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_NAME:'Interactive fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'Interactive fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
 const children=[];
+const retainedRecordings=new Map();
+function recording(id){
+ const directory=path.join(kb,'.kyyn/runs',id);
+ return {header:JSON.parse(fs.readFileSync(path.join(directory,'header.json'),'utf8')),
+  events:fs.readFileSync(path.join(directory,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse)};
+}
 function invoke(command,args,status=0){const r=spawnSync(command,args,{cwd:temporary,env,encoding:'utf8',timeout:600000});assert.equal(r.status,status,JSON.stringify({command,args,...r}));return r.stdout;}
 const cli=(args,status=0)=>JSON.parse(invoke(executable,['--kb',kb,'--json',...args],status));
 const runtime=(args,status=0)=>cli(['--nix','/not-installed',...args],status);
@@ -180,6 +186,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const waiting=show(started.id),wait=waiting.waits.find(x=>x.status==='open');
  assert.equal(wait.descriptor.request,2);assert.equal(waiting.attempts.length,1);
  assert.equal(waiting.attempts[0].path,'/runs/'+waiting.attempts[0].id);
+ retainedRecordings.set(waiting.attempts[0].id,recording(waiting.attempts[0].id));
  runtime(['run','clear',waiting.attempts[0].id]);
  assert.equal(show(started.id).attempts.length,1,'Clearing recording removed the durable link');
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','invalid','--reply','"not an integer"']);
@@ -208,9 +215,8 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  const completed=show(started.id);assert.equal(completed.result.trim(),'+9');assert.equal(completed.revision,accepted);
  const projection=newFlowProjection(started.id);
  for(const {id} of completed.attempts){
-  const directory=path.join(kb,'.kyyn/runs',id);
-  addAttempt(projection,id,JSON.parse(fs.readFileSync(path.join(directory,'header.json'),'utf8')));
-  const events=fs.readFileSync(path.join(directory,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  const {header,events}=retainedRecordings.get(id)??recording(id);
+  addAttempt(projection,id,header);
   events.forEach((event,index)=>reduceAttempt(projection,id,{sequence:String(index),event}));
   finishAttempt(projection,id,{summary:{status:'returned'},more:false,incompleteTail:false});
  }

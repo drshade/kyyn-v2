@@ -90,7 +90,7 @@ export function flowNodeState(state, item) {
   // override a later returned scope. Scope identity is local to an attempt.
   for (const attempt of [...state.attempts.values()].reverse()) {
     const scopes = [...attempt.scopes.values()].filter(scope => scope.item === item);
-    if (scopes.length) return combine(scopes.map(scope => scope.terminal ?? 'unknown'));
+    if (scopes.length) return combine(scopes.map(scope => scope.terminal ?? (attempt.closed ? 'unknown' : 'open')));
   }
   return 'unseen';
 }
