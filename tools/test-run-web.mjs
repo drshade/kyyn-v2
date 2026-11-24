@@ -65,10 +65,10 @@ try{
  const instance=(id,status,parent=null)=>({id,parent,startKey:id,launch:{revision:'b'.repeat(40),request:'<script>input</script>',owner:{tag:'hosted',bundle:'c'.repeat(64),recipe:'reviewOpportunity'}},status,retryRequired:false,blocked:[],cancelDescendants:false,attempts:[],waits:[],deliveries:[]});
  const coordinator=instance('instance-demo',tag('waiting'));
  coordinator.attempts=['suspended','restored'];
- coordinator.waits=[{id:'child-wait',kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
-   {id:'manual-wait',kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
+ coordinator.waits=[{id:'child-wait',adapter:null,kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
+   {id:'manual-wait',adapter:null,kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
  coordinator.deliveries=[{id:'manual-delivery',wait:'manual-wait',origin:tag('manual','cli'),value:'captured reply',outcome:tag('accepted')},
-   {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:'fixture',event:'event-1'}),value:'changed',outcome:tag('conflict')}];
+   {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:{plugin:'fixture',connector:'Updates',instance:'demo',event:'question'},event:'event-1'}),value:'changed',outcome:tag('conflict')}];
  const childInstance=instance('child-demo',tag('finished',tag('completed','<script>result</script>')),'instance-demo');
  const runningInstance=instance('running-instance',tag('running'));
  const stoppedInstance=instance('stopped-instance',tag('running'));
@@ -91,7 +91,7 @@ try{
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
  assert(flowPage.includes('id="flow-snapshot" data-finished="false"'));assert(flowPage.includes('id="flow-live" hidden'));
- assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
+ assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture/demo/question · event-1'));assert(flowPage.includes('conflicting'));
  assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(flowPage.includes('class="context">Ask for update</span>'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
  const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
  assert((await get('/flows/child-demo')).includes('href="/flows/instance-demo"'));
