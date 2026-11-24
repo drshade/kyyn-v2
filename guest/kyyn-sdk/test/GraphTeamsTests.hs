@@ -9,6 +9,7 @@ import Data.IORef
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Aeson as A
+import qualified Data.Aeson.KeyMap as Keys
 import Data.Aeson ((.=))
 import Kyyn.Types.Program hiding (request)
 import Kyyn.Types.PluginHost
@@ -50,6 +51,16 @@ main = do
   let reaction = add "lastModifiedDateTime" (A.String "2026-11-24T12:00:00Z") (add "etag" (A.String "changed") good)
   (reacted,_,_) <- run [ok 200 (page [reaction] Nothing)] polling
   assert "reaction churn excluded" (reacted == batch)
+  let quoted = message "reply" "person" ["question"] "2026-11-24T10:01:00Z" "<attachment id=\"question\"></attachment>Answer"
+  (stripped,_,_) <- run [ok 200 (page [quoted] Nothing)] polling
+  assert "quote placeholder removed" (stripped == batch)
+  let malformed = [A.Null, add "attachments" A.Null good,
+        add "messageType" (A.String "systemEventMessage") good,
+        add "deletedDateTime" (A.String later) good,
+        add "attachments" (A.toJSON [A.object ["id" .= ("question" :: Text),"contentType" .= ("messageReference" :: Text),"content" .= ("{\"messageId\":\"wrong\"}" :: Text)]]) good,
+        add "attachments" (A.toJSON [A.object ["id" .= ("question" :: Text),"contentType" .= ("forwardedMessageReference" :: Text)]]) good]
+  (usable,_,_) <- run [ok 200 (page (malformed <> [good]) Nothing)] polling
+  assert "unusable candidates do not poison wait" (usable == batch)
   let edited = message "reply" "person" ["question"] "2026-11-24T10:01:00Z" "Edited"
   (changed,_,_) <- run [ok 200 (page [edited] Nothing)] polling
   assert "edit preserves event identity but changes reply" (changed == Right (EventBatch [arrival (expected { content = "Edited" })] initialCursor))
@@ -60,6 +71,19 @@ main = do
   assert "page budget" (length requests == 4 && partial == Right (EventBatch [] (Cursor "question" created (Just (link 4)))))
   (continued,continuedTrace,_) <- run [ok 200 (page [good] Nothing)] (Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just (Cursor "question" created (Just (link 4))))))
   assert "continuation publishes and resets scan" (continued == batch && case continuedTrace of [HttpRequest _ url _ _] -> url == link 4; _ -> False)
+  let resumed = Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just (Cursor "question" created (Just (link 4)))))
+  forM_ [400,410,500] $ \status -> do
+    (restarted,tries,_) <- run [ok status A.Null,ok 200 (page [good] Nothing)] resumed
+    assert "expired continuation restarts from question floor" (restarted == batch && length tries == 2)
+  let refused = Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just (Cursor "question" created (Just "https://evil.invalid/page"))))
+  (restarted,tries,_) <- run [ok 200 (page [good] Nothing)] refused
+  assert "refused saved continuation restarts without sending credential" (restarted == batch && length tries == 1)
+  let colonConfig = config { chatId = "19:chat@thread.v2" }
+  forM_ ["https://graph.microsoft.com/v1.0/chats/19:chat@thread.v2/messages?$skiptoken=x",
+         "https://GRAPH.MICROSOFT.COM/v1.0/chats/19%3achat%40thread.v2/messages?$skiptoken=x"] $ \url ->
+    assert "equivalent Graph encodings" (Api.checkedPage colonConfig url == Right url)
+  forM_ ["http://graph.microsoft.com/v1.0/chats/chat/messages", "https://user:pass@graph.microsoft.com/v1.0/chats/chat/messages", "https://graph.microsoft.com:444/v1.0/chats/chat/messages"] $ \url ->
+    assert "unsafe Graph continuation" (isLeft (Api.checkedPage config url))
   forM_ ["https://evil.invalid/messages?page=2", Api.messagesUrl config <> "/wrong?page=2"] $ \foreignLink -> do
     (bad,rs,_) <- run [ok 200 (page [] (Just foreignLink))] polling
     assert "foreign continuation refused" (isLeft bad && length rs == 1)
@@ -96,7 +120,7 @@ arrival reply@(Reply key _ _ _ _) = EventArrival (EventIdentity (Api.encode (A.t
 ok :: Int -> A.Value -> Either HttpError HttpResponse
 ok status body = Right (HttpResponse status [] (Api.encode body))
 add :: A.Key -> A.Value -> A.Value -> A.Value
-add key value (A.Object fields) = A.Object (fields <> case A.object [key .= value] of A.Object extra -> extra; _ -> mempty)
+add key value (A.Object fields) = A.Object (Keys.insert key value fields)
 add _ _ value = value
 
 run :: [Either HttpError HttpResponse] -> LiveEvent a -> IO (a,[HttpRequest],[Text])

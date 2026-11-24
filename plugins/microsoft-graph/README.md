@@ -49,6 +49,7 @@ let Connector =
           , retentionDays : Integer }
       | Meetings : { auth : Auth, retentionDays : Integer }
       | Directory : { auth : Auth }
+      | Teams : { auth : Auth, chatId : Text, respondentId : Text }
       | Files :
           { auth : Auth
           , scope : < SiteLibrary : { site : Text, library : Text }
@@ -554,19 +555,22 @@ show microsoft-graph`; no chat is created or selected automatically.
 
 The request is `Question { text :: Text }`. Tell the recipient to use Reply.
 The returned `Reply` includes message ID, sender ID, creation time, body content
-and its `text`/`html` content type. HTML is retained as provider data, including
-quoted-message attachment placeholders; consumers must escape or sanitize it
+and its `text`/`html` content type. The matched quote's documented attachment placeholder is removed. Other HTML
+is retained as provider data (not converted to plain text); consumers must escape or sanitize it
 before display. Quoted previews and unrelated messages are not copied into the
 reply payload. Message bodies can contain personal data; apply the recipe's
 redaction policy before sending them to a model that requires redaction.
 
 Polling runs at most once per wait per 30 seconds and reads at most four pages
-of 50 messages per invocation. It saves a continuation for the next poll, then
+of 50 messages per invocation. It saves a continuation for the next poll (restarting from the question floor
+if that saved link is refused or fails), then
 rescans from the question timestamp after a completed scan. This is a deliberate
 first implementation for small chats: rescanning catches delayed visibility,
 but work grows with chat activity and the age of an unanswered question. Matching
-replies within each batch are ordered by creation time then ID; the first accepted
-answer wins. Edits do not replace accepted answers, and closed waits stop polling.
+replies within one poll are ordered by creation time then ID; the first accepted
+answer wins. Pages arrive newest-modified first, so a later answer can win before
+an older answer on a subsequent poll. Unusable individual messages are skipped;
+a malformed page fails the poll. Edits do not replace accepted answers, and closed waits stop polling.
 Reaction changes do not create a different reply.
 
 A failed send may have reached Teams. Dispatch requires an explicit retry; check

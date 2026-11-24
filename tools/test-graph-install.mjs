@@ -68,6 +68,9 @@ try {
           , retentionDays = +90 } }
       , { name = "directory", binding = "directory", connector = Connector.Directory
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" } } }
+      , { name = "teams", binding = "teams", connector = Connector.Teams
+          { auth = Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-teams-secret", scopes = [ "Chat.Read", "ChatMessage.Send" ] }
+          , chatId = "fixture-chat", respondentId = "fixture-person" } }
       , { name = "files", binding = "files", connector = Connector.Files
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , scope = Scope.SiteLibrary { site = "site", library = "Documents" }
@@ -76,6 +79,9 @@ try {
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const head = git(kb, 'rev-parse', 'HEAD');
+  const teams = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'teams']).result;
+  assert.match(JSON.stringify(teams), /question/);
+  assert.match(JSON.stringify(teams), /require-explicit-retry/);
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
   assert.equal(descriptor.fetchOptionsType, null);
   assert.equal(descriptor.reportType.trim(), "{}");

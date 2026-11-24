@@ -6,6 +6,7 @@ import Data.List (sortOn)
 import Data.Maybe (catMaybes)
 import qualified Data.Aeson as Aeson
 import Data.Aeson ((.=))
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Kyyn.Plugin (FetchError(..))
 import Kyyn.Plugin.Host (HttpRequest(..))
@@ -42,11 +43,17 @@ poll config@(TeamsConfig auth chat _) (EventPoll _ _ prior) = result $ do
   -- cursor cannot prove that eventually visible replies have all arrived.
   let initial = messagesUrl config <> "?$top=50&$orderby=lastModifiedDateTime%20desc&$filter=" <>
         Json.escape ("lastModifiedDateTime gt " <> created)
-      pages 0 _ url = pure ([],Just url)
-      pages remaining seen url = do
-        _ <- either throwE pure (checkedPage config url)
-        if url `elem` seen then throwE "Teams pagination repeated a page." else pure ()
-        value <- ExceptT (send (HttpRequest "GET" url [("Authorization","Bearer " <> token)] ""))
+      pages 0 _ _ url = pure ([],Just url)
+      pages remaining restart seen url = do
+        fetched <- case checkedPage config url of
+          Left problem -> pure (Left problem)
+          Right checked -> if checked `elem` seen then pure (Left "Teams pagination repeated a page.") else
+            lift (send (HttpRequest "GET" checked [("Authorization","Bearer " <> token)] ""))
+        case fetched of
+          Left _ | restart -> pages (remaining - 1) False [] initial
+          Left problem -> throwE problem
+          Right value -> consume remaining seen url value
+      consume remaining seen url value = do
         rows <- either throwE pure (Json.member "value" value >>= Json.array)
         replies <- either throwE pure (catMaybes <$> mapM (reply config cursor) rows)
         next <- either throwE pure (Json.optionalText "@odata.nextLink" value)
@@ -55,9 +62,9 @@ poll config@(TeamsConfig auth chat _) (EventPoll _ _ prior) = result $ do
           Just link -> do
             _ <- either throwE pure (checkedPage config link)
             if link `elem` (url:seen) then throwE "Teams pagination repeated a page." else pure ()
-            (more,final) <- pages (remaining - 1) (url:seen) link
+            (more,final) <- pages (remaining - 1) False (url:seen) link
             pure (replies <> more,final)
-  (replies,next) <- pages (4 :: Int) [] (maybe initial id continuation)
+  (replies,next) <- pages (4 :: Int) (continuation /= Nothing) [] (maybe initial id continuation)
   let ordered = sortOn (\(Reply message _ time _ _) -> (timestamp time,message)) replies
       arrival value@(Reply message _ _ _ _) = EventArrival (EventIdentity (encode (Aeson.toJSON [chat,message]))) value
   pure (EventBatch (map arrival ordered) (Cursor key created next))

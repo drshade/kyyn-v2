@@ -27,7 +27,8 @@ main = do
   batch <- maybe (fail "Missing poll result") (get "value") received :: IO Value
   arrivals <- get "arrivals" batch :: IO [Value]
   assert "one quoted answer" (length arrivals == 1)
-  reply <- get "value" (head arrivals) :: IO Value
+  entry <- case arrivals of [entry] -> pure entry; _ -> fail "Expected one answer"
+  reply <- get "value" entry :: IO Value
   assert "answer" . (== ("Answer" :: Text.Text)) =<< get "content" reply
   putStrLn "Teams real guest: discovery, delegated dispatch and quoted reply passed."
 

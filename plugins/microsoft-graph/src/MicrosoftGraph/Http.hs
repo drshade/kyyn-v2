@@ -3,8 +3,6 @@ module MicrosoftGraph.Http (send, download, downloadOptional, postForm, requireS
 
 import qualified Data.Text as Text
 import Data.Text (Text)
-import Kyyn.Types.Program (Program, Member)
-import Kyyn.Types.PluginHost (Http, Waiting)
 import Kyyn.Plugin.Host
 import Kyyn.Plugin (FetchError(..))
 import MicrosoftGraph.Json (form)

@@ -6,6 +6,8 @@ import qualified Data.Text.Encoding as Encoding
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Aeson as Aeson
 import Data.List (nub)
+import qualified Network.HTTP.Client as Client
+import Network.HTTP.Types.URI (urlDecode)
 import Kyyn.Plugin.Event (LiveEvent)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Config (graphApiBase)
@@ -37,9 +39,15 @@ messagesUrl :: TeamsConfig -> Text
 messagesUrl (TeamsConfig _ chat _) = graphApiBase <> "chats/" <> Json.escape chat <> "/messages"
 
 checkedPage :: TeamsConfig -> Text -> Either Text Text
-checkedPage config url
-  | (messagesUrl config <> "?") `Text.isPrefixOf` url && not (Text.any (`elem` ['#','\r','\n']) url) = Right url
-  | otherwise = Left "Unexpected Teams pagination URL."
+checkedPage (TeamsConfig _ chat _) url = case Client.parseRequest (Text.unpack url) :: Maybe Client.Request of
+  Just request
+    | Client.secure request && Client.port request == 443
+    , Text.toLower (Encoding.decodeUtf8 (Client.host request)) == "graph.microsoft.com"
+    , null (Client.requestHeaders request)
+    , not (Text.any (`elem` ['#','\r','\n']) url)
+    , Right path <- Encoding.decodeUtf8' (urlDecode False (Client.path request))
+    , path == "/v1.0/chats/" <> chat <> "/messages" -> Right url
+  _ -> Left "Unexpected Teams pagination URL."
 
 field :: Text -> Aeson.Value -> Either Text Text
 field key value = Json.member key value >>= Json.text
@@ -55,7 +63,10 @@ encode = Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode
 -- Graph documents messageReference attachments for chat quotes. replyToId is
 -- channel-only. Never infer correlation from quoted HTML or preview text.
 reply :: TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
-reply (TeamsConfig _ chat respondent) (Cursor question created _) value = do
+reply config cursor value = Right (either (const Nothing) id (candidate config cursor value))
+
+candidate :: TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
+candidate (TeamsConfig _ chat respondent) (Cursor question created _) value = do
   kind <- field "messageType" value
   deleted <- Json.optionalText "deletedDateTime" value
   if kind /= "message" || deleted /= Nothing then pure Nothing else do
@@ -89,5 +100,10 @@ reply (TeamsConfig _ chat respondent) (Cursor question created _) value = do
         body <- Json.member "body" value
         kind <- field "contentType" body
         content <- field "content" body
-        if kind `elem` ["text","html"] then pure (Just (Reply key respondent sent kind content))
+        if kind `elem` ["text","html"] then pure (Just (Reply key respondent sent kind (if kind == "html" then stripQuote question content else content)))
           else Left "Unsupported Teams reply body content type."
+
+-- Remove only the documented placeholder for the correlated quote. Other HTML
+-- remains provider content, not a plain-text rendering or sanitized HTML.
+stripQuote :: Text -> Text -> Text
+stripQuote key = Text.replace ("<attachment id=\"" <> key <> "\"></attachment>") ""

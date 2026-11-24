@@ -5,8 +5,6 @@ import qualified Data.Text as Text
 import Data.Text (Text)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.Trans.Class (lift)
-import Kyyn.Types.Program (Program, Member)
-import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Config (graphRoot)
