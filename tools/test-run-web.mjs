@@ -90,6 +90,7 @@ try{
  assert(flowList.includes('reviewOpportunity'));assert(flowList.includes('interrupted'));assert(flowList.includes('running'));
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
+ assert(flowPage.includes('id="flow-snapshot" data-finished="false"'));assert(flowPage.includes('id="flow-live" hidden'));
  assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
  assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(flowPage.includes('class="context">Ask for update</span>'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
  const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
@@ -141,6 +142,7 @@ try{
   await page.locator('[data-attempt="active"]').waitFor();
   assert.equal(await page.locator('#flow-run').getAttribute('src'), '/runs/suspended?embedded=1');
   assert.equal(await detail.getAttribute('open'), '');
+  assert(await detail.locator('summary').evaluate(node => node === document.activeElement), 'Refresh preserves disclosure focus');
   await page.locator('#flow-follow').check();
   await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/active?embedded=1');
   await page.frameLocator('#flow-run').locator('#run-diagram svg').waitFor();
@@ -152,6 +154,7 @@ try{
   coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();
   await page.waitForTimeout(2300);
   assert.equal(await page.locator('[data-wait="new-wait"]').count(), 0);
+  assert.match(await page.locator('#flow-message').textContent(), /text is selected/);
   await page.evaluate(() => getSelection().removeAllRanges());
   await page.locator('[data-wait="new-wait"]').waitFor();
   // A transient read failure retains the snapshot and recovers.
@@ -169,7 +172,15 @@ try{
   coordinator.status=tag('finished',tag('completed','Done'));updateCatalog();
   await page.waitForFunction(() => document.querySelector('#flow-snapshot').dataset.finished === 'true');
   flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  // Loading an already finished instance must not start polling.
+  await page.reload();flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
   page.off('request',countFlow);
+  await page.goto(base+'/flows/stopped-instance');
+  let missingRequests=0;
+  await page.route('**/flows/stopped-instance', route => {missingRequests++;return route.fulfill({status:404,body:'Cleared'});});
+  await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('cleared'));
+  await page.waitForTimeout(2300);assert.equal(missingRequests,1);
+  await page.unroute('**/flows/stopped-instance');
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
    await page.locator('#run-inspector .progress-count').waitFor();

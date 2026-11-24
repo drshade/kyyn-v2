@@ -33,13 +33,12 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     frame.src = `${path}?embedded=1`;
     frame.hidden = false;
   }
-  function update() {
+  function update(paused = false) {
     if (follow.checked) show(latestAttempt(snapshot));
-    message.textContent = follow.checked
-      ? (selected ? 'Following the latest attempt. Replies and status update automatically.' : 'Waiting for the first execution attempt…')
-      : 'Inspecting the selected attempt. Replies and status still update.';
+    message.textContent = paused ? 'Updates paused while text is selected.'
+      : !selected && snapshot.dataset.finished !== 'true' ? 'Waiting for the first execution attempt…' : '';
   }
-  follow.addEventListener('change', update);
+  follow.addEventListener('change', () => update());
   snapshot.addEventListener('click', event => {
     const link = event.target.closest('[data-attempt]');
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
@@ -54,18 +53,20 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     pending = true;
     try {
       const response = await fetchPage(location.pathname, {cache: 'no-store'});
-      if (!response.ok) throw new Error(response.status === 404 ? 'This flow was cleared or is no longer available.' : `Could not refresh this flow (HTTP ${response.status}).`);
+      if (response.status === 404) { stopped = true; message.textContent = 'This flow was cleared or is no longer available.'; return; }
+      if (!response.ok) throw new Error(`Could not refresh this flow (HTTP ${response.status}).`);
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
       const incoming = page.querySelector('#flow-snapshot');
       if (!incoming) throw new Error('The response did not contain this flow.');
-      if (stopped) return;
-      refreshSnapshot(snapshot, incoming); update();
+      if (stopped || doc.hidden) return;
+      update(!refreshSnapshot(snapshot, incoming));
     } catch (error) {
       if (!stopped) message.textContent = `${error.message} Retrying; showing the last received state.`;
     } finally {
       pending = false; schedule();
     }
   }
+  doc.querySelector('#flow-live').hidden = false;
   update(); schedule();
   doc.addEventListener("visibilitychange", schedule);
   const stop = () => { stopped = true; clearTimeout(timer); doc.removeEventListener("visibilitychange", schedule); };

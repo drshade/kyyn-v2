@@ -27,12 +27,12 @@ flowIndex items = document "Interactive flows" $ do
 
 flowPage :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()
 flowPage item interrupted values children descriptions = document (recipe item) $ do
-  section_ [id_ "flow-live"] $ do
+  section_ [id_ "flow-live", makeAttribute "hidden" ""] $ do
     label_ $ do
       input_ [id_ "flow-follow", type_ "checkbox", checked_ ""]
       " Follow latest attempt"
-    p_ [id_ "flow-message", role_ "status"] "Following this conversation."
-    iframe_ [id_ "flow-run", title_ "Conversation execution", style_ "width:100%;height:75vh;border:1px solid #ddd", makeAttribute "hidden" ""] mempty
+    p_ [id_ "flow-message", role_ "status"] mempty
+    iframe_ [id_ "flow-run", title_ "Conversation execution", makeAttribute "hidden" ""] mempty
   div_ [id_ "flow-snapshot", makeAttribute "data-finished" (case item.status of Finished _ -> "true"; _ -> "false")] (snapshot item interrupted values children descriptions)
   script_ [src_ "/_inspection/flow-viewer.mjs", type_ "module"] ("" :: Text.Text)
 
@@ -125,4 +125,5 @@ diagnostics :: [Diagnostic] -> Html ()
 diagnostics problems = forM_ problems $ \problem -> p_ [class_ "diagnostic"] $
   toHtml (problem.code <> ": " <> problem.message)
 document :: Text.Text -> Html () -> Html ()
-document title = pageDocument Nothing Nothing title mempty
+document title = pageDocument Nothing Nothing title
+  (link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"])
