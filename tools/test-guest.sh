@@ -7,7 +7,8 @@ nix_command=(nix --extra-experimental-features 'nix-command flakes')
 guest_system=$("${nix_command[@]}" eval --impure --raw --expr builtins.currentSystem)
 guest_stage=$(mktemp -d "${TMPDIR:-/tmp}/kyyn-guest-tests.XXXXXXXX")
 trap 'rm -rf -- "$guest_stage"' EXIT
-guest_source=$("${nix_command[@]}" flake metadata --json --no-update-lock-file | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>console.log(JSON.parse(s).path))')
+# Materialize the snapshot: metadata can report a store path that is not copied yet.
+guest_source=$("${nix_command[@]}" flake archive --json --no-update-lock-file | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>console.log(JSON.parse(s).path))')
 checks=(guest-frozen-api guest-model guest guest-schema guest-api guest-api-bindings guest-api-tools guest-plugins
   guest-tool guest-root-api guest-recipe guest-output guest-target-evolution
   guest-recipe-evolution guest-first-party)

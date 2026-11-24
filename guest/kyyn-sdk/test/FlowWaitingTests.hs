@@ -44,8 +44,8 @@ integer = C.primitive S.SInteger V.Integer $ \case
   _ -> Left "Expected integer"
 
 flow :: A.Agentic Step [Integer] [Integer]
-flow = A.each (A.durably integer integer (\_ n -> lift (request Effect) >> pure n)
-  A.>>> A.await integer integer)
+flow = A.each (A.durablyWith integer integer (\_ n -> lift (request Effect) >> pure n)
+  A.>>> A.awaitWith integer integer)
 
 -- Round-trip every persisted value through the actual host/guest value codec.
 wire :: V.Value -> IO V.Value
@@ -84,6 +84,10 @@ check = do
   assert "both independent waits reached" (length waits == 2 && count == 2)
   assert "suspension is observed, not failed" (any ((== A.Suspended) . (.happened)) events &&
     not (any ((== A.Failed) . (.happened)) events))
+  assert "durable operations classify live work before suspension"
+    (length [() | event <- events, event.happened == A.Executing (A.KeyedOperation A.DurableEffect)] == 2)
+  assert "await misses do not execute an action"
+    (not (any ((== A.Executing (A.KeyedOperation A.AwaitedReply)) . (.happened)) events))
   persisted <- traverse (\w -> wire (W.pendingWaitValue w) >>=
     either (fail . Text.unpack) pure . W.pendingWaitFromValue) waits
   case persisted of
@@ -101,6 +105,8 @@ check = do
       (_,complete,_,_) <- run partialStore (A.fulfil runtime flow two (V.Integer 22))
       (finished,_,repeated,restored) <- run complete (A.resumable runtime flow [10,20])
       assert "typed replies reach final result" (finished == Right (A.RunFinished [11,22]) && repeated == 0)
+      assert "completed operations do not classify replay as live"
+        (not (any (\event -> case event.happened of A.Executing _ -> True; _ -> False) restored))
       assert "restoration observations survive wire encoding" (any (\event -> case event.happened of A.Restored _ -> True; _ -> False) restored)
       (duplicate,duplicateStore,_,_) <- run complete (A.fulfil runtime flow one (V.Integer 11))
       assert "duplicate reply is idempotent" (duplicate == Right (Right ()) && duplicateStore == complete)
@@ -109,11 +115,11 @@ check = do
         Right (Left _) -> conflictStore == complete
         _ -> False)
     _ -> fail "Unexpected waiting frontier"
-  let failed = A.await integer integer A.&&& A.act (\_ -> throwE (FetchError "fixture failure"))
+  let failed = A.awaitWith integer integer A.&&& A.act (\_ -> throwE (FetchError "fixture failure"))
         :: A.Agentic Step Integer (Integer,Integer)
   (failure,_,_,failureEvents) <- run [] (A.resumable runtime failed 1)
   assert "short-circuit failure is not a waiting outcome" (failure == Left (FetchError "fixture failure") &&
     any ((== A.Failed) . (.happened)) failureEvents)
-  (plain,_,_,_) <- run [] (A.interpret runtime (A.await integer integer) 1)
+  (plain,_,_,_) <- run [] (A.interpret runtime (A.awaitWith integer integer) 1)
   assert "plain interpret uses FetchError for an unexpected wait" (case plain of Left _ -> True; _ -> False)
   putStrLn "Kyyn Program/ExceptT waiting, typed fulfilment, replay and wire observations passed."

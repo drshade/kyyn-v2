@@ -60,11 +60,11 @@ trace = A.arr (const ([Left 0, Right 0] :: [Either Int Int]))
 
 -- The connector must run only on the first attempt; the reply becomes the typed result.
 waiting :: Flow Integer Integer
-waiting = A.durably integer number (\_ runs -> do
+waiting = A.durablyWith integer number (\_ runs -> do
     count <- ExceptT (Files.count files ())
     pure (fromInteger (runs + count)))
   A.>>> A.arr round
-  A.>>> A.await integer integer
+  A.>>> A.awaitWith integer integer
   where
     number = C.primitive S.SNumber V.Number $ \value -> case value of
       V.Number n -> Right n

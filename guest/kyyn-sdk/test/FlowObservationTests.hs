@@ -40,15 +40,15 @@ check :: IO ()
 check = do
   (success,events) <- record runtime (A.act (const (pure (error "lazy result" :: Int))))
   case success of Right _ -> pure (); Left _ -> fail "Successful flow failed"
-  unless (map (.happened) events == [A.Entered Nothing,A.Entered Nothing,A.Returned A.Completed,A.Returned A.Completed])
+  unless (map (.happened) events == [A.Entered Nothing,A.Entered Nothing,A.Executing A.PlainAction,A.Returned A.Completed,A.Returned A.Completed])
     (fail "Incorrect successful scope trace")
   let primary = FetchError "body failed"
       failed :: A.Agentic Step () ()
       failed = A.act (const (throwE primary)) `A.named` "failing step"
   (result,failures) <- record runtime failed
-  unless (result == Left primary && map (.happened) failures == replicate 3 (A.Entered Nothing) ++ replicate 3 A.Failed)
+  unless (result == Left primary && map (.happened) failures == replicate 3 (A.Entered Nothing) ++ [A.Executing A.PlainAction] ++ replicate 3 A.Failed)
     (fail "ExceptT failure was not observed at each scope")
-  unless (map (.occurrence) (drop 3 failures) == reverse (map (.occurrence) (take 3 failures)))
+  unless (map (.occurrence) (filter ((== A.Failed) . (.happened)) failures) == reverse (map (.occurrence) (take 3 failures)))
     (fail "Failure terminals do not match entered occurrences")
   (missing,missingEvents) <- record runtime (A.draft @Int @() "no model")
   unless (missing == Left (FetchError "NoSystemTwo") && any ((== A.Failed) . (.happened)) missingEvents)
@@ -62,10 +62,14 @@ check = do
     (A.act (const (error "entry failure must prevent body")) :: A.Agentic Step () ())
   unless (entryFailure == Left (FetchError "observer failed") && length entryEvents == 1)
     (fail "Entry failure produced a body or a terminal")
+  (liveFailure,_) <- record (runtime { A.observe = notify (A.Executing A.PlainAction) })
+    (A.act (const (error "live-start notification failure must prevent body")) :: A.Agentic Step () ())
+  unless (liveFailure == Left (FetchError "observer failed"))
+    (fail "Executing was treated as proof the callback ran")
   (returnFailure,returnEvents) <- record (runtime { A.observe = notify (A.Returned A.Completed) })
     (A.act (const (pure ())) :: A.Agentic Step () ())
   unless (returnFailure == Left (FetchError "observer failed") &&
-    map (.happened) returnEvents == [A.Entered Nothing,A.Entered Nothing,A.Returned A.Completed,A.Failed])
+    map (.happened) returnEvents == [A.Entered Nothing,A.Entered Nothing,A.Executing A.PlainAction,A.Returned A.Completed,A.Failed])
     (fail "Return notification failure invented a second child terminal")
   putStrLn "Program/ExceptT observation scopes preserve failures, ancestry and payload laziness."
 
