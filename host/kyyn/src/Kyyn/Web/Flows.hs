@@ -29,7 +29,7 @@ flowPage :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Tex
 flowPage item interrupted values children descriptions = document (recipe item) $ do
   section_ [id_ "flow-live", makeAttribute "hidden" ""] $ do
     label_ $ do
-      input_ [id_ "flow-follow", type_ "checkbox", checked_ ""]
+      input_ [id_ "flow-follow", type_ "checkbox", checked_]
       " Follow latest attempt"
     p_ [id_ "flow-message", role_ "status"] mempty
     iframe_ [id_ "flow-run", title_ "Conversation execution", makeAttribute "hidden" ""] mempty
