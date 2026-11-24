@@ -702,8 +702,9 @@ remain in named secrets and must not appear in query results or diagnostics.
 
 `plugin connector query PLUGIN INSTANCE METHOD --input VALUE` performs one fresh
 query against the accepted configuration, using the same checked invocation as
-interactive flows. Discovery uses `plugin connector show` and the corresponding
-method description. CLI execution does not create an interactive instance, invoke
+interactive flows. Discover methods with `plugin connector method list PLUGIN INSTANCE`
+and inspect their types with `plugin connector method show PLUGIN INSTANCE METHOD`.
+CLI execution does not create an interactive instance, invoke
 a model or populate an evidence capture. Query failures produce the ordinary
 non-success CLI response and exit status. No query is performed by listing or
 inspecting methods.

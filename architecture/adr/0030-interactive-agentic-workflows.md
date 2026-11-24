@@ -152,7 +152,8 @@ worker visits do not reissue the query while blocked.
 On a journal hit, the output is restored without executing the provider adapter,
 authentication or callbacks. A different occurrence, such as the next repeat
 iteration or a later model tool call, is a new query and may see newer provider
-data. An interrupted operation can execute again after explicit retry. Live queries must tolerate repeated reads; this does not promise a consistent
+data. An interrupted operation can execute again after explicit retry. Live queries
+must tolerate repeated reads; this does not promise a consistent
 provider snapshot across separate calls or exactly-once execution.
 
 The query can be a direct step or an authored Agentic tool body supplied to a draft.
