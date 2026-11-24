@@ -6,9 +6,10 @@ import Data.Aeson (Value)
 import Data.List (find)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Time (UTCTime, NominalDiffTime, addUTCTime)
+import Data.Time (UTCTime, addUTCTime)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FlowInstance
+import Kyyn.Types.Plugin (Seconds(..))
 import Kyyn.Types.EventIdentity (EventIdentity)
 
 pollDue :: UTCTime -> FlowWait -> Bool
@@ -17,15 +18,14 @@ pollDue now wait = wait.waitStatus == Open && case wait.adapter of
     && maybe True (<= now) state.polling.nextAttempt
   Nothing -> False
 
-beginPoll :: UTCTime -> NominalDiffTime -> Text -> FlowInstance -> Either FlowStoreProblem (Bool,FlowInstance)
-beginPoll now interval key current
-  | interval <= 0 = Left (InvalidTransition "Poll interval must be positive")
+beginPoll :: UTCTime -> Seconds -> Text -> FlowInstance -> Either FlowStoreProblem (Bool,FlowInstance)
+beginPoll now (Seconds interval) key current
   | Finished{} <- current.status = Right (False,current)
   | current.retryRequired = Right (False,current)
   | otherwise = case find ((== key) . (.waitId)) current.waits of
       Just wait | pollDue now wait -> do
         updated <- change key (\state -> state {polling = state.polling
-          {lastAttempt = Just now, nextAttempt = Just (addUTCTime interval now)}}) current
+          {lastAttempt = Just now, nextAttempt = Just (addUTCTime (fromInteger interval) now)}}) current
         pure (True,updated)
       _ -> Right (False,current)
 
@@ -40,7 +40,8 @@ completePoll :: Text -> [(EventIdentity,Value)] -> Value -> FlowInstance
   -> Either FlowStoreProblem (Bool,FlowInstance)
 completePoll key arrivals cursor current = do
   reference <- case find ((== key) . (.waitId)) current.waits of
-    Just wait | EventWait ref <- wait.kind -> Right ref
+    Just wait | EventWait ref <- wait.kind, Just state <- wait.adapter,
+      state.dispatch `elem` [NotRequired,DispatchCompleted], state.polling.lastAttempt /= Nothing -> Right ref
     _ -> Left (InvalidTransition "Missing event wait")
   let append (queued,item) (event,value) =
         let origin = ReceivedFrom (ProviderReply reference event)
@@ -49,10 +50,12 @@ completePoll key arrivals cursor current = do
             closed = terminal || maybe True ((== Closed) . (.waitStatus)) (find ((== key) . (.waitId)) item.waits)
             outcome | closed = Just ClosedWait
                     | not (null previous) = Just Conflicting
+                    | Just wait <- find ((== key) . (.waitId)) item.waits,
+                      Answered _ accepted <- wait.waitStatus = Just (if accepted == value then Duplicate else Conflicting)
                     | otherwise = Nothing
-            fresh = head [candidate | n <- [length item.deliveries ..],
-              let candidate = "internal-event-" <> Text.pack (show n),
-              all ((/= candidate) . (.deliveryId)) item.deliveries]
+            fresh = freshAt (length item.deliveries)
+            freshAt n = let candidate = "internal-event-" <> Text.pack (show n)
+              in if any ((== candidate) . (.deliveryId)) item.deliveries then freshAt (n + 1) else candidate
         in if any ((== value) . (.value)) previous then Right (queued,item)
            else Right (queued || outcome == Nothing,item {deliveries = item.deliveries ++ [FlowDelivery fresh key origin value outcome]})
   (queued,received) <- foldM append (False,current) arrivals

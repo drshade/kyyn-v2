@@ -1,5 +1,6 @@
 // Installed typed event waits: atomic authority refusal, pinned retry, manual
-// provenance, invalid/duplicate replies and dispatch visibility. Synthetic only.
+// provenance, invalid/duplicate replies, real None/Some poll cursor wiring,
+// bounded --once resumption and dispatch-only retry. Synthetic only.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,8 +23,17 @@ try {
  const target=path.join(draft.path,'target');
  const plugin=path.join(target,'plugins/packages/event-fixture/source/src/Events.hs');
  let source=fs.readFileSync(plugin,'utf8');
- source=source
-   .replace('pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply question)] (Cursor config)))','error "Polling must not run in the wait-only slice"');
+ source=source.replace('dispatchQuestion config _ = pure (Right (Cursor config))',
+  'dispatchQuestion config (EventDispatch _ (Request question)) = if question == "Retry dispatch" then pure (Left (FetchError "synthetic refusal")) else pure (Right (Cursor config))');
+ source=source.replace('pollUpdates config (EventPoll (WaitId identity) (Request question) _) =\n  pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply question)] (Cursor config)))',
+  `pollUpdates config (EventPoll (WaitId identity) (Request question) prior) =
+  case (question,prior) of
+    ("Auto dispatch",Just (Cursor _)) -> pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply "with-cursor")] (Cursor config)))
+    ("Auto poll",Nothing) -> pure (Right (EventBatch [EventArrival (EventIdentity identity) (Reply "without-cursor")] (Cursor config)))
+    ("Fail poll",_) -> pure (Left (FetchError "synthetic poll failure"))
+    ("Auto dispatch",_) -> pure (Left (FetchError "expected Some cursor"))
+    ("Auto poll",_) -> pure (Left (FetchError "expected None cursor"))
+    _ -> pure (Right (EventBatch [] (Cursor config)))`);
  fs.writeFileSync(plugin,source);
  fs.writeFileSync(path.join(target,'src/Conversations.hs'),`{-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
 module Conversations where
@@ -49,6 +59,20 @@ conversation = A.arr (const (Events.makeRequest "Update please")) A.>>> awaitRep
   A.>>> A.arr (\\(ReceivedReply source reply) -> case source of
     ManualReply surface -> surface <> ":" <> Events.replyText reply
     ProviderReply binding (EventIdentity identity) -> binding.instanceName <> ":" <> identity <> ":" <> Events.replyText reply)
+automatic :: Flow () Text
+automatic = A.arr (const (Events.makeRequest "Auto dispatch")) A.>>> awaitReply reference
+  A.>>> A.arr (\\(ReceivedReply source reply) -> case source of
+    ProviderReply _ _ -> Events.replyText reply
+    _ -> "wrong origin")
+autoPollOnly :: Flow () Text
+autoPollOnly = A.arr (const (Events.makeRequest "Auto poll")) A.>>> awaitReply (Updates.updates Connectors.updates)
+  A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)
+pollFailure :: Flow () Text
+pollFailure = A.arr (const (Events.makeRequest "Fail poll")) A.>>> awaitReply (Updates.updates Connectors.updates)
+  A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)
+retryDispatch :: Flow () Text
+retryDispatch = A.arr (const (Events.makeRequest "Retry dispatch")) A.>>> awaitReply reference
+  A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)
 pollOnly :: Flow () Text
 pollOnly = A.arr (const (Events.makeRequest "Update please")) A.>>> awaitReply (Updates.updates Connectors.updates)
   A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)
@@ -78,6 +102,10 @@ import qualified Schema
  fs.writeFileSync(path.join(draft.path,'change/Evolution.hs'),imports+`evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) (edit (Rationale "Synthetic event waits" []) $ do
   createInteractiveRecipe (RecipeId "conversation") (withEvents [event (Updates.question Connectors.updates)] Flows.conversation)
+  createInteractiveRecipe (RecipeId "automatic") (withEvents [event (Updates.question Connectors.updates)] Flows.automatic)
+  createInteractiveRecipe (RecipeId "autoPollOnly") (withEvents [event (Updates.updates Connectors.updates)] Flows.autoPollOnly)
+  createInteractiveRecipe (RecipeId "pollFailure") (withEvents [event (Updates.updates Connectors.updates)] Flows.pollFailure)
+  createInteractiveRecipe (RecipeId "retryDispatch") (withEvents [event (Updates.question Connectors.updates)] Flows.retryDispatch)
   createInteractiveRecipe (RecipeId "pollOnly") (withEvents [event (Updates.updates Connectors.updates)] Flows.pollOnly)
   createInteractiveRecipe (RecipeId "badRequest") (withEvents [event (Updates.question Connectors.updates)] Flows.badRequest)
   createInteractiveRecipe (RecipeId "mixed") Flows.mixed)
@@ -112,6 +140,33 @@ evolution = prepare (pure ()) (edit (Rationale "Synthetic event waits" []) $ do
  assert.equal(completed.waits[0].dispatch,'completed','Manual fulfil changed dispatch state');
  runtime(['flow','fulfil',pollOnly.id,'--reply','{"answer":"Manual too"}']);pass();
  assert.equal(show(pollOnly.id).status,'completed');
+ const automatic=cli(['flow','start','automatic']).result;
+ const autoPoll=cli(['flow','start','autoPollOnly']).result;
+ const retrying=cli(['flow','start','retryDispatch']).result;
+ const pollFailing=cli(['flow','start','pollFailure']).result;
+ const firstAutomaticPass=pass();
+ const retryVisit=firstAutomaticPass.result.visits.find(x=>x.id===pollFailing.id);
+ assert.equal(retryVisit.outcome,'poll-failed');
+ assert.ok(retryVisit.retryAt);
+ assert.equal(show(pollFailing.id).waits[0].polling.consecutiveFailures,1);
+ assert.equal(show(pollFailing.id).waits[0].polling.nextAttempt,retryVisit.retryAt);
+ runtime(['flow','cancel',pollFailing.id]);
+ assert.equal(show(automatic.id).waits[0].dispatch,'completed');
+ assert.equal(show(autoPoll.id).status,'completed','--once did not consume a freshly polled reply');
+ assert.match(show(autoPoll.id).result,/without-cursor/);
+ assert.equal(show(autoPoll.id).waits[0].dispatch,'not required');
+ assert.ok(show(autoPoll.id).waits[0].adapterCursor);
+ assert.equal(show(retrying.id).waits[0].dispatch,'started');
+ assert.ok(show(retrying.id).waits[0].dispatchBlocked.length);
+ runtime(['flow','retry',retrying.id]);
+ assert.equal(show(retrying.id).waits[0].dispatch,'pending');
+ pass();
+ assert.equal(show(automatic.id).status,'completed');
+ assert.match(show(automatic.id).result,/with-cursor/);
+ assert.equal(show(automatic.id).deliveries[0].origin.kind,'provider');
+ assert.equal(show(retrying.id).waits[0].dispatch,'started','Waiting dispatch-only retry was skipped');
+ assert.ok(show(retrying.id).waits[0].dispatchBlocked.length);
+ runtime(['flow','cancel',retrying.id]);
  const fix=cli(['evolution','new','authorize-mixed']).result;
  fs.writeFileSync(path.join(fix.path,'change/Evolution.hs'),imports+`evolution :: Evolution Schema.Root
 evolution = prepare (pure ()) (edit (Rationale "Authorize mixed event wait" []) $ do

@@ -21,7 +21,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Protocol.Interactive (eventWaitRequest)
 import Kyyn.Porcelain.Capability.FlowEvents
-import Kyyn.Porcelain.Capability.FlowWorker (WorkerVisit(..))
+import Kyyn.Porcelain.Capability.FlowWorker (WorkerVisit(..), combineVisits)
 import Kyyn.Porcelain.Capability.FlowStore
 import Kyyn.Porcelain.Capability.FlowPreparation (FlowBundle(..), PreparedFlowEntry(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedEvent(..), ConfiguredConnector(..))
@@ -30,7 +30,7 @@ import Kyyn.Porcelain.Interpreter.FlowLocks (tryFlowAdapterLock)
 import Kyyn.Porcelain.Protocol.EventBindings (checkEventWait, resolveEventInstance)
 import Kyyn.Types.EventWait (EventWaitRequest(..))
 import Kyyn.Types.KnowledgeBase (InteractionBindings(..))
-import Kyyn.Types.Plugin (RepeatSafety(..), Seconds(..))
+import Kyyn.Types.Plugin (RepeatSafety(..))
 
 -- Adapter ownership never nests a journal lock. Results are committed before
 -- ownership is released, including when cancellation closes the wait in-flight.
@@ -52,7 +52,7 @@ runFlowEvents kb = interpret $ \_ (ServiceEvents identity) -> do
       readInstance identity >>= \case
         Just current | active current -> do
           outcomes <- forM [wait.waitId | wait <- current.waits, actionable now wait] (service identity)
-          pure (EventVisit (if any ((== Blocked) . (.activity)) outcomes then Blocked else if any ((== Advanced) . (.activity)) outcomes then Advanced else NoWork) (any (.received) outcomes))
+          pure (EventVisit (combineVisits (map (.activity) outcomes)) (any (.received) outcomes))
         _ -> pure (EventVisit NoWork False)
     service identity key = do
       now <- currentTime
@@ -69,9 +69,9 @@ runFlowEvents kb = interpret $ \_ (ServiceEvents identity) -> do
                     (config,event) <- resolveEventInstance reference bundle.plugins
                     pure (request,config,event) of
                       Left problems -> block identity key problems
-                      Right (request,ConfiguredConnector _ _ _ (CheckedValue _ config),PreparedEvent _ _ (Seconds interval) input reply cursor poll dispatch) ->
+                      Right (request,ConfiguredConnector _ _ _ (CheckedValue _ config),PreparedEvent _ _ interval input reply cursor poll dispatch) ->
                         if Polling.pollDue now wait then do
-                          started <- beginPoll identity key now (fromInteger interval)
+                          started <- beginPoll identity key now interval
                           case started of
                             Right True -> catchError @Failure.OperationalFailure
                               (do
@@ -85,7 +85,7 @@ runFlowEvents kb = interpret $ \_ (ServiceEvents identity) -> do
                                       checkedCursor <- encodeValue (contractShape cursor) nextCursor
                                       case concat [problems | Left problems <- checkedCursor : checkedReplies] of
                                         [] -> completePoll identity key arrivals nextCursor >>= \case
-                                          Right queued -> pure (EventVisit Advanced queued)
+                                          Right queued -> pure (EventVisit (if queued then Advanced else NoWork) queued)
                                           Left problem -> pollFailure identity key [errorDiagnostic "flow.poll" (show problem)]
                                         problems -> pollFailure identity key problems)
                               (\_ problem -> pollFailure identity key [Failure.operationalDiagnostic problem])
@@ -123,4 +123,12 @@ runFlowEvents kb = interpret $ \_ (ServiceEvents identity) -> do
     block identity key problems = blockDispatch identity key problems >>= \case
       Left _ -> pure (EventVisit Blocked False)
       Right () -> pure (EventVisit Blocked False)
-    pollFailure identity key problems = failPoll identity key problems >> pure (EventVisit Blocked False)
+    pollFailure identity key problems = do
+      _ <- failPoll identity key problems
+      current <- readInstance identity
+      let due = do
+            item <- current
+            wait <- find ((== key) . (.waitId)) item.waits
+            state <- wait.adapter
+            state.polling.nextAttempt
+      pure (EventVisit (maybe NoWork PollRetry due) False)

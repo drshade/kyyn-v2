@@ -6,7 +6,8 @@ module Kyyn.Porcelain.Capability.FlowStore
   ) where
 
 import Kyyn.Domain.RecipeRunId (RecipeRunId)
-import Data.Time (UTCTime, NominalDiffTime)
+import Data.Time (UTCTime)
+import Kyyn.Types.Plugin (Seconds)
 import Kyyn.Types.EventIdentity (EventIdentity)
 import Data.Aeson (Value)
 import Data.Text (Text)
@@ -28,7 +29,7 @@ data FlowStore :: Effect where
   BeginDispatch :: FlowInstanceId -> Text -> FlowStore m (Either FlowStoreProblem Bool)
   CompleteDispatch :: FlowInstanceId -> Text -> Value -> FlowStore m (Either FlowStoreProblem ())
   BlockDispatch :: FlowInstanceId -> Text -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem ())
-  BeginPoll :: FlowInstanceId -> Text -> UTCTime -> NominalDiffTime -> FlowStore m (Either FlowStoreProblem Bool)
+  BeginPoll :: FlowInstanceId -> Text -> UTCTime -> Seconds -> FlowStore m (Either FlowStoreProblem Bool)
   CompletePoll :: FlowInstanceId -> Text -> [(EventIdentity,Value)] -> Value -> FlowStore m (Either FlowStoreProblem Bool)
   FailPoll :: FlowInstanceId -> Text -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem ())
   ListInstances :: FlowStore m [FlowInstance]
@@ -107,7 +108,7 @@ completeDispatch identity wait = send . CompleteDispatch identity wait
 blockDispatch :: FlowStore :> es => FlowInstanceId -> Text -> [Diagnostic] -> Eff es (Either FlowStoreProblem ())
 blockDispatch identity wait = send . BlockDispatch identity wait
 
-beginPoll :: FlowStore :> es => FlowInstanceId -> Text -> UTCTime -> NominalDiffTime -> Eff es (Either FlowStoreProblem Bool)
+beginPoll :: FlowStore :> es => FlowInstanceId -> Text -> UTCTime -> Seconds -> Eff es (Either FlowStoreProblem Bool)
 beginPoll identity key now = send . BeginPoll identity key now
 completePoll :: FlowStore :> es => FlowInstanceId -> Text -> [(EventIdentity,Value)] -> Value -> Eff es (Either FlowStoreProblem Bool)
 completePoll identity key arrivals = send . CompletePoll identity key arrivals

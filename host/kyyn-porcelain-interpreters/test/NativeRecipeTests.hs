@@ -2,12 +2,15 @@
 -- executable fixes compilation; selecting any other guest mode is rejected.
 -- An empty captured evidence index supplies the nested connector callback.
 -- Interactive attempts use fresh guest processes and the native journal; after
--- suspension any repeated connector read fails the test.
-{-# LANGUAGE DuplicateRecordFields, GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
+-- suspension any repeated connector read fails the test. Event adapters use an
+-- injected clock and synthetic callbacks to test pacing, failures and ingress.
+{-# LANGUAGE LambdaCase, DuplicateRecordFields, GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
 import Kyyn.Types.KnowledgeBase (Lifetime(..), InteractionBindings(..), ChildReference(..), EventReference(EventReference))
-import Kyyn.Porcelain.Capability.FlowEvents (dispatchEvents)
+import Kyyn.Porcelain.Capability.FlowEvents (serviceEvents, EventVisit(..))
+import Kyyn.Plumbing.Capability.Clock (Clock(..))
+import Data.Time (UTCTime, addUTCTime)
 import Kyyn.Porcelain.Capability.PluginEvent (PluginEvent(..))
 import Kyyn.Porcelain.Interpreter.FlowEvents (runFlowEvents)
 import Kyyn.Types.Plugin (RepeatSafety(..))
@@ -379,10 +382,12 @@ main = do
           [Fact (FactId "event") (R.ClosedRecipe (Interactive (InteractionBindings [] [eventReference])) (FlowEntryRef "Flows.eventWaiting"))]
           (R.RecipeId "event") (Just "\"Question\"")
     eventReady <- right eventPrepared >>= right
-    let adapterPass safety fault selectedIdentity = runEff . runFailure . runFileSystemIO scope
+    let adapterPass safety fault selectedIdentity = fmap (fmap (.activity)) (eventPassAt 0 safety fault selectedIdentity)
+        eventPassAt seconds safety fault selectedIdentity = runEff . runFailure . runFileSystemIO scope
+          . fixedClock (addUTCTime seconds fixtureTime)
           . runDhallHandling . runDocumentPersistenceIO . runFlowStore kb
           . dispatchMetadata safety fault . syntheticDispatch fault selectedIdentity . runFlowEvents kb $
-            dispatchEvents selectedIdentity
+            serviceEvents selectedIdentity
         newEvent key = do
           item <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
           _ <- visit False item.instanceId
@@ -413,6 +418,7 @@ main = do
         done <- adapterState dispatchIdentity
         unless (done.dispatch == Instance.DispatchCompleted && done.cursor == Just (String "10"))
           (fail "Successful dispatch did not retain cursor")
+        _ <- adapterPass safety "poll-empty" dispatchIdentity >>= right
         again <- adapterPass safety "forbidden" dispatchIdentity >>= right
         unless (again == NoWork) (fail "Completed dispatch repeated")
         _ <- store (cancelInstance dispatchIdentity Instance.ThisFlow) >>= right >>= right
@@ -438,6 +444,45 @@ main = do
       unless (saved.cursor == Just (String "10")) (fail "Closed wait discarded dispatch cursor")
       ignored <- adapterPass SafeToRepeat "forbidden" dispatchIdentity >>= right
       unless (ignored == NoWork) (fail "Closed wait invoked adapter")
+    Foldable.forM_ ["poll-fail","poll-operational","poll-bad","poll-cursor"] $ \fault -> do
+      (pollIdentity,_) <- newEvent (Text.pack fault)
+      _ <- adapterPass SafeToRepeat "success" pollIdentity >>= right
+      failedPoll <- eventPassAt 0 SafeToRepeat fault pollIdentity >>= right
+      unless (failedPoll.activity == PollRetry (addUTCTime 2 fixtureTime) && not failedPoll.received) (fail "Poll failure was not reported")
+      afterFailure <- inspect pollIdentity
+      savedPoll <- adapterState pollIdentity
+      unless (null afterFailure.deliveries && savedPoll.cursor == Just (String "10") && savedPoll.polling.consecutiveFailures == 1)
+        (fail "Invalid batch advanced cursor or partially published arrivals")
+      notDue <- eventPassAt 1 SafeToRepeat "forbidden" pollIdentity >>= right
+      unless (notDue.activity == NoWork) (fail "Poll ran before its persisted due time")
+      atDue <- eventPassAt 2 SafeToRepeat "poll-conflicts" pollIdentity >>= right
+      unless (atDue.activity == Advanced && atDue.received) (fail "Poll did not recover at declared interval")
+      savedBatch <- inspect pollIdentity
+      unless (map (.outcome) savedBatch.deliveries == [Nothing,Just Instance.Conflicting])
+        (fail "Provider duplicate/conflicting identity handling failed")
+      recovered <- adapterState pollIdentity
+      unless (recovered.cursor == Just (String "11") && recovered.polling.consecutiveFailures == 0 && null recovered.polling.problems)
+        (fail "Successful poll did not reset error state with its cursor")
+      duplicateBatch <- eventPassAt 4 SafeToRepeat "poll-conflicts" pollIdentity >>= right
+      unless (not duplicateBatch.received) (fail "Repeated batch queued duplicate deliveries")
+      repeatedBatch <- inspect pollIdentity
+      unless (length repeatedBatch.deliveries == 2) (fail "Repeated poll grew duplicate history")
+      _ <- visit False pollIdentity
+      afterPoll <- inspect pollIdentity
+      unless (case afterPoll.status of Instance.Finished Instance.Completed{} -> True; _ -> False)
+        (fail "Provider arrival did not resume the real guest")
+    Foldable.forM_ ["poll-cancel","poll-manual"] $ \fault -> do
+      (pollIdentity,_) <- newEvent (Text.pack fault)
+      _ <- adapterPass SafeToRepeat "success" pollIdentity >>= right
+      _ <- eventPassAt 0 SafeToRepeat fault pollIdentity >>= right
+      raceResult <- inspect pollIdentity
+      savedPoll <- adapterState pollIdentity
+      unless (savedPoll.cursor == Just (String "11")) (fail "Closed wait lost poll cursor")
+      unless (if fault == "poll-cancel" then map (.outcome) raceResult.deliveries == [Just Instance.ClosedWait]
+        else case raceResult.waits of [w] -> w.waitStatus == Instance.Answered (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "Manual") && map (.outcome) raceResult.deliveries == [Just Instance.Accepted,Just Instance.Conflicting]; _ -> False)
+        (fail "Poll result overwrote cancellation or manual reply")
+      noClosedPoll <- eventPassAt 10 SafeToRepeat "forbidden" pollIdentity >>= right
+      unless (noClosedPoll.activity == NoWork) (fail "Closed wait was polled")
     Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply eventReference (EventIdentity "provider-event")),
       ("provider-first",Instance.ProviderReply eventReference (EventIdentity "provider-event"),Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
       eventHosted <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
@@ -710,6 +755,9 @@ dispatchMetadata :: FlowStore :> es => RepeatSafety -> String -> Eff es a -> Eff
 dispatchMetadata safety fault = interpose $ \_ operation -> case operation of
   ReadExecutionBundle identity -> fmap (fmap (\bundle -> bundle {FlowPreparation.plugins = map plugin bundle.plugins})) (readExecutionBundle identity)
   CompleteDispatch _ _ _ | fault == "commit" -> pure (Left (Instance.InvalidTransition "injected completion failure"))
+  BeginPoll identity key now interval -> beginPoll identity key now interval
+  CompletePoll identity key arrivals cursor -> completePoll identity key arrivals cursor
+  FailPoll identity key problems -> failPoll identity key problems
   ReadInstance identity -> readInstance identity
   BeginDispatch identity key -> beginDispatch identity key
   CompleteDispatch identity key value -> completeDispatch identity key value
@@ -730,19 +778,49 @@ dispatchMetadata safety fault = interpose $ \_ operation -> case operation of
 
 syntheticDispatch :: (FlowStore :> es, Failure :> es, IOE :> es)
   => String -> Instance.FlowInstanceId -> Eff (PluginEvent : es) a -> Eff es a
-syntheticDispatch fault identity = interpret $ \_ (DispatchEvent _ _ waitIdentity payload) -> do
-  current <- readInstance identity >>= maybe (error "Missing dispatch instance") pure
-  selected <- case current.waits of [value] -> pure value; _ -> error "Missing dispatch wait"
-  liftIO $ unless (waitIdentity == Instance.flowInstanceIdText identity <> ":" <> selected.waitId && payload == String "Question")
-    (fail "Dispatch changed stable identity or request")
-  case fault of
-    "forbidden" -> error "Unexpected adapter invocation"
-    "fetch" -> pure (Left [errorDiagnostic "flow.dispatch-failed" "provider rejected request"])
-    "operational" -> raiseFailure (Failure.RuntimeUnavailable (Failure.ProcessDiagnostic Failure.ReadOutput "injected failure"))
-    "cursor" -> pure (Right (String "invalid cursor"))
-    "cancel" -> cancelInstance identity Instance.ThisFlow >> pure (Right (String "10"))
-    "manual" -> do
-      _ <- queueDelivery identity "during-dispatch" selected.waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "Answer")
-      _ <- resolveDelivery identity "during-dispatch" Instance.Accepted
-      pure (Right (String "10"))
-    _ -> pure (Right (String "10"))
+syntheticDispatch fault identity = interpret $ \_ -> \case
+  DispatchEvent _ _ waitIdentity payload -> do
+    current <- readInstance identity >>= maybe (error "Missing dispatch instance") pure
+    selected <- case current.waits of [value] -> pure value; _ -> error "Missing dispatch wait"
+    liftIO $ unless (waitIdentity == Instance.flowInstanceIdText identity <> ":" <> selected.waitId && payload == String "Question")
+      (fail "Dispatch changed stable identity or request")
+    case fault of
+      "forbidden" -> error "Unexpected adapter invocation"
+      "fetch" -> pure (Left [errorDiagnostic "flow.dispatch-failed" "provider rejected request"])
+      "operational" -> raiseFailure (Failure.RuntimeUnavailable (Failure.ProcessDiagnostic Failure.ReadOutput "injected failure"))
+      "cursor" -> pure (Right (String "invalid cursor"))
+      "cancel" -> cancelInstance identity Instance.ThisFlow >> pure (Right (String "10"))
+      "manual" -> do
+        _ <- queueDelivery identity "during-dispatch" selected.waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "Answer")
+        _ <- resolveDelivery identity "during-dispatch" Instance.Accepted
+        pure (Right (String "10"))
+      _ -> pure (Right (String "10"))
+  PollEvent _ _ waitIdentity payload cursor -> do
+    current <- readInstance identity >>= maybe (error "Missing poll instance") pure
+    selected <- case current.waits of [value] -> pure value; _ -> error "Missing poll wait"
+    liftIO $ unless (waitIdentity == Instance.flowInstanceIdText identity <> ":" <> selected.waitId && payload == String "Question"
+      && cursor == (selected.adapter >>= (.cursor))) (fail "Poll changed identity, request or cursor")
+    liftIO $ unless (case selected.adapter of
+      Just adapter -> adapter.polling.lastAttempt /= Nothing && adapter.polling.nextAttempt /= Nothing
+      _ -> False) (fail "Poll invoked before attempt was persisted")
+    let arrival value = (EventIdentity "same-event",value)
+        batch = ([arrival (String "Answer")],String "11")
+    case fault of
+      "forbidden" -> error "Unexpected poll invocation"
+      "poll-empty" -> pure (Right ([],String "11"))
+      "poll-fail" -> pure (Left [errorDiagnostic "fixture.poll" "failed"])
+      "poll-operational" -> raiseFailure (Failure.RuntimeUnavailable (Failure.ProcessDiagnostic Failure.ReadOutput "poll failure"))
+      "poll-bad" -> pure (Right ([arrival (String "Answer"),(EventIdentity "invalid",Number 7)],String "11"))
+      "poll-cursor" -> pure (Right ([arrival (String "Answer")],String "invalid"))
+      "poll-conflicts" -> pure (Right (map arrival [String "Answer",String "Changed",String "Answer"],String "11"))
+      "poll-cancel" -> cancelInstance identity Instance.ThisFlow >> pure (Right batch)
+      "poll-manual" -> do
+        _ <- queueDelivery identity "during-poll" selected.waitId (Instance.ReceivedFrom (Instance.ManualReply "cli")) (String "Manual")
+        _ <- resolveDelivery identity "during-poll" Instance.Accepted
+        pure (Right batch)
+      _ -> pure (Right batch)
+
+fixtureTime :: UTCTime
+fixtureTime = read "2026-11-24 12:00:00 UTC"
+fixedClock :: UTCTime -> Eff (Clock : es) a -> Eff es a
+fixedClock time = interpret $ \_ CurrentTime -> pure time

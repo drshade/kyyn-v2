@@ -5,6 +5,7 @@ import Control.Concurrent (threadDelay)
 import Control.Monad (forM, when)
 import Data.List (nub)
 import Data.Time (diffUTCTime)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Kyyn.Plumbing.Capability.Clock (Clock, currentTime)
 import Kyyn.Plumbing.Interpreter.Clock (runClockIO)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
@@ -145,15 +146,15 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
         items <- listInstances
         visits <- forM (filter eligible items) $ \item -> do
           visited <- catchError @OperationalFailure (Right <$> (do
-            guest <- visitInstance item.instanceId
+            guest <- if guestEligible item then visitInstance item.instanceId else pure NoWork
             events <- serviceEvents item.instanceId
             resumed <- if events.received then visitInstance item.instanceId else pure NoWork
-            pure (if Blocked `elem` [guest,events.activity,resumed] then Blocked
-              else if Advanced `elem` [guest,events.activity,resumed] then Advanced
-              else if WriterBusy `elem` [guest,events.activity,resumed] then WriterBusy else NoWork))) (\_ problem -> pure (Left problem))
+            pure (combineVisits [guest,events.activity,resumed]))) (\_ problem -> pure (Left problem))
           pure (item.instanceId,visited)
         now <- currentTime
         latest <- listInstances
+        -- Keep checking ingress at least once per second; an earlier poll due
+        -- time only shortens that idle sleep. --once never reaches the sleep.
         let delays = [max 1000 (ceiling (diffUTCTime due now * 1000000)) |
               item <- latest, eligible item, wait <- item.waits, wait.waitStatus == Open,
               Just adapter <- [wait.adapter], null adapter.dispatchProblems,
@@ -163,9 +164,10 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
         Left problem -> pure (operationalFailure problem)
         Right (visits,idleDelay) -> do
           let messages = [Text.unpack (flowInstanceIdText identity) ++ "  " ++ either
-                (Text.unpack . (.message) . operationalDiagnostic) (Text.unpack . visitText) visited | (identity,visited) <- visits]
+                (Text.unpack . (.message) . operationalDiagnostic) visitSummary visited | (identity,visited) <- visits]
               value = object ["visits" .= [object ["id" .= flowInstanceIdText identity,
-                "outcome" .= either (const "blocked") visitText visited] | (identity,visited) <- visits]]
+                "outcome" .= either (const "blocked") visitText visited,
+                "retryAt" .= (case visited of Right (PollRetry due) -> Just due; _ -> Nothing)] | (identity,visited) <- visits]]
           if once then pure (success value (if null messages then ["No interactive flows to visit."] else messages))
           else do
             when (previous /= Just messages) (mapM_ (hPutStrLn stderr) messages)
@@ -212,6 +214,18 @@ visitText WriterBusy = "busy"
 visitText NoWork = "no-work"
 visitText Advanced = "advanced"
 visitText Blocked = "blocked"
+visitText PollRetry{} = "poll-failed"
+
+visitSummary :: WorkerVisit -> String
+visitSummary (PollRetry due) = "poll failed; will retry at " ++ iso8601Show due
+visitSummary result = Text.unpack (visitText result)
+
+guestEligible :: FlowInstance -> Bool
+guestEligible item = case item.status of
+  Runnable -> True
+  Running -> True
+  Waiting -> any ((== Nothing) . (.outcome)) item.deliveries
+  Finished{} -> False
 
 eligible :: FlowInstance -> Bool
 eligible item = case item.launch.owner of

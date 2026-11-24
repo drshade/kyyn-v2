@@ -1,12 +1,9 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent) where
 
-import Data.Aeson (Value, object, (.=), (.:), withObject)
-import Data.Aeson.Types (Parser, parseEither)
-import qualified Data.Aeson.KeyMap as Keys
-import Control.Monad (unless)
-import Data.List (sort)
-import Kyyn.Types.EventIdentity (EventIdentity(..))
+import Data.Aeson (object, (.=))
+import Data.Aeson.Types (parseEither)
+import Kyyn.Porcelain.Protocol.PluginEvent (parseEventBatch)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -36,12 +33,4 @@ runPluginEvent = interpret $ \_ -> \case
       (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request,"cursor" .= encodedCursor]]) answerNetwork
     pure $ case result of
       Left (FetchError message) -> Left [errorDiagnostic "flow.poll-failed" (Text.unpack message)]
-      Right value -> either (Left . pure . errorDiagnostic "flow.poll-result") Right (parseEither parseBatch value)
-
-parseBatch :: Value -> Parser ([(EventIdentity,Value)],Value)
-parseBatch = withObject "event batch" $ \fields -> do
-  unless (sort (Keys.keys fields) == ["arrivals","cursor"]) (fail "Expected arrivals and cursor")
-  arrivals <- fields .: "arrivals" >>= traverse (withObject "event arrival" (\entry -> do
-    unless (sort (Keys.keys entry) == ["identity","value"]) (fail "Expected identity and value")
-    (,) <$> (EventIdentity <$> entry .: "identity") <*> entry .: "value"))
-  (,) arrivals <$> fields .: "cursor"
+      Right value -> either (Left . pure . errorDiagnostic "flow.poll-result") Right (parseEither parseEventBatch value)

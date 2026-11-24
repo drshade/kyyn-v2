@@ -10,7 +10,8 @@ library
   other-modules: Kyyn.Porcelain.Protocol.ModelConfiguration
     Kyyn.Porcelain.Protocol.CapturedBlobs
     Kyyn.Porcelain.Protocol.EventBindings Kyyn.Porcelain.Protocol.PluginDescription
-  exposed-modules: Kyyn.Porcelain.Interpreter.Inspection
+  exposed-modules: Kyyn.Porcelain.Protocol.PluginEvent
+    Kyyn.Porcelain.Interpreter.Inspection
     Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.PluginInstallation
     Kyyn.Porcelain.Interpreter.PluginDocumentation
@@ -173,6 +174,6 @@ test-suite flow-instances
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded
-  build-depends: base, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
+  build-depends: time, base, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
     kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core, aeson, bytestring, text,
     temporary, async

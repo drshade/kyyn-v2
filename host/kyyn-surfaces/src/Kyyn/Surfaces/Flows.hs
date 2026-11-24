@@ -3,6 +3,7 @@ module Kyyn.Surfaces.Flows (FlowValues(..), waitLabel, instanceValue, instanceLi
 
 import qualified Data.Aeson.KeyMap as Keys
 import Data.Foldable (toList)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.Aeson (Value(..), object, (.=), encode)
 import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.Text.Encoding as Text
@@ -68,7 +69,7 @@ instanceLines item interrupted descriptors input result problems =
   ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && (case wait.kind of ChildWait{} -> False; _ -> True)) item.waits] ++
   ["Dispatch blocked [" ++ Text.unpack wait.waitId ++ "]: " ++ Text.unpack problem.message |
     wait <- item.waits, adapter <- maybe [] pure wait.adapter, problem <- adapter.dispatchProblems] ++
-  ["Poll [" ++ Text.unpack wait.waitId ++ "]: " ++ show adapter.polling.consecutiveFailures ++ " consecutive failures; next " ++ show adapter.polling.nextAttempt |
+  ["Poll [" ++ Text.unpack wait.waitId ++ "]: " ++ show adapter.polling.consecutiveFailures ++ " consecutive failures; next " ++ maybe "not scheduled" iso8601Show adapter.polling.nextAttempt |
     wait <- item.waits, adapter <- maybe [] pure wait.adapter, adapter.polling.lastAttempt /= Nothing] ++
   ["Poll failed [" ++ Text.unpack wait.waitId ++ "]: " ++ Text.unpack problem.message |
     wait <- item.waits, adapter <- maybe [] pure wait.adapter, problem <- adapter.polling.problems] ++

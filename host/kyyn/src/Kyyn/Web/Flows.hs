@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Web.Flows (flowIndex, flowPage, flowLink) where
 
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Control.Monad (when, forM_)
 import Data.List (find)
 import Data.Aeson (Value, encode)
@@ -47,8 +48,8 @@ flowPage item interrupted values children descriptions = document (recipe item) 
     forM_ wait.adapter $ \state -> do
       p_ (toHtml ("Dispatch: " <> dispatchText state.dispatch))
       diagnostics state.dispatchProblems
-      mapM_ (\time -> p_ (toHtml ("Last poll: " ++ show time))) state.polling.lastAttempt
-      mapM_ (\time -> p_ (toHtml ("Next poll: " ++ show time))) state.polling.nextAttempt
+      mapM_ (\time -> p_ (toHtml ("Last poll: " ++ iso8601Show time))) state.polling.lastAttempt
+      mapM_ (\time -> p_ (toHtml ("Next poll: " ++ iso8601Show time))) state.polling.nextAttempt
       when (state.polling.consecutiveFailures > 0) $ p_ (toHtml ("Consecutive poll failures: " ++ show state.polling.consecutiveFailures))
       diagnostics state.polling.problems
       forM_ state.cursor $ \value -> details_ $ summary_ "Adapter cursor" >> json value
