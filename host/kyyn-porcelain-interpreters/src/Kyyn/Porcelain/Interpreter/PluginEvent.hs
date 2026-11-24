@@ -2,6 +2,7 @@
 module Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent) where
 
 import Data.Aeson (object, (.=))
+import Kyyn.Plumbing.Capability.Deadline (Deadline, withinMicroseconds)
 import Data.Aeson.Types (parseEither)
 import Kyyn.Porcelain.Protocol.PluginEvent (parseEventBatch)
 import qualified Data.Text as Text
@@ -19,18 +20,26 @@ import Kyyn.Porcelain.Capability.PluginEvent
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Plugin (FetchError(..))
 
-runPluginEvent :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es, Failure :> es)
+runPluginEvent :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es, Failure :> es, Deadline :> es)
   => Eff (PluginEvent : es) a -> Eff es a
 runPluginEvent = interpret $ \_ -> \case
-  DispatchEvent entry config identity request -> do
-    result <- conversationWithBody (decodeHostFrame decodePluginHostCall) entry
-      (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request]]) answerNetwork
-    pure (either (\(FetchError message) -> Left [errorDiagnostic "flow.dispatch-failed" (Text.unpack message)]) Right result)
+  DispatchEvent entry config identity request -> invoke "flow.dispatch-failed" entry
+    (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request]])
   PollEvent entry config identity request cursor -> do
     let encodedCursor = maybe (object ["tag" .= ("None" :: Text.Text)])
           (\value -> object ["tag" .= ("Some" :: Text.Text),"value" .= value]) cursor
-    result <- conversationWithBody (decodeHostFrame decodePluginHostCall) entry
-      (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request,"cursor" .= encodedCursor]]) answerNetwork
-    pure $ case result of
-      Left (FetchError message) -> Left [errorDiagnostic "flow.poll-failed" (Text.unpack message)]
-      Right value -> either (Left . pure . errorDiagnostic "flow.poll-result") Right (parseEither parseEventBatch value)
+    result <- invoke "flow.poll-failed" entry
+      (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request,"cursor" .= encodedCursor]])
+    pure $ result >>= either (Left . pure . errorDiagnostic "flow.poll-result") Right . parseEither parseEventBatch
+  where
+    invoke failureCode entry input = do
+      result <- withinMicroseconds eventAdapterDeadlineMicroseconds
+        (conversationWithBody (decodeHostFrame decodePluginHostCall) entry input answerNetwork)
+      pure $ case result of
+        Nothing -> Left [errorDiagnostic "flow.adapter-timeout" "Event adapter exceeded its 60-second deadline."]
+        Just (Left (FetchError message)) -> Left [errorDiagnostic failureCode (Text.unpack message)]
+        Just (Right value) -> Right value
+
+-- Product policy, shared by dispatch and poll; not per-plugin configuration.
+eventAdapterDeadlineMicroseconds :: Int
+eventAdapterDeadlineMicroseconds = 60 * 1000000

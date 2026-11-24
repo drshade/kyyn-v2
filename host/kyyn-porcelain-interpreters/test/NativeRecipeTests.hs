@@ -4,6 +4,7 @@
 -- Interactive attempts use fresh guest processes and the native journal; after
 -- suspension any repeated connector read fails the test. Event adapters use an
 -- injected clock and synthetic callbacks to test pacing, failures and ingress.
+-- Short injected deadlines also exercise real subprocess cleanup and Waiting.
 {-# LANGUAGE LambdaCase, DuplicateRecordFields, GHC2021, GADTs, OverloadedStrings, OverloadedRecordDot, DataKinds, TypeFamilies #-}
 module Main (main) where
 
@@ -17,7 +18,19 @@ import Kyyn.Types.Plugin (RepeatSafety(..))
 import Kyyn.Types.EventIdentity (EventIdentity(..))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
-import Control.Monad (unless, void, when)
+import Control.Monad (unless, void, when, forM)
+import qualified Control.Exception as Exception
+import System.IO.Error (isDoesNotExistError)
+import System.Posix.Signals (signalProcess, nullSignal)
+import System.Posix.Types (ProcessID)
+import qualified System.Timeout as Timeout
+import Kyyn.Plumbing.Capability.Deadline (Deadline(..), withinMicroseconds)
+import Kyyn.Plumbing.Interpreter.Deadline (runDeadlineIO)
+import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportWith)
+import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
+import Kyyn.Plumbing.Interpreter.PluginInteraction (runWaitingIO)
+import Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent)
+import Kyyn.Porcelain.Interpreter.FlowLocks (tryFlowAdapterLock)
 import Data.Aeson (Value(..), object, (.=), (.:), withObject, toJSON, encode)
 import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
@@ -28,7 +41,7 @@ import qualified Data.Text.Encoding as TextEncoding
 import qualified Data.Text as Text
 import Effectful (Eff, IOE, DispatchOf, Dispatch(..), runEff, liftIO, (:>))
 import Effectful.Dispatch.Dynamic (interpret, interpose, localSeqUnlift)
-import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink, doesPathExist)
+import System.Directory (canonicalizePath, createDirectoryLink, removeDirectoryLink, createDirectoryIfMissing, createFileLink, doesPathExist, getPermissions, setPermissions, setOwnerExecutable)
 import System.Environment (getArgs)
 import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
@@ -62,7 +75,7 @@ import Kyyn.Domain.CompiledEntry (entryProgram, compiledEntries, invocationName)
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournalIdentity(..))
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournal)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Plumbing.Protocol.Frame (Frame, jsonFrame)
+import Kyyn.Plumbing.Protocol.Frame (Frame(..), jsonFrame, encodeFrame)
 import Kyyn.Plumbing.Protocol.Tool (encodeFlowValue, decodeFlowValue, FlowControlCall(..))
 import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, executeRecordedRecipeProgram, executeToolProgram)
 import Kyyn.Porcelain.Capability.RecipeRunStore
@@ -86,7 +99,7 @@ import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
 import Kyyn.Types.Wire (parseWire)
-import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..), executeEntry)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..), executeEntry, executeGuest, executeCompiled)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestInspection (describeGuest)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -483,6 +496,61 @@ main = do
         (fail "Poll result overwrote cancellation or manual reply")
       noClosedPoll <- eventPassAt 10 SafeToRepeat "forbidden" pollIdentity >>= right
       unless (noClosedPoll.activity == NoWork) (fail "Closed wait was polled")
+    -- Real subprocesses exercise silence, long Waiting and a blocked HTTP callback.
+    -- The deadline is shortened by an injected interpreter only in this test.
+    Foldable.forM_ [False,True] $ \pollingDeadline ->
+      Foldable.forM_ ["silent","waiting","http"] $ \mode -> do
+        let deadlineKey = Text.pack ("deadline-" ++ show pollingDeadline ++ "-" ++ mode)
+        (timedIdentity,_) <- newEvent deadlineKey
+        (followingIdentity,_) <- newEvent (deadlineKey <> "-next")
+        when pollingDeadline $ do
+          _ <- adapterPass SafeToRepeat "success" timedIdentity >>= right
+          _ <- adapterPass SafeToRepeat "success" followingIdentity >>= right
+          pure ()
+        httpEntered <- newEmptyMVar
+        httpBlocked <- newEmptyMVar
+        let childPath = directory ++ "/" ++ Text.unpack deadlineKey ++ ".sh"
+            pidPath = childPath ++ ".pid"
+            callback = if mode == "http"
+              then object ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "http",
+                "method" .= String "send","arguments" .= object ["method" .= String "GET","url" .= String "https://synthetic.invalid",
+                  "headers" .= ([] :: [Value])]]
+              else object ["tag" .= String "HostRequest","id" .= String "1","capability" .= String "waiting",
+                "method" .= String "seconds","arguments" .= object ["seconds" .= String "3600"]]
+            waitingFrame = Text.unpack (TextEncoding.decodeUtf8 (Bytes.concat (encodeFrame (jsonFrame (Lazy.toStrict (encode callback))))))
+        writeFile childPath ("#!/bin/sh\nprintf '%s' \"$$\" > '" ++ pidPath ++ "'\n" ++
+          (if mode /= "silent" then "printf '%s' '" ++ waitingFrame ++ "'\n" else "") ++
+          "while read line; do :; done\n")
+        permissions <- getPermissions childPath
+        setPermissions childPath (setOwnerExecutable True permissions)
+        deadlineResult <- Timeout.timeout 10000000 $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runDeadlineIO . shortDeadlines . runWaitingIO . unexpected @SecretStore
+          . runHttpTransportWith (\_ -> putMVar httpEntered () >> takeMVar httpBlocked)
+          . runGuestExecution [("LC_ALL","C.UTF-8")] . rerouteGuest timedIdentity childPath
+          . runDhallHandling . fixedClock fixtureTime . runDocumentPersistenceIO . runFlowStore kb
+          . dispatchMetadata RequireExplicitRetry "success" . runPluginEvent . runFlowEvents kb $
+            forM [timedIdentity,followingIdentity] serviceEvents
+        reachedHttp <- not <$> isEmptyMVar httpEntered
+        unless (reachedHttp == (mode == "http")) (fail "Deadline did not exercise the expected HTTP callback")
+        visits <- maybe (fail "Deadline failed to bound callback and process cleanup") right deadlineResult
+        unless (map (.activity) visits == [if pollingDeadline then PollRetry (addUTCTime 2 fixtureTime) else Blocked,Advanced])
+          (fail ("Deadline did not continue to next instance: " ++ show visits))
+        timedAdapter <- adapterState timedIdentity
+        let timeoutProblems = if pollingDeadline then timedAdapter.polling.problems else timedAdapter.dispatchProblems
+        unless (any ((== "flow.adapter-timeout") . (.code)) timeoutProblems)
+          (fail "Timeout lost its diagnostic code")
+        unless (pollingDeadline || any ((== "flow.dispatch-uncertain") . (.code)) timeoutProblems)
+          (fail "Timed-out dispatch lost its duplicate-send warning")
+        when pollingDeadline $ unless (timedAdapter.cursor == Just (String "10") && timedAdapter.polling.consecutiveFailures == 1)
+          (fail "Poll timeout advanced cursor or lost retry state")
+        pid <- read <$> readFile pidPath :: IO ProcessID
+        alive <- Exception.try (signalProcess nullSignal pid) :: IO (Either Exception.IOException ())
+        unless (either isDoesNotExistError (const False) alive) (fail "Timed-out guest is running or unreaped")
+        unlocked <- runEff . runFailure . runDocumentPersistenceIO $ tryFlowAdapterLock kb timedIdentity (pure ())
+        unless (unlocked == Right (Just ())) (fail "Timed-out adapter retained its lock")
+        _ <- store (cancelInstance timedIdentity Instance.ThisFlow) >>= right >>= right
+        _ <- store (cancelInstance followingIdentity Instance.ThisFlow) >>= right >>= right
+        pure ()
     Foldable.forM_ [("manual-first",Instance.ManualReply "cli",Instance.ProviderReply eventReference (EventIdentity "provider-event")),
       ("provider-first",Instance.ProviderReply eventReference (EventIdentity "provider-event"),Instance.ManualReply "cli")] $ \(key,firstOrigin,secondOrigin) -> do
       eventHosted <- store (startPreparedInstance Nothing key eventReady) >>= right >>= right
@@ -824,3 +892,15 @@ fixtureTime :: UTCTime
 fixtureTime = read "2026-11-24 12:00:00 UTC"
 fixedClock :: UTCTime -> Eff (Clock : es) a -> Eff es a
 fixedClock time = interpret $ \_ CurrentTime -> pure time
+
+shortDeadlines :: (Deadline :> es, IOE :> es) => Eff es a -> Eff es a
+shortDeadlines = interpose $ \env (WithinMicroseconds duration action) -> do
+  liftIO $ unless (duration == 60000000) (fail "Event adapter did not use the fixed host-wide policy")
+  localSeqUnlift env $ \unlift -> withinMicroseconds 1000000 (unlift action)
+
+rerouteGuest :: GuestExecution :> es => Instance.FlowInstanceId -> FilePath -> Eff es a -> Eff es a
+rerouteGuest identity replacement = interpose $ \env operation -> case operation of
+  ExecuteCompiled program input -> executeCompiled program input
+  ExecuteGuest program@(CompiledProgram build _ retention) input respond -> localSeqUnlift env $ \unlift ->
+    executeGuest (if TextEncoding.encodeUtf8 (Instance.flowInstanceIdText identity <> ":") `Bytes.isInfixOf` input.metadata
+      then CompiledProgram build replacement retention else program) input (unlift . respond)
