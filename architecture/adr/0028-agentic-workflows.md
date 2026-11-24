@@ -379,8 +379,11 @@ recording.
 
 Upstream owns both execution semantics and the payload-free summary vocabulary.
 The guest uses `summaryValue . summarise` before transport. Kyyn stores that
-lossless encoding rather than defining a competing event sum. The host adds
-ordering and timing. Graph and summary values cross the restricted host/guest
+lossless encoding rather than defining a competing event sum. Alongside it the
+guest supplies the canonical operation identity for `Executing (KeyedOperation op)`
+and `Restored op`, using upstream `journalKeyValue (journalKey op occurrence)`.
+The host and browser compare that identity as an opaque value; they do not
+reproduce upstream's frame projection. The host adds ordering and timing. Graph and summary values cross the restricted host/guest
 wire profile through the existing tagged Agentic Value codec, also used for model
 values; the host unwraps it before recording. This preserves upstream nulls and
 numeric nodes without defining a second graph or observation vocabulary. Stored
@@ -391,9 +394,15 @@ and browser-served values use upstream's ordinary JSON-shaped encoding.
 -- Construction in the guest discards Event.payload without evaluating it.
 newtype FlowSummary = FlowSummary Value
 
+-- Both values come from the upstream library; no provider payload is retained.
+-- Nothing for non-keyed observations, including Executing PlainAction.
+newtype OperationIdentity = OperationIdentity Value
+data FlowObservation = FlowObservation
+  { summary :: FlowSummary, operation :: Maybe OperationIdentity }
+
 -- SDK-generated request; not an authored wire/value API.
 data ObserveFlow result where
-  ObserveFlow :: FlowSummary -> ObserveFlow ()
+  ObserveFlow :: FlowObservation -> ObserveFlow ()
 
 -- Before/build identify provenance; reading a run does not resolve them.
 -- FlowGraph denotes the complete captured graph encoding described above.
@@ -411,7 +420,7 @@ data RunEvent = RunEvent
 data SequencedRunEvent = SequencedRunEvent Natural RunEvent
 
 data RunEventBody
-  = FlowObserved FlowSummary
+  = FlowObserved FlowObservation
   | RunCompleted EvolutionId
   | RunFailed [Diagnostic]
   | RunCancelled
@@ -421,7 +430,7 @@ data RunEventBody
 
 The summary preserves occurrence, parent, node kind, labels and the upstream
 phase: `Entered`, `Returned`, `Failed`, `Cancelled`, `Selected`, `CallResolved`,
-`Suspended`, `Restored`, `Drafting`, `Turned`, `OutputRejected` or `Judged`. Each entry includes its exact
+`Suspended`, `Restored`, `Executing`, `Drafting`, `Turned`, `OutputRejected` or `Judged`. Each entry includes its exact
 total, including zero. Progress counts returns of element body roots identified
 by the published body relation, not arbitrary descendant returns. Repeat has no
 predicted total. Turns carry their index and action kind, not tool names; Judged
@@ -429,13 +438,24 @@ has no answer count, and OutputRejected has no rejection text. Call return
 outcomes distinguish completed, unknown-tool and invalid-input results. A resolved
 call can reject input without entering its body.
 
+`Executing PlainAction` and `Executing (KeyedOperation op)` mean selection for
+live execution, not proof that a callback started, delivered or completed.
+`Restored op` means a validated journal hit. Classification is per operation;
+a draft can restore one turn and select another live, and parallel branches can
+interleave both. `Entered`, `Drafting` and `CallResolved` do not classify work.
+A prefix without classification remains unclassified. Await misses suspend
+without `Executing`; empty judge batches likewise have no live operation.
+
 For an interactive recipe each resume attempt has its own recording, linked to
 its durable instance. `RunSuspended` ends that attempt while the instance waits;
 `RunReturned` reports that the guest returned without implying a draft evolution.
 Neither carries request, reply or result values. Upstream `Restored` distinguishes
 journal restoration from re-execution, and `Suspended` closes the observed scopes
-without inventing completion. The viewer stops live activity on suspension and
-shows the pending reply count. Failed recording writes stop further dispatch;
+without inventing completion. The per-attempt viewer stops live activity on suspension and
+shows the pending reply count. The interactive instance view instead retains
+one diagram across attempts, as specified by
+[ADR 0030](0030-interactive-agentic-workflows.md#continuous-interactive-observation).
+Failed recording writes stop further dispatch;
 they interrupt the attempt without replacing the instance's previous frontier
 with a logical failure. Lock-busy, blocked and cancelled preflight checks create
 no attempt recording.
@@ -574,14 +594,17 @@ the stored graph even when the source revision or build is unavailable.
 #### Viewing the same sequence live and later
 
 [ADR 0023](0023-interaction.md) owns run pages and their read-only endpoints.
-One browser state reducer consumes RunEvent records in sequence. Live viewing
+For an ordinary run or raw execution-attempt diagnostic, one browser state
+reducer consumes RunEvent records in sequence. Live viewing
 first loads the saved prefix and polls after its cursor; playback loads that same
 sequence and uses elapsed time for pacing. Pause, speed changes and scrubbing
 only change the browser's position in the recording. Refresh reconstructs state
 from the saved prefix. Duplicate deliveries are ignored by sequence; a missing
 sequence requires reading the missing page, not guessing the intervening state.
 The view shows unfinished occurrences honestly and links a completed run to its
-draft. Multiple active runs remain individually selectable.
+draft. Multiple active runs remain individually selectable. Interactive instance pages
+use the separate continuous projection in ADR 0030; they do not replace an
+embedded attempt viewer at each resume.
 
 ## Verification
 

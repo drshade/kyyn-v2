@@ -1,6 +1,7 @@
 module Kyyn.Plumbing.Protocol.Tool (ToolCall(..), JournalCall(..), FlowControlCall(..), decodeToolFrame, decodeFlowValue, encodeFlowValue, encodeJournalLookup) where
 
 import Control.Monad (unless)
+import Kyyn.Types.FlowObservation
 import Agentic.Aeson (toAeson, fromAeson)
 import qualified Kyyn.Runtime.Json as Wire
 import Kyyn.Runtime.ModelWire (valueCodec)
@@ -25,7 +26,7 @@ data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName V
   | ToolEvidenceRead PluginName ConnectorTypeName ConnectorName EvidenceId
   | ToolJudgement JudgeRequest
   | ToolModel Agentic.Conversation
-  | ToolFlowObserved Value
+  | ToolFlowObserved FlowObservation
   | ToolJournal JournalCall
   | ToolFlowControl FlowControlCall
 
@@ -42,7 +43,11 @@ decodeToolFrame = decodeFrameWith $ \capability operation arguments ->
   else if capability == "model" && operation == "turn"
   then ToolModel <$> Model.decodeRequest arguments
   else if capability == "flow" && operation == "observe"
-  then ToolFlowObserved <$> decodeFlowValue arguments
+  then ToolFlowObserved <$> withObject "flow observation" (\o -> do
+    unless (sort (Keys.keys o) == ["operation","summary"]) (fail "Unexpected observation fields")
+    summary <- o .: "summary" >>= either fail pure . Wire.decodeWith valueCodec
+    identity <- o .: "operation" >>= either fail pure . Wire.decodeWith (Wire.optionalCodec valueCodec)
+    pure (FlowObservation (FlowSummary summary) (OperationIdentity <$> identity))) arguments
   else if capability == "flow-control"
   then ToolFlowControl <$> decodeControl operation arguments
   else if capability == "flow-journal"

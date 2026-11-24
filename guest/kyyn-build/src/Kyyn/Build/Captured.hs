@@ -11,6 +11,7 @@ import Agentic.Contract (Contract)
 import Agentic.Questions (JudgeRequest, Answer)
 import qualified Agentic.Runtime as Agentic
 import Kyyn.Types.FlowControl (FlowControl)
+import Kyyn.Types.FlowObservation (FlowObservation)
 import Kyyn.Types.FlowJournal (JournalRequest)
 import Kyyn.Types.Evidence (EvidenceId, Evidence)
 import Kyyn.Types.Program (Program, Member, inject, request, (:+:))
@@ -53,7 +54,7 @@ toolCalls calls connectors methods = do
         (AppT (AppT (ConT ''Either) (ConT ''String)) (AppT ListT (ConT ''Answer)))
       model = gadt (mkName "ModelCall") [] [ConT ''Agentic.Conversation]
         (AppT (AppT (ConT ''Either) (ConT ''String)) (ConT ''Agentic.Turn))
-      observation = gadt (mkName "ObserveFlow") [] [ConT ''Agentic.Summary] (TupleT 0)
+      observation = gadt (mkName "ObserveFlow") [] [ConT ''FlowObservation] (TupleT 0)
       journal = ForallC [PlainTV (mkName "result") SpecifiedSpec] []
         (GadtC [mkName "JournalCall"] [(Bang NoSourceUnpackedness NoSourceStrictness, AppT (ConT ''JournalRequest) (VarT (mkName "result")))]
           (AppT (ConT calls) (VarT (mkName "result"))))

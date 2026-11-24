@@ -7,7 +7,7 @@ import Control.Monad (void)
 import Data.Bifunctor (first)
 import Kyyn.Porcelain.Capability.FlowJournal (FlowJournal, FlowJournalIdentity(..), lookupCompletion, saveCompletion)
 import Kyyn.Porcelain.Capability.RecipeRunStore (RecipeRunStore, RecipeRunWriter, appendRunEvent)
-import Kyyn.Domain.RecipeRun (RunEventBody(FlowObserved))
+import Kyyn.Domain.RecipeRun (RunEventBody(FlowObserved), FlowObservation)
 import Data.Coerce (coerce)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>), raise)
@@ -61,7 +61,7 @@ executeRecordedRecipeProgram writer program plugins model arguments = fmap (fmap
 
 executeInteractiveProgram :: (FlowJournal :> es, EvidenceStore :> es, PluginRead :> es,
   GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => FlowJournalIdentity -> (Value -> Eff es ()) -> (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin]
+  => FlowJournalIdentity -> (FlowObservation -> Eff es ()) -> (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin]
   -> Maybe ModelConfiguration -> Value -> Eff es (Either ProgramFailure Value)
 executeInteractiveProgram identity observe control program plugins model arguments = fmap (fmap fst)
   (executeProgramResult (Just observe) (Just answerJournal) (Just control) program plugins model [] arguments)
@@ -73,13 +73,13 @@ executeInteractiveProgram identity observe control program plugins model argumen
     answerJournal (SaveJournal key value) = saveCompletion key value >> pure (object [])
 
 executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
 executeProgram observe journal control program plugins model captured arguments =
   first programDiagnostics <$> executeProgramResult observe journal control program plugins model captured arguments
 
 executeProgramResult :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (Value -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either ProgramFailure (Value, [EvidenceIndex]))
 executeProgramResult observe journal control program plugins model captured arguments = runExceptT $ do
   (result,contexts) <- ExceptT $ fmap (first InvocationFailure) $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $

@@ -2,9 +2,10 @@
 module Kyyn.Domain.RecipeRun
   ( RecipeRunId, recipeRunId, runIdText, PreparedRecipeRun(..), RecipeRunHeader(..)
   , RunEvent(..), RunEventBody(..), SequencedRunEvent(..), RecipeRunSummary(..), RecipeRunPage(..), RecipeRunListing(..)
-  , RunStatus(..), terminalStatus
+  , FlowObservation(..), FlowSummary(..), OperationIdentity(..), RunStatus(..), terminalStatus
   ) where
 
+import Kyyn.Types.FlowObservation
 import Kyyn.Domain.RecipeRunId
 import Kyyn.Domain.FlowInstance (FlowInstanceId)
 import Data.Aeson (Value)
@@ -26,7 +27,7 @@ data RecipeRunHeader = RecipeRunHeader
   { runId :: RecipeRunId, recipe :: RecipeId, flow :: FlowEntryRef
   , before :: GitRevision, build :: BuildIdentity, startedAt :: Text, graph :: Value, mermaid :: Text, instanceId :: Maybe FlowInstanceId
   } deriving (Eq, Show)
-data RunEventBody = FlowObserved Value | RunCompleted EvolutionId | RunFailed [Diagnostic] | RunCancelled | RunSuspended Natural | RunReturned
+data RunEventBody = FlowObserved FlowObservation | RunCompleted EvolutionId | RunFailed [Diagnostic] | RunCancelled | RunSuspended Natural | RunReturned
   deriving (Eq, Show)
 data RunEvent = RunEvent { elapsedNanos :: Natural, body :: RunEventBody } deriving (Eq, Show)
 data SequencedRunEvent = SequencedRunEvent Natural RunEvent deriving (Eq, Show)

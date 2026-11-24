@@ -14,6 +14,7 @@ inspectionAsset :: [Text] -> Maybe ByteString
 inspectionAsset ("vendor":path) = lookup (Text.unpack (Text.intercalate "/" path)) vendor
 inspectionAsset ["inspection.mjs"] = Just script
 inspectionAsset ["flow-viewer.mjs"] = Just flowScript
+inspectionAsset ["flow-projection.mjs"] = Just flowProjection
 inspectionAsset ["run-viewer.mjs"] = Just runScript
 inspectionAsset ["run-viewer.css"] = Just runStyle
 inspectionAsset _ = Nothing
@@ -39,3 +40,8 @@ flowScript :: ByteString
 flowScript = $(do
   source <- loc_filename <$> TH.location
   embedFile (takeDirectory source </> "../../../web/flow-viewer.mjs"))
+
+flowProjection :: ByteString
+flowProjection = $(do
+  source <- loc_filename <$> TH.location
+  embedFile (takeDirectory source </> "../../../web/flow-projection.mjs"))

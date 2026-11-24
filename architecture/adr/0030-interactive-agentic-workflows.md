@@ -475,19 +475,93 @@ The external harness explicitly reports its checked terminal result through a
 host application completion operation; it cannot replace an existing terminal
 outcome or bypass a cancellation. Disconnection alone does not mark it Completed.
 
+### Continuous interactive observation
+
 Durable instance state, reply values and the replay journal are distinct from
-the disposable viewer recordings in [ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback). Each execution attempt has its own
-recording namespace. The library reports Suspended for a wait and enclosing
-scopes exiting because of it, and Restored for an answered wait on replay. Those
-terminals belong to an attempt, not the logical instance; an enclosing parallel
-scope can still fail because another branch failed. Restoring work uses these
-upstream observations rather than inferred host events. A waiting attempt is not a completed logical flow. An instance links
-its attempts and draft evolutions. Clearing viewer recordings does not delete
-replay state or abandon waiting work. The instance view shows logical status and child statuses separately; the run
-list/viewer continues to show individual attempts, linked to their instance.
-A completed parent can therefore visibly have active children.
-Run identity checks for resumption do not
-turn recording inspection into historical compatibility enforcement.
+the disposable viewer recordings in
+[ADR 0028](0028-agentic-workflows.md#record-recipe-execution-for-live-viewing-and-playback).
+Existing attempt recordings remain the observation source of truth. An instance
+page projects them into one retained diagram and logical operation history;
+resumption does not replace or reset that diagram. No second observation store,
+persistent guest or scheduler mechanism is introduced. Raw attempts remain
+inspectable as diagnostics. Child instances are links, not merged graphs; a
+completed parent can visibly have active children.
+
+The captured execution fixes the graph. The view uses the earliest readable
+attempt recording of that execution, without compiling current source or running
+the guest. Graphs from later attempts must agree with that captured graph; a
+difference is a diagnostic, never a graph merge. Missing captured graph data is
+a diagnostic. Instance completion, cancellation, blocking,
+waits and accepted deliveries come from the catalog, not the latest attempt's
+terminal. A suspended attempt is not a completed flow; an interrupted attempt
+is not automatically a failed flow.
+
+#### Identity and execution episodes
+
+The guest records upstream's canonical operation identity alongside each keyed
+classification, as specified in ADR 0028. The logical identity is qualified by
+instance; an execution episode also retains its attempt and observation sequence.
+The host and browser never derive journal identities from display labels,
+timestamps, list positions, or a private copy of upstream's Each/call/repeat
+projection. Scope ancestry uses the explicit occurrence/parent metadata within
+its attempt. Observation equality alone never establishes restoration.
+
+`Executing` and `Restored` classify operation episodes without implying scope
+completion. `Executing PlainAction` is a fresh live selection every time,
+including at a previously observed scope. A keyed operation has one logical
+identity but may have several live retry episodes. Retrying does not overwrite
+an earlier failure or unknown outcome. A later restoration does not inflate
+live-operation or logical-completion counts. If earlier observation is missing,
+show the available restoration and the gap without inventing its original
+completion time.
+
+Await suspension means that the scope exited while waiting in that attempt.
+A later `Restored AwaitedReply` and observed return can advance that wait for the
+first time; restoration must not be discarded indiscriminately. A draft can
+restore turn zero and then select turn one live within the same scope. There is
+no global replay/live phase. Scope entry, drafting and tool resolution establish
+context only. Without classification the operation remains unclassified;
+without an observed result/terminal its corresponding outcome remains unknown.
+Selection for execution cannot prove that a callback ran, and a host attempt
+terminal cannot supply missing child scope terminals.
+
+#### Ordering and gaps
+
+Observation history uses catalog attempt order, then each recording's sequence.
+Elapsed time is local to its attempt; it does not establish a total order across
+attempts, catalogs or parallel branches. Waits, replies, deliveries, dispatch
+and polling state remain a separate catalog view. They are correlated by their
+explicit wait identities where supplied; reply values are not inserted into the
+observation stream by guessed timestamps or positions.
+
+Missing, cleared, corrupt or incomplete recordings produce visible diagnostics
+at their attempt position; later available attempts remain usable. Missing
+canonical identity metadata is a gap in logical correlation, not permission to
+reconstruct it. Unreadable current-contract graph or recording data is unavailable.
+There is no compatibility migration or historical decoder. Clearing viewer
+recordings never deletes replay state or abandons waiting work. Reading the
+projection never reads secrets, invokes providers or resumes a flow.
+
+#### Incremental viewing
+
+The page keeps in-memory cursors per attempt and consumes each newly received
+observation once. Its retained state comprises the captured graph, current
+catalog snapshot, per-attempt read position and availability, classified episodes
+and the logical operation identity map. It neither rereads completed attempts
+on every live update nor refolds the complete conversation at every poll. Reload
+reconstructs the view from available recordings. This does not promise linear
+total recording volume: resumption itself can emit repeated observations.
+Reload may therefore read a quadratic volume in the number of conversational
+turns; that is the accepted trade-off of retaining existing recordings without
+a second store. Projection work is proportional to newly consumed raw
+observations, rather than repeatedly reconstructing all earlier attempts.
+
+The default view retains the diagram and appends newly observed activity.
+Restoration updates context and logical progress without animating another live
+provider/action execution. Pausing inspection prevents automatic navigation and
+viewport resets, not execution of the flow. Raw attempt recordings retain their
+own elapsed-time playback; the instance projection does not invent a unified
+wall-clock replay timeline. Web remains read-only and independent of the worker.
 
 ## Verification
 

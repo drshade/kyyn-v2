@@ -8,6 +8,7 @@ import Control.Concurrent (newEmptyMVar, putMVar, takeMVar)
 import Control.Concurrent.Async (async, cancel, wait)
 import Control.Monad (unless)
 import qualified Control.Exception as E
+import Agentic.Aeson (fromAeson)
 import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict')
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString.Lazy as Lazy
@@ -59,7 +60,7 @@ suite = withSystemTempDirectory "kyyn-recordings-" $ \directory -> do
         (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output")
         (object ["upstream" .= String "graph"]) "flowchart TD" Nothing
       draft = either error id (evolutionId "000001-review")
-      event = FlowObserved (object ["opaque" .= String "summary"])
+      event = FlowObserved (FlowObservation (FlowSummary (fromAeson (object ["opaque" .= String "summary"]))) Nothing)
       eventFile identity = directory </> ".kyyn/runs" </> runIdText identity </> "events.jsonl"
   empty <- execute (listRecipeRuns kb Nothing)
   check "empty listing" (null empty.runs && null empty.unavailable)
@@ -178,7 +179,7 @@ child mode directory = do
         (either error id (gitRevision (replicate 40 'a'))) (BuildIdentity "digest" "system" "build.drv" "output") (object []) "flowchart TD" Nothing
   case mode of
     "--die" -> execute $ withRecipeRun prepared $ \writer -> do
-      _ <- appendRunEvent writer (FlowObserved (object []))
+      _ <- appendRunEvent writer (FlowObserved (FlowObservation (FlowSummary (fromAeson (object []))) Nothing))
       liftIO (Signal.raiseSignal Signal.sigKILL)
     "--write-failure" -> do
       result <- E.try @E.IOException $ execute $ withRecipeRun prepared $ \writer -> do
