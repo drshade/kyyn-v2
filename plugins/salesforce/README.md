@@ -1,4 +1,4 @@
-# Salesforce query evidence
+# Salesforce queries
 
 `Query` runs a saved SOQL SELECT and captures one evidence item per returned record.
 Every fetch runs the whole query. New or changed records enter the capture; records
@@ -22,7 +22,8 @@ let Auth =
       | DeviceCode : { clientId : Text, tokenKey : Text }
       >
 let Connector =
-      < Query :
+      < Live : { instanceUrl : Text, auth : Auth, apiVersion : Text }
+      | Query :
           { instanceUrl : Text, auth : Auth, apiVersion : Text
           , query : Text, idField : Text }
       >
@@ -132,3 +133,35 @@ Neither test uses real Salesforce credentials or establishes live org access.
 - [SOQL query and pagination](https://developer.salesforce.com/docs/platform/api-rest/guide/dome-query.html)
 - [Device flow](https://help.salesforce.com/s/articleView?id=remoteaccess_oauth_device_flow.htm&language=en_US&type=5)
 - [Client credentials and integration users](https://developer.salesforce.com/blogs/2024/02/invoke-rest-apis-with-the-salesforce-integration-user-and-oauth-client-credentials)
+
+## Query live from an interactive flow
+
+The `Live` connector shares authentication with `Query`, without a saved SOQL query
+or an identity field. Set its config to `{ instanceUrl, auth, apiVersion }`, using
+`plugin connector schema show salesforce` for the exact Dhall union. Choose a binding
+such as `sales`, then authenticate with `plugin connector login salesforce sales`.
+The existing device login requests `api refresh_token`; no additional scopes are needed.
+
+```sh
+kyyn-v2 plugin connector method show salesforce sales query
+kyyn-v2 plugin connector query salesforce sales query --input '{ query = "SELECT Id, Name, Amount FROM Opportunity LIMIT 10" }'
+```
+
+`liveQuery (Salesforce.query Connectors.sales)` runs the same method in an interactive
+flow, where `Salesforce` imports `Kyyn.Plugins.P_salesforce.Live`. Wrap that step as
+an Agentic tool when a model should choose the SOQL. A resumed call restores its
+result; a new occurrence queries again.
+
+The result is `Records` with rows, `totalSize` and `truncated`, or `Rejected` with
+an error code and message for malformed SOQL, unknown fields or unknown objects.
+Those rejections let a model correct the query. Authentication and operational
+failures stop the attempt. Records have named fields with null, boolean, exact
+number text, text or explicit nested JSON values, so aggregate queries need no Id.
+
+One call reads one provider page and returns at most 100 rows and 32 KiB of raw
+record JSON. A larger result or incomplete nested relationship sets `truncated`;
+use a narrower SOQL query to get the desired detail. An oversized first row yields
+an empty, explicitly truncated result. The typed encoding adds its own field tags.
+Queries only use Salesforce's SOQL query endpoint. No generic REST method or write
+operation is exposed. Returned data may enter the flow journal and model context;
+redact people before sending it to a model that requires redaction.

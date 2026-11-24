@@ -138,6 +138,15 @@ preparePlugins compiler libdir generated basePackages = do
         (defaultReferences,options) <- adapter "sinkDefaults" "sinkDefaultsEntry" defaults
         pure (configReferences ++ publishReferences ++ defaultReferences,
           "sinkConnectorEntry " ++ identity ++ " " ++ config ++ " " ++ publication ++ " " ++ options)
+      P.LiveConnector _ _ login queries -> do
+        authentication <- traverse (adapter "login" "loginEntry") login
+        selected <- forM queries $ \query -> do
+          (refs,entry) <- adapter ("query." <> query.queryName) "liveQueryEntry" query.implementation
+          pure (refs,"(" ++ show query.queryName ++ "," ++ show query.queryDescription ++ "," ++ entry ++ ")")
+        pure (configReferences ++ maybe [] fst authentication ++ concatMap fst selected,
+          "liveConnectorEntry " ++ identity ++ " " ++ config ++ " " ++
+          maybe "Nothing" (\(_,entry) -> "(Just " ++ entry ++ ")") authentication ++
+          " [" ++ intercalate "," (map snd selected) ++ "]")
       P.EventConnector _ _ login events -> do
         authentication <- traverse (adapter "login" "loginEntry") login
         selected <- forM events $ \event -> do

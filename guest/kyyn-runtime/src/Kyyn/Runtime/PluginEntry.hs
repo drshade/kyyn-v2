@@ -1,5 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
-module Kyyn.Runtime.PluginEntry (configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry) where
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
+module Kyyn.Runtime.PluginEntry (liveQueryEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry) where
 
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
@@ -8,6 +8,10 @@ import qualified Data.Text as Text
 import Agentic.Aeson (fromAeson, toAeson)
 import Kyyn.Contract
 import Kyyn.Plugin.Host (PluginLogin, LoginError)
+import Kyyn.Plugin.Live (LiveQueryProgram)
+import Kyyn.Types.Plugin (FetchError)
+import Kyyn.Runtime.Event (executeEventAction)
+import Kyyn.Runtime.Json (fields, field)
 import Kyyn.Plugin.Sink (Sink, SinkError)
 import Kyyn.Types.Diagnostic (ValidationReport)
 import Kyyn.Types.Guest
@@ -17,6 +21,21 @@ import Kyyn.Runtime.Entry (Adapter(..), pureAdapter)
 import Kyyn.Runtime.PluginHost (executeLoginAction)
 import Kyyn.Runtime.Sink (executeSinkAction)
 import Kyyn.Runtime.Validation (encodeReportValue)
+
+liveQueryEntry :: forall config input output.
+  (Contract config, Contract input, Contract output)
+  => Text -> [Text] -> (config -> input -> LiveQueryProgram (Either FetchError output))
+  -> Either ProjectionError (Adapter (LiveQueryContracts DescribedContract))
+liveQueryEntry name sources selected = do
+  config <- compileContract (contract @config)
+  input <- compileContract (contract @input)
+  output <- compileContract (contract @output)
+  let contracts = LiveQueryContracts (describe sources config) (describe sources input) (describe sources output)
+  pure (Adapter (Invocation name contracts) $ \transport value -> do
+    members <- either fail pure (fields ["config","input"] value)
+    configuration <- either fail pure (field "config" (runtimeCodec config.codec) members)
+    arguments <- either fail pure (field "input" (runtimeCodec input.codec) members)
+    executeEventAction transport (runtimeCodec output.codec) (selected configuration arguments))
 
 configurationEntry :: forall config. Contract config => Text -> [Text]
   -> (config -> ValidationReport) -> Either ProjectionError (Adapter DescribedContract)

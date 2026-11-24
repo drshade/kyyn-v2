@@ -134,6 +134,11 @@ runInspection = interpret $ \_ -> \case
                      concat [[("method:" ++ method ++ ":input",input),("method:" ++ method ++ ":result",output)] |
                        Plugins.PreparedMethod (MethodName method) _ input output _ <- methods])
                     [(method,description) | Plugins.PreparedMethod method description _ _ _ <- methods] configured
+                Plugins.PreparedLiveConnector { Plugins.queries = liveMethods } ->
+                  ConnectorDeclarationInspection connector.connectorType LiveKind
+                    (config : concat [[("query:" ++ queryName ++ ":input",input),("query:" ++ queryName ++ ":result",output)] |
+                      Plugins.PreparedMethod (MethodName queryName) _ input output _ <- liveMethods])
+                    [(queryName,description) | Plugins.PreparedMethod queryName description _ _ _ <- liveMethods] configured
                 Plugins.PreparedEventConnector { Plugins.events = events } ->
                   ConnectorDeclarationInspection connector.connectorType EventKind
                     (config : concat [[("event:" ++ eventName ++ ":request",input),("event:" ++ eventName ++ ":reply",reply),

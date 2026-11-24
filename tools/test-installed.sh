@@ -19,6 +19,7 @@ node tools/test-closed-recipes.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-recipe-state.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-recipe-state-run.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-recipe-run.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-live-query.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-interactive-flow.mjs "$journey_stage/install/bin/kyyn-v2"
 run_view_system=$(nix eval --impure --raw --expr builtins.currentSystem)
 nix build ".#checks.$run_view_system.guest-recipe" --no-update-lock-file --out-link "$journey_stage/run-guest"

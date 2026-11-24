@@ -66,6 +66,7 @@ import Kyyn.Domain.RecipeRun (PreparedRecipeRun(..))
 import qualified Kyyn.Domain.RecipeRun as Run
 import Kyyn.Porcelain.Capability.FlowWorker
 import Kyyn.Porcelain.Interpreter.FlowControl (answerFlowControl)
+import Kyyn.Porcelain.Capability.PluginLive (PluginLive)
 import Kyyn.Porcelain.Interpreter.FlowWorker (runFlowWorker)
 import Kyyn.Porcelain.Capability.PluginRead
 import Kyyn.Types.Plugin (FetchError(..))
@@ -162,7 +163,7 @@ main = do
         stateValue = CheckedValue (contractId state) (object ["runs" .= String "4"])
     result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . fixedCompilation program
-      . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+      . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
       . capturedEvidence index . runPluginRead . runPluginPreparation . runRootStore
       . runAppendJournalIO . runRecipeRunStore (const (pure ())) . runRecipeInspection . runRecipeExecution $ do
         contracts <- inspectRecipeContracts (SourceRoot rootContract code definition [])
@@ -313,7 +314,7 @@ main = do
       _ -> fail "Missing ordinary waiting recipe"
     ordinary <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
       . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
-      . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+      . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
       . capturedEvidence index . runPluginRead . runAppendJournalIO . runRecipeRunStore (const (pure ())) $ do
         captured <- executeEntry ordinaryEntry (toJSON G.CaptureRecipeGraph)
         let (graph,mermaid) = either error id (parseWire captured >>= parseEither (withObject "captured graph" (\fields ->
@@ -335,7 +336,7 @@ main = do
              "inputContract" .= descriptionOf controlContract.inputContract,
              "outputContract" .= descriptionOf controlContract.outputContract,"input" .= String "1"]])))
     refusedControl <- runEff . runFailure . forgedControlGuest forged
-      . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead $
+      . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead $
         executeToolProgram waitingEntry [] Nothing [] (object [])
     unless (case refusedControl of
       Left problem -> "only available during hosted interactive" `Text.isInfixOf` (Failure.operationalDiagnostic problem).message
@@ -347,7 +348,7 @@ main = do
         attempt first invocation = do
           outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
             . runDhallHandling . runGuestExecution [("LC_ALL","C.UTF-8")]
-            . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+            . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . runDocumentPersistenceIO . runFlowJournal kb identity $
               executeInteractiveProgram identity (\_ -> case invocation of
@@ -376,7 +377,7 @@ main = do
         workerWith fault first operation = do
           outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
             . runDhallHandling . (if fault == NoGuest then unexpected @GuestExecution else runGuestExecution [("LC_ALL","C.UTF-8")])
-            . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
+            . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
             . (if first then capturedEvidence index else unexpected @EvidenceStore)
             . runPluginRead . (case fault of PluginFault -> failPlugin True; ProtocolFault -> failPlugin False; _ -> id) . runDocumentPersistenceIO . runFlowStore kb
             . runAppendJournalIO . runRecipeRunStore (const (pure ()))
@@ -700,7 +701,7 @@ main = do
     let coordinatorIdentity = FlowJournalIdentity (Instance.flowInstanceIdText coordinator.instanceId) coordinator.launch.revision coordinator.launch.request
         childAttempt crash restored = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
           . runGuestExecution [("LC_ALL","C.UTF-8")]
-          . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead
+          . unexpected @PluginLive . unexpected @Judgement . unexpected @ModelTurn . unexpected @EvidenceStore . unexpected @PluginRead
           . runDocumentPersistenceIO . runFlowStore kb . runFlowJournal kb coordinatorIdentity $
             executeInteractiveProgram coordinatorIdentity (const (pure ())) (\call -> do
               when restored (error "Restored start reached the host")

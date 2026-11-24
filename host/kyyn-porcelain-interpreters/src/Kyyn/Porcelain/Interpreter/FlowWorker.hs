@@ -39,13 +39,14 @@ import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
 import Kyyn.Porcelain.Interpreter.FlowJournal (runFlowJournalLocked, tryFlowWriterLock)
 import Kyyn.Porcelain.Interpreter.FlowControl (answerFlowControl)
+import Kyyn.Porcelain.Capability.PluginLive (PluginLive)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeInteractiveProgram, ProgramFailure(..), programDiagnostics)
 import qualified Kyyn.Types.Guest as G
 
 -- One visit advances at most one instance. A foreground loop owns polling;
 -- ingress and cancellation remain independent short catalog transactions.
 runFlowWorker :: forall es a. (DocumentPersistence :> es, FlowStore :> es,
-  RecipeRunStore :> es, EvidenceStore :> es, PluginRead :> es, GuestExecution :> es,
+  PluginLive :> es, RecipeRunStore :> es, EvidenceStore :> es, PluginRead :> es, GuestExecution :> es,
   Failure :> es, Judgement :> es, ModelTurn :> es, DhallHandling :> es)
   => KnowledgeBase -> Eff (FlowWorker : es) a -> Eff es a
 runFlowWorker kb = interpret $ \_ -> \case

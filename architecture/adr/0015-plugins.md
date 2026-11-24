@@ -672,15 +672,18 @@ exposed as Agentic tools or called directly as steps.
 executeLiveQuery
   :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es,
       Waiting :> es, Deadline :> es, Failure :> es)
-  => PreparedLiveQuery -> CheckedValue
-  -> Eff es (Either [Diagnostic] CheckedValue)
+  => CheckedValue -> PreparedMethod -> Value
+  -> Eff es (Either [Diagnostic] (Either FetchError CheckedValue))
 ```
 
 Each invocation runs under the existing fixed 60-second adapter deadline, including
 provider callbacks. Process cleanup and cancellation use the event adapter's
 existing execution boundary. Expiry produces one live-query timeout diagnostic;
 it does not introduce a new timeout setting or a background retry process.
-Provider/authentication refusals become sanitized typed failures. Host transport,
+Failure to obtain a provider answer, including authentication failure, returns
+`FetchError`; the plugin constructs its message without secrets and the host adds
+no provider payload. Expected provider answers which callers can act on, including
+query rejection, belong in the plugin’s successful output contract. Host transport,
 contract and process failures retain their existing diagnostic boundary. The host
 does not automatically restart a failed query. A plugin may retain its bounded
 provider-specific retry policy within the invocation deadline.

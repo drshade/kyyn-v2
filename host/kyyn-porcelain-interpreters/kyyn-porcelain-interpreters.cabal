@@ -36,6 +36,7 @@ library
     Kyyn.Porcelain.Interpreter.PluginPreparation
     Kyyn.Porcelain.Interpreter.PluginLogin
     Kyyn.Porcelain.Interpreter.Delivery
+    Kyyn.Porcelain.Interpreter.PluginLive
     Kyyn.Porcelain.Interpreter.PluginEvent Kyyn.Porcelain.Interpreter.PluginRead
     Kyyn.Porcelain.Interpreter.ToolPreparation
     Kyyn.Porcelain.Interpreter.ToolExecution

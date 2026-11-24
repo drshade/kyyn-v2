@@ -60,6 +60,7 @@ data ConnectorCommand
   | ShowConnectorSchema PluginName (Maybe EvolutionId)
   | ListConnectorMethods PluginName ConnectorName (Maybe EvolutionId)
   | ShowConnectorMethod PluginName ConnectorName MethodName (Maybe EvolutionId)
+  | QueryConnector PluginName ConnectorName MethodName String
   | ExecuteConnectorMethod PluginName ConnectorName MethodName String
   deriving (Eq, Show)
 data EvidenceCommand
@@ -210,11 +211,14 @@ secretParser = hsubparser
 connectorParser :: Parser ConnectorCommand
 connectorParser = hsubparser
   (group "list" "List a plugin's configured instances" (ListConnectors <$> plugin <*> evolution)
+  <> group "query" "Run a fresh live query"
+      (QueryConnector <$> plugin <*> instanceName <*> method
+        <*> strOption (long "input" <> metavar "DHALL" <> help "Input value as a hermetic Dhall expression"))
   <> group "login" "Authenticate a configured connector" (LoginConnector <$> plugin <*> instanceName)
   <> group "show" "Show an instance's fetch options type" (ShowConnector <$> plugin <*> instanceName <*> evolution)
   <> group "schema" "Discover connector configuration schemas" (hsubparser
       (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution)))
-  <> group "method" "Discover and invoke captured-evidence methods" (hsubparser
+  <> group "method" "Discover methods and invoke captured-evidence readers" (hsubparser
       (group "list" "List a connector instance's methods" (ListConnectorMethods <$> plugin <*> instanceName <*> evolution)
       <> group "show" "Show a method's description and Dhall input/result types" (ShowConnectorMethod <$> plugin <*> instanceName <*> method <*> evolution)
       <> group "execute" "Invoke a method over the latest fetched evidence"

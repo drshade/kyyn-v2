@@ -38,6 +38,7 @@ writeOutputBindings generated roots plugins manifest
         publication <- case [selected | selected <- declarations, selected.name == connector] of
           [P.SinkConnector _ _ publish _] -> either problem pure (qualifiedReference False publish)
           [P.SourceConnector{}] -> problem "selected connector is a source"
+          [P.LiveConnector{}] -> problem "selected connector is a live connector"
           [P.EventConnector{}] -> problem "selected connector is an event connector"
           _ -> problem "unknown sink connector"
         let bindingName = "output_" ++ map (\c -> if isAlphaNum c then c else '_') (Text.unpack name) ++ "_" ++ show index

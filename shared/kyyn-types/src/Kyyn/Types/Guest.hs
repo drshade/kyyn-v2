@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( EventEntry(..), EventContracts(..), DispatchContracts(..), InteractiveInvocation(..), InteractiveContracts(..), EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( LiveQueryEntry(..), LiveQueryContracts(..), EventEntry(..), EventContracts(..), DispatchContracts(..), InteractiveInvocation(..), InteractiveContracts(..), EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -200,6 +200,24 @@ data Invocation contract = Invocation { invocationName :: Text, invocationContra
 data CapturedEntry contract = CapturedEntry
   { capturedName :: Text, capturedDescription :: Text, capturedInvocation :: Invocation (CapturedContracts contract) }
   deriving (Eq, Show, Functor, Foldable, Traversable)
+data LiveQueryContracts contract = LiveQueryContracts contract contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+data LiveQueryEntry contract = LiveQueryEntry
+  { liveQueryName :: Text, liveQueryDescription :: Text
+  , liveQueryInvocation :: Invocation (LiveQueryContracts contract) }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance ToJSON contract => ToJSON (LiveQueryContracts contract) where
+  toJSON (LiveQueryContracts config input output) = object
+    ["config" .= config,"input" .= input,"output" .= output]
+instance FromJSON contract => FromJSON (LiveQueryContracts contract) where
+  parseJSON = exactObject "live query contracts" ["config","input","output"] $ \fields ->
+    LiveQueryContracts <$> fields .: "config" <*> fields .: "input" <*> fields .: "output"
+instance ToJSON contract => ToJSON (LiveQueryEntry contract) where
+  toJSON (LiveQueryEntry name description invocation) = object
+    ["name" .= name,"description" .= description,"invocation" .= invocation]
+instance FromJSON contract => FromJSON (LiveQueryEntry contract) where
+  parseJSON = exactObject "live query entry" ["name","description","invocation"] $ \fields ->
+    LiveQueryEntry <$> fields .: "name" <*> fields .: "description" <*> fields .: "invocation"
 data EventContracts contract = EventContracts contract contract contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 data DispatchContracts contract = DispatchContracts contract contract contract
@@ -241,6 +259,8 @@ data ConnectorEntries contract
       , publish :: Invocation (SinkContracts contract)
       , defaults :: Invocation contract
       }
+  | LiveEntries
+      { configure :: Invocation contract, login :: Maybe (Invocation contract), liveQueries :: [LiveQueryEntry contract] }
   | EventEntries
       { configure :: Invocation contract, login :: Maybe (Invocation contract), eventMethods :: [EventEntry contract] }
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -255,6 +275,9 @@ entryNames (ConnectorEntry _ (EventEntries config authentication events)) =
   [invocationName config] ++ maybe [] (pure . invocationName) authentication ++
   concat [invocationName poll : maybe [] (pure . invocationName . fst) dispatch |
     EventEntry _ _ _ poll dispatch <- events]
+entryNames (ConnectorEntry _ (LiveEntries config authentication queries)) =
+  [invocationName config] ++ maybe [] (pure . invocationName) authentication ++
+  map (invocationName . liveQueryInvocation) queries
 entryNames (ValidatorEntry name _) = [name]
 entryNames (EvolutionEntry name _) = [name]
 entryNames (InteractiveEntry name _ _) = [name]
@@ -282,6 +305,8 @@ instance ToJSON contract => ToJSON (ConnectorEntries contract) where
     ["kind" .= String "sink","configure" .= config,"publish" .= publication,"defaults" .= options]
   toJSON (EventEntries config authentication events) = object
     ["kind" .= String "event","configure" .= config,"login" .= optionalValue authentication,"events" .= events]
+  toJSON (LiveEntries config authentication queries) = object
+    ["kind" .= String "live","configure" .= config,"login" .= optionalValue authentication,"queries" .= queries]
 instance FromJSON contract => FromJSON (ConnectorEntries contract) where
   parseJSON value = withObject "connector entries" (\fields -> do
     kind <- fields .: "kind"
@@ -291,6 +316,8 @@ instance FromJSON contract => FromJSON (ConnectorEntries contract) where
           <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "methods") value
       "sink" -> exactObject "sink connector" ["kind","configure","publish","defaults"]
         (\entry -> SinkEntries <$> entry .: "configure" <*> entry .: "publish" <*> entry .: "defaults") value
+      "live" -> exactObject "live connector" ["kind","configure","login","queries"]
+        (\entry -> LiveEntries <$> entry .: "configure" <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "queries") value
       "event" -> exactObject "event connector" ["kind","configure","login","events"]
         (\entry -> EventEntries <$> entry .: "configure" <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "events") value
       _ -> fail "Unknown connector kind") value

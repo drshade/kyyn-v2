@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Salesforce.Auth (accessToken, login) where
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -10,7 +11,7 @@ import qualified Salesforce.Json as Json
 import qualified Salesforce.Http as Http
 import qualified Data.Aeson as Aeson
 
-accessToken :: Text -> SalesforceAuth -> NetworkHost rest (Either Text Text)
+accessToken :: (Member Http row, Member Secrets row, Member Waiting row) => Text -> SalesforceAuth -> Program row (Either Text Text)
 accessToken origin auth = runExceptT $ do
   let (client,key) = case auth of ClientSecret c k -> (c,k); DeviceCode c k -> (c,k)
   stored <- lift (getSecret key)

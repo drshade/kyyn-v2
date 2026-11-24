@@ -69,6 +69,8 @@ main = do
       let handles = entry : concat [getField @"validationEntry" connector : case connector of
             PreparedConnector {fetchEntry = fetch,loginEntry = login,methods = methods} ->
               fetch : maybe [] pure login ++ [method | PreparedMethod _ _ _ _ method <- methods]
+            PreparedLiveConnector {loginEntry = login,queries = queries} -> maybe [] pure login ++
+              [method | PreparedMethod _ _ _ _ method <- queries]
             PreparedEventConnector {loginEntry = login,events = events} -> maybe [] pure login ++
               concat [poll : maybe [] (pure . fst) dispatch | PreparedEvent _ _ _ _ _ _ poll dispatch <- events]
             PreparedSinkConnector {sinkEntry = publish} -> [publish] |

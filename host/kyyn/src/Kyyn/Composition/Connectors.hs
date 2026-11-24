@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 module Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence) where
 
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff)
 import Kyyn.Configuration (Host(..), SelectedKb(..))
 import Data.Maybe (isJust)
@@ -31,6 +31,10 @@ import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
 import Kyyn.Plumbing.Interpreter.PluginInteraction (runWaitingIO, runLoginInteractionIO)
 import Kyyn.Porcelain.Interpreter.PluginLogin (runPluginLogin)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, PreparedMethod(..))
+import Kyyn.Types.Plugin (FetchError(..))
+import Kyyn.Plumbing.Interpreter.Deadline (runDeadlineIO)
+import Kyyn.Porcelain.Capability.PluginLive (executeLiveQuery)
+import Kyyn.Porcelain.Interpreter.PluginLive (runPluginLive)
 import Kyyn.Porcelain.Capability.PluginRead (callCapturedMethod)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
@@ -79,10 +83,24 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
     fmap (fmap (methodListResult . map (\(PreparedMethod method description _ _ _) -> (method,description))))
       (listConnectorMethods kb revision workspace plugin name)
   Cli.ShowConnectorMethod plugin name method workspace -> respond $ runDiscovery host settings $ runExceptT $ do
-    (_,_,PreparedMethod _ description input output _) <- ExceptT (selectConnectorMethod kb revision workspace plugin name method)
+    methods <- ExceptT (listConnectorMethods kb revision workspace plugin name)
+    PreparedMethod _ description input output _ <- case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
+      [m] -> pure m
+      _ -> throwE [errorDiagnostic "plugin.method-unknown" "No method with that name"]
     inputType <- ExceptT (Right <$> renderType (contractShape input))
     resultType <- ExceptT (Right <$> renderType (contractShape output))
     pure (methodResult method description inputType resultType)
+  Cli.QueryConnector plugin name method inputText -> case knowledgeBaseScope kb of
+    Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+    Right scope -> respond $ runRuntime host settings . runHttpTransportIO . runSecretStoreIO scope
+      . runWaitingIO . runDeadlineIO . runPluginPreparation . runToolPreparation
+      . runRootOpening . runWorkspaceStore . runEvolutionStore . runPluginLive $ runExceptT $ do
+        (config,selected@(PreparedMethod _ _ input output _)) <- ExceptT (selectLiveQuery kb revision plugin name method)
+        value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
+        response <- ExceptT (executeLiveQuery config selected value)
+        CheckedValue _ result <- either (\(FetchError message) -> throwE [errorDiagnostic "plugin.query-failed" (Text.unpack message)]) pure response
+        rendered <- ExceptT (encodeValue (contractShape output) result)
+        pure (methodOutputResult result rendered [])
   Cli.ExecuteConnectorMethod plugin name method inputText -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host settings . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)

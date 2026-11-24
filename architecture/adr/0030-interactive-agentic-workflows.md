@@ -119,6 +119,8 @@ typed references to those methods. A reference identifies the plugin, connector
 type, configured instance and method, with generated input/output codecs and
 contracts. It is captured with the flow's executable and configuration; resumption
 does not select a new account, method implementation or current working tree.
+Instance configuration is captured; named secrets are read at execution time, so
+a subsequent login supplies refreshed credentials for a new invocation.
 
 ```haskell
 -- Generated bindings construct these; authors do not assemble wire requests.
@@ -138,7 +140,9 @@ not invent an input-based cache or a second deduplication mechanism.
 
 On a journal miss, the generated request invokes the captured live-query binding
 through the host broker. Only a checked successful output completes that durable
-operation. A provider/authentication failure is a `FetchError` in the flow's existing
+operation. Expected provider answers which callers can act on, such as a rejected
+query, belong in the plugin’s output contract and are journalled normally. Failure
+to obtain an answer is a `FetchError` in the flow's existing
 failure channel, not a successful journalled `Either` value. Host execution failures
 retain their diagnostic boundary. The existing failed-attempt and explicit retry
 rules apply; no query-specific automatic recovery loop is introduced.
@@ -151,6 +155,9 @@ rules. Live queries must tolerate repeated reads; this does not promise a consis
 provider snapshot across separate calls or exactly-once execution.
 
 The query can be a direct step or an authored Agentic tool body supplied to a draft.
+A tool body that fails the step monad fails the attempt: upstream does not convert
+that failure into a model-visible tool result. A rejected query returned as typed
+output lets the model correct its query in a subsequent tool call.
 Provider results are returned only to that caller unless the authored workflow
 explicitly uses them in a later proposal. They do not automatically become evidence
 or accepted facts. Query output can be retained in the completion journal and sent
