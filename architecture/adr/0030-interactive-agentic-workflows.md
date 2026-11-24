@@ -487,9 +487,11 @@ persistent guest or scheduler mechanism is introduced. Raw attempts remain
 inspectable as diagnostics. Child instances are links, not merged graphs; a
 completed parent can visibly have active children.
 
-The captured execution fixes the graph. The view uses an available recording
-of that execution, without compiling current source or running the guest. Missing
-captured graph data is a diagnostic. Instance completion, cancellation, blocking,
+The captured execution fixes the graph. The view uses the earliest readable
+attempt recording of that execution, without compiling current source or running
+the guest. Graphs from later attempts must agree with that captured graph; a
+difference is a diagnostic, never a graph merge. Missing captured graph data is
+a diagnostic. Instance completion, cancellation, blocking,
 waits and accepted deliveries come from the catalog, not the latest attempt's
 terminal. A suspended attempt is not a completed flow; an interrupted attempt
 is not automatically a failed flow.
@@ -549,8 +551,10 @@ and the logical operation identity map. It neither rereads completed attempts
 on every live update nor refolds the complete conversation at every poll. Reload
 reconstructs the view from available recordings. This does not promise linear
 total recording volume: resumption itself can emit repeated observations.
-Projection work is proportional to newly consumed raw observations, rather than
-repeatedly reconstructing all earlier attempts.
+Reload may therefore read a quadratic volume in the number of conversational
+turns; that is the accepted trade-off of retaining existing recordings without
+a second store. Projection work is proportional to newly consumed raw
+observations, rather than repeatedly reconstructing all earlier attempts.
 
 The default view retains the diagram and appends newly observed activity.
 Restoration updates context and logical progress without animating another live
