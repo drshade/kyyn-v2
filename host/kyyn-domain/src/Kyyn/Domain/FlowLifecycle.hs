@@ -33,7 +33,7 @@ frontier reached current = do
       unless (case kind of EventWait{} -> initialDispatch /= Nothing; _ -> initialDispatch == Nothing)
         (Left (InvalidTransition "Dispatch state must belong to an event wait"))
       case find ((== identity) . (.waitId)) current.waits of
-        Nothing -> Right (FlowWait identity description kind Open (fmap (\phase -> EventAdapter phase Nothing []) initialDispatch))
+        Nothing -> Right (FlowWait identity description kind Open (fmap (\phase -> EventAdapter phase Nothing [] initialPollState) initialDispatch))
         Just old | old.descriptor /= description || old.kind /= kind -> Left (InvalidTransition "Wait descriptor changed")
                  | old.waitStatus /= Open -> Left (InvalidTransition "Reported wait is already closed or answered")
                  | otherwise -> Right old

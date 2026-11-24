@@ -51,7 +51,9 @@ kindValue (ChildWait child output) = tag "child" (object ["child" .= flowInstanc
 kindValue (EventWait reference) = tag "event" (toJSON reference)
 adapterValue :: EventAdapter -> Value
 adapterValue state = object ["dispatch" .= dispatchValue state.dispatch,"cursor" .= fmap (\value -> object ["value" .= value]) state.cursor,
-  "blocked" .= map diagnosticValue state.dispatchProblems]
+  "blocked" .= map diagnosticValue state.dispatchProblems,
+  "polling" .= object ["lastAttempt" .= state.polling.lastAttempt,"nextAttempt" .= state.polling.nextAttempt,
+    "consecutiveFailures" .= state.polling.consecutiveFailures,"problems" .= map diagnosticValue state.polling.problems]]
 dispatchValue :: DispatchState -> Text.Text
 dispatchValue NotRequired = "notRequired"
 dispatchValue Pending = "pending"
@@ -141,14 +143,23 @@ parseWait = withObject "wait" $ \fields -> do
     _ -> fail "Invalid wait status"
   kind <- fields .: "kind" >>= parseKind
   adapter <- fields .: "adapter" >>= traverse (withObject "event adapter" (\entry -> do
-    exact ["dispatch","cursor","blocked"] entry
+    exact ["dispatch","cursor","blocked","polling"] entry
     phase <- entry .: "dispatch" >>= \name -> case name :: Text.Text of
       "notRequired" -> pure NotRequired; "pending" -> pure Pending
       "started" -> pure Started; "completed" -> pure DispatchCompleted
       _ -> fail "Invalid dispatch state"
     cursor <- entry .: "cursor" >>= traverse (withObject "cursor" (\stored -> exact ["value"] stored >> stored .: "value"))
-    unless ((phase == DispatchCompleted) == (cursor /= Nothing)) (fail "Dispatch cursor does not match phase")
-    EventAdapter phase cursor <$> (entry .: "blocked" >>= diagnostics)))
+    unless (case phase of DispatchCompleted -> cursor /= Nothing; NotRequired -> True; _ -> cursor == Nothing) (fail "Dispatch cursor does not match phase")
+    poll <- entry .: "polling" >>= withObject "polling" (\saved -> do
+      exact ["lastAttempt","nextAttempt","consecutiveFailures","problems"] saved
+      lastAttempt <- saved .: "lastAttempt"
+      nextAttempt <- saved .: "nextAttempt"
+      failures <- saved .: "consecutiveFailures"
+      unless (failures >= 0 && case (lastAttempt,nextAttempt) of
+        (Nothing,Nothing) -> True; (Just lastTime,Just nextTime) -> nextTime > lastTime; _ -> False)
+        (fail "Invalid poll schedule")
+      PollState lastAttempt nextAttempt failures <$> (saved .: "problems" >>= diagnostics))
+    EventAdapter phase cursor <$> (entry .: "blocked" >>= diagnostics) <*> pure poll))
   unless (case kind of EventWait{} -> adapter /= Nothing; _ -> adapter == Nothing)
     (fail "Adapter state must belong to an event wait")
   FlowWait <$> fields .: "id" <*> fields .: "descriptor" <*> pure kind <*> pure state <*> pure adapter

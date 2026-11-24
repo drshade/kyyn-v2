@@ -2,6 +2,8 @@
 module Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent) where
 
 import Data.Aeson (object, (.=))
+import Data.Aeson.Types (parseEither)
+import Kyyn.Porcelain.Protocol.PluginEvent (parseEventBatch)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -24,3 +26,11 @@ runPluginEvent = interpret $ \_ -> \case
     result <- conversationWithBody (decodeHostFrame decodePluginHostCall) entry
       (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request]]) answerNetwork
     pure (either (\(FetchError message) -> Left [errorDiagnostic "flow.dispatch-failed" (Text.unpack message)]) Right result)
+  PollEvent entry config identity request cursor -> do
+    let encodedCursor = maybe (object ["tag" .= ("None" :: Text.Text)])
+          (\value -> object ["tag" .= ("Some" :: Text.Text),"value" .= value]) cursor
+    result <- conversationWithBody (decodeHostFrame decodePluginHostCall) entry
+      (object ["config" .= config,"input" .= object ["waitIdentity" .= identity,"request" .= request,"cursor" .= encodedCursor]]) answerNetwork
+    pure $ case result of
+      Left (FetchError message) -> Left [errorDiagnostic "flow.poll-failed" (Text.unpack message)]
+      Right value -> either (Left . pure . errorDiagnostic "flow.poll-result") Right (parseEither parseEventBatch value)

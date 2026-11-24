@@ -12,7 +12,7 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-porcelain,
+  build-depends: time, base >=4.22 && <4.23, kyyn-domain, kyyn-types, kyyn-porcelain,
     aeson, bytestring, text, optparse-applicative >=0.18.1 && <0.20
 
 test-suite cli-arguments

@@ -246,6 +246,27 @@ against the actual flow codec at fulfilment. A malformed adapter result cannot
 advance the cursor. The host supplies `ProviderReply` provenance from the bound,
 authenticated adapter; submitted reply payloads cannot choose their own origin.
 
+Poll failures retain a consecutive failure count and the declared next-attempt
+time; a successful batch resets the count and diagnostics. Worker reporting
+identifies a poll failure with its retry time, separately from a sticky dispatch
+or attempt block. A due poll with no new pending arrivals reports no progress,
+so an idle provider does not produce alternating progress/no-work messages.
+
+The provider deduplication key is the bound wait plus its provider event identity.
+Delivery IDs identify retained receipts, including conflicting reuse of that key,
+so they cannot be the provider key itself. The catalog transaction allocates an
+unused `internal-event-N` receipt ID from its existing delivery count. Repeated
+identical arrivals do not create another receipt. A poll racing an answered wait
+records Duplicate or Conflicting immediately; a closed or terminal wait records
+ClosedWait. These results cannot replace the accepted reply or resume the flow.
+
+A worker pass visits an eligible guest, services each due event wait at most once,
+and performs at most one further guest visit if arrivals were queued. It never
+loops until quiescence. Waiting instances without unresolved deliveries do not
+acquire the guest journal lock. Foreground idle checks remain bounded by one
+second for new ingress, shortened when a persisted poll is due sooner. `--once`
+performs the bounded pass without sleeping. Tests inject the clock.
+
 Adapter entries execute from the instance's pinned program with its captured
 connector configuration. Secret references are resolved by name only during an
 actual invocation. Inspection does not load secret values or call the provider.

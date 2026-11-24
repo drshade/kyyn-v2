@@ -1,6 +1,7 @@
 -- Native catalog lifecycle: restart, parent/child independence, subtree races,
 -- immutable start/reply identities, authoritative frontiers and ingress while a
--- guest journal lock is held. No guest build or provider service is involved.
+-- guest journal lock is held. Poll scheduling, ingress atomicity and nullable
+-- cursors are checked without guest builds, sleeps or provider services.
 {-# LANGUAGE DataKinds, GADTs, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
@@ -13,7 +14,12 @@ import Control.Monad (when, void, unless, replicateM_, forM_)
 import qualified Data.ByteString as Bytes
 import qualified Effectful.State.Static.Local as State
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
-import Data.Aeson (Value(..), object)
+import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict')
+import qualified Data.ByteString.Lazy as Lazy
+import Data.Time (UTCTime, addUTCTime)
+import Kyyn.Types.Plugin (Seconds(..))
+import qualified Kyyn.Domain.FlowPolling as Polling
+import Kyyn.Porcelain.Protocol.PluginEvent (parseEventBatch)
 import Data.Aeson.Types (parseEither)
 import qualified Kyyn.Domain.FlowLifecycle as Lifecycle
 import qualified Kyyn.Domain.FlowDispatch as Dispatch
@@ -323,7 +329,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   let eventReference = EventReference "plugin" "connector" "instance" "event"
       pendingEvent = orphan { status = Waiting, retryRequired = False, blocked = [],
         waits = [FlowWait "event" Null (EventWait eventReference) Open
-          (Just (EventAdapter Pending Nothing []))] }
+          (Just (EventAdapter Pending Nothing [] initialPollState))] }
       eventState item = case item.waits of
         [event] -> maybe (error "Missing event adapter") id event.adapter
         _ -> error "Missing event wait"
@@ -347,6 +353,40 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   cancelledResult <- right (Dispatch.completeDispatch "event" Null startedEvent {status = Finished Cancelled})
   assert ((eventState cancelledResult).cursor == Just Null && cancelledResult.status == Finished Cancelled)
     "Cancellation discarded an in-flight dispatch result"
+
+  let pollTime = read "2026-11-24 12:00:00 UTC" :: UTCTime
+      pollOnlyEvent = pendingEvent {waits = [FlowWait "event" Null (EventWait eventReference) Open
+        (Just (EventAdapter NotRequired Nothing [] initialPollState))]}
+  (pollStarted,pollingEvent) <- right (Polling.beginPoll pollTime (Seconds 2) "event" pollOnlyEvent)
+  assert pollStarted "NotRequired event was not pollable"
+  [reloadedPoll] <- right (parseEither parseCatalog (catalogValue [pollingEvent]))
+  early <- right (Polling.beginPoll (addUTCTime 1 pollTime) (Seconds 2) "event" reloadedPoll)
+  assert (not (fst early)) "Restart polled before persisted next-attempt time"
+  (_,receivedPoll) <- right (Polling.completePoll "event" [(EventIdentity "one",Null)] Null reloadedPoll)
+  [reloadedCursor] <- right (parseEither parseCatalog (catalogValue [receivedPoll]))
+  assert ((eventState reloadedCursor).cursor == Just Null && length reloadedCursor.deliveries == 1)
+    "NotRequired cursor/arrivals did not round-trip together"
+  forM_ [pendingEvent,startedEvent,completedEvent {retryRequired = True},completedEvent {status = Finished Cancelled},dispatchBlocked] $ \unpollable -> do
+    denied <- right (Polling.beginPoll pollTime (Seconds 2) "event" unpollable)
+    assert (not (fst denied)) "Unready or blocked instance polled"
+  atomicResult <- runEff . runFailure . runFileSystemIO scope
+    . State.runState @CollisionRecord (Just (Lazy.toStrict (encode (catalogValue [pollingEvent]))),0)
+    . recordingDocuments . runFlowStore kb $
+      completePoll pollingEvent.instanceId "event" [(EventIdentity "atomic",String "reply")] (String "cursor")
+  (queuedAtomic,(savedAtomic,writes)) <- right atomicResult
+  assert (queuedAtomic == Right True && writes == 1) "Poll arrivals and cursor required more than one catalog write"
+  atomicBytes <- maybe (fail "Missing committed catalog") pure savedAtomic
+  atomicJson <- right (eitherDecodeStrict' atomicBytes)
+  [atomicInstance] <- right (parseEither parseCatalog atomicJson)
+  assert (length atomicInstance.deliveries == 1 && (eventState atomicInstance).cursor == Just (String "cursor"))
+    "Atomic poll commit lost arrivals or cursor"
+  let goodBatch = object ["arrivals" .= [object ["identity" .= ("one" :: Text.Text),"value" .= Null]],"cursor" .= Null]
+      badBatches = [object ["arrivals" .= ([] :: [Value]),"cursor" .= Null,"extra" .= Null],
+        object ["arrivals" .= [object ["value" .= Null]],"cursor" .= Null]]
+  parsedBatch <- right (parseEither parseEventBatch goodBatch)
+  assert (parsedBatch == ([(EventIdentity "one",Null)],Null)) "Poll protocol parser lost nullable payload/cursor"
+  forM_ badBatches $ \batch -> assert (case parseEither parseEventBatch batch of Left _ -> True; _ -> False)
+    "Malformed poll envelope was accepted"
 
   -- Adapter ownership also excludes retry and clear, but never cancellation.
   adapting <- start Nothing "clear-active-adapter"
@@ -428,3 +468,16 @@ preparedFixture = PreparedFlow (RecipeId "fixture") (object []) bundle
       (InteractionBindings [ChildReference (RecipeId "fixture") (FlowEntryRef "Flows.fixture")] [])
     bundle = FlowBundle (either error id (gitRevision (replicate 40 'a'))) program guest
       [PreparedFlowEntry declaration entry contract contract (object []) "fixture"] [] Nothing
+
+-- Observe catalog transaction boundaries independently of atomic filesystem
+-- replacement (covered by DocumentPersistence tests).
+recordingDocuments :: State.State CollisionRecord :> es => Eff (DocumentPersistence : es) a -> Eff es a
+recordingDocuments = interpret $ \env request -> case request of
+  TryLockedDocument{} -> error "Unexpected adapter lock in catalog transaction test"
+  WithLockedDocument _ _ action -> localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
+    unlift (interpret (\_ operation -> liftLocal (record operation)) action)
+  where
+    record :: State.State CollisionRecord :> es => DocumentAccess m a -> Eff es a
+    record ReadCurrent = fst <$> State.get @CollisionRecord
+    record (ReplaceCurrent bytes) = State.modify @CollisionRecord (\(_,count) -> (Just bytes,count + 1))
+    record _ = error "Unexpected catalog operation"

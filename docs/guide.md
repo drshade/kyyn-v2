@@ -683,6 +683,21 @@ An interrupted, unreported `started` call retains that state on retry: the next
 worker pass either repeats it with the same identity (`SafeToRepeat`) or records
 the uncertainty warning (`RequireExplicitRetry`), requiring another explicit retry.
 
+The worker also polls open event waits after dispatch completes, or immediately
+when dispatch is not required. It records each attempt before calling the plugin
+and respects the plugin's minimum interval, including across worker restarts.
+Poll errors preserve the cursor and retry at that interval; they do not need
+`flow retry`. CLI and web inspection show the last/next attempt, diagnostic and
+consecutive failure count. One malformed arrival refuses the whole batch and
+keeps the old cursor.
+
+Arrivals and the next cursor are saved together. Repeated provider identities
+are deduplicated within their bound wait; conflicting reuse is retained without
+replacing the original arrival. A worker pass performs one adapter pass and at
+most one extra guest visit, so `flow worker --once` can consume newly polled
+replies without looping until completion. Waiting before the next poll is
+reported as `no-work`.
+
 Manual `flow fulfil` works in any dispatch state and preserves adapter results,
 including a result returned after a manual reply. Bare upstream waits and
 child-completion waits remain distinct. Event cursors are stored in the local
