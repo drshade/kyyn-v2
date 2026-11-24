@@ -54,3 +54,6 @@ button:focus-visible,a:focus-visible{outline:2px solid #245a94;outline-offset:3p
 .graph-viewport [data-state=restored]{--run-fill:#eee9fb;--run-stroke:#7561a9}
 .node-list [data-state=suspended]{background:#fff3d6}
 .node-list [data-state=restored]{background:#eee9fb}
+
+.embedded-run body { margin: 0; padding: 1rem; max-width: none; }
+.embedded-run body > nav, .embedded-run body > h1 { display: none; }

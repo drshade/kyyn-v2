@@ -1,3 +1,4 @@
+if (typeof document !== 'undefined' && new URLSearchParams(location.search).has('embedded')) document.documentElement.classList.add('embedded-run');
 import {compactFlow} from './inspection.mjs';
 
 // One recording reducer for live following, seek and playback. Graph addresses
