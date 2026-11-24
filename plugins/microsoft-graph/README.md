@@ -601,19 +601,23 @@ first answers the turn. Messages created before the next outgoing message are
 not queued for that next turn.
 
 Polling has a five-second minimum interval: for one small chat, up to 12 Graph
-list calls and 12 token refresh calls per minute while waiting. A paginated scan
-reads up to four pages per invocation, retaining the earliest eligible candidate
+list calls per minute while waiting. Polling reuses an access token in the
+secret store (`TOKEN_KEY-access`), refreshing it when Graph returns 401.
+Dispatch refreshes once per outgoing message and never repeats a POST. A paginated
+scan reads up to four pages per invocation, retaining the earliest eligible candidate
 in its cursor until the scan completes. No answer is delivered from a partial
 scan. Restarting an expired saved page also resets that candidate. As with all
 polling, this cannot recover a message deleted before it was observed or guarantee
 ordering against messages not yet visible at the provider.
 
 The result is `ChatReply { message :: Reply, text :: Text }`. `message` retains
-the provider body. `text` is a deliberately lossy convenience view: TagSoup decodes
-HTML entities, removes tags and script/style contents, separates markup boundaries
-with spaces, and collapses whitespace. It does not transcribe attachments or
+the provider body. `text` is a deliberately lossy convenience view: it decodes
+basic entities (`amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`) and numeric character references, removes recognized tags/comments and script/style
+contents, separates markup boundaries with spaces, and collapses whitespace. It does not transcribe attachments or
 preserve formatting. Compare this field with `exit`, or pass it to a model.
-TagSoup is supplied by the default Kyyn guest environment.
+Whitespace is collapsed for plain-text bodies too. During a multi-page scan,
+the cursor contains a not-yet-delivered candidate message body, visible in flow
+inspection.
 
 Outgoing conversation messages above 24,000 UTF-8 bytes fail before sending;
 text is never silently truncated. Dispatch retains `RequireExplicitRetry`.

@@ -8,6 +8,7 @@ import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Teams.Types (TeamsConfig(..))
 import MicrosoftGraph.Config (authentication, graphRoot)
 import qualified MicrosoftGraph.Auth as Auth
+import qualified MicrosoftGraph.Teams.Auth as TeamsAuth
 
 validate :: TeamsConfig -> ValidationReport
 validate config = ValidationReport [errorDiagnostic "graph.teams" message | Left message <- [check config]]
@@ -26,4 +27,9 @@ check (TeamsConfig auth chat respondent) = do
 login :: TeamsConfig -> PluginLogin (Either LoginError ())
 login config@(TeamsConfig auth _ _) = case check config of
   Left problem -> pure (Left (LoginError problem))
-  Right () -> Auth.login auth
+  Right () -> do
+    result <- Auth.login auth
+    case result of
+      Right () -> TeamsAuth.invalidate auth
+      Left _ -> pure ()
+    pure result

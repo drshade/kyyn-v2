@@ -1,14 +1,12 @@
 module MicrosoftGraph.Teams.Conversation (dispatch, poll) where
 
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Aeson as Aeson
 import Data.Maybe (catMaybes, maybeToList)
 import Data.List (sortOn)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Control.Monad.Trans.Except (runExceptT, throwE)
 import Kyyn.Plugin (FetchError(..))
-import Kyyn.Plugin.Host (HttpRequest(..))
 import Kyyn.Plugin.Event
 import MicrosoftGraph.Teams.Types
 import MicrosoftGraph.Teams.Config (check)
@@ -17,7 +15,7 @@ import MicrosoftGraph.Teams.Api
 import MicrosoftGraph.Timestamp (timestamp)
 import qualified MicrosoftGraph.Teams.Event as Question
 import qualified MicrosoftGraph.Json as Json
-import qualified MicrosoftGraph.Auth as Auth
+import qualified MicrosoftGraph.Teams.Auth as Auth
 
 dispatch :: TeamsConfig -> EventDispatch Question -> LiveEvent (Either FetchError ConversationCursor)
 dispatch config input@(EventDispatch _ (Question content))
@@ -29,7 +27,6 @@ poll config@(TeamsConfig auth chat _) (EventPoll _ _ prior) = fmap (either (Left
   either throwE pure (check config)
   ConversationCursor sent@(Cursor key created continuation) saved <- maybe (throwE "Teams conversation requires a completed dispatch.") pure prior
   _ <- either throwE pure (timestamp created)
-  token <- ExceptT (Auth.accessToken auth)
   let initial = messagesUrl config <> "?$top=50&$orderby=lastModifiedDateTime%20desc&$filter=" <>
         Json.escape ("lastModifiedDateTime gt " <> created)
       oldest candidates = case sortOn (\(Reply identity _ time _ _) -> (timestamp time,identity)) candidates of
@@ -40,7 +37,7 @@ poll config@(TeamsConfig auth chat _) (EventPoll _ _ prior) = fmap (either (Left
         fetched <- case checkedPage config url of
           Left problem -> pure (Left problem)
           Right checked -> if checked `elem` seen then pure (Left "Teams conversation pagination repeated a page.") else
-            lift (send (HttpRequest "GET" checked [("Authorization","Bearer " <> token)] ""))
+            lift (Auth.getPage auth checked)
         case fetched of
           Left _ | restart -> pages (budget - 1) False [] Nothing initial
           Left problem -> throwE problem

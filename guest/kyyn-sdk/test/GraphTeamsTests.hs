@@ -101,6 +101,10 @@ main = do
   assert "HTML exit extraction" (ChatText.plainText "<p> EXIT&nbsp; </p>" == "EXIT")
   assert "HTML entities and paragraphs" (ChatText.plainText "<p>A &amp; B</p><p>&lt;ok&gt; &#65;</p>" == "A & B <ok> A")
   assert "script/style ignored" (ChatText.plainText "<style>bad</style><p>Hello</p><script>bad</script>" == "Hello")
+  assert "quoted greater-than in attribute" (ChatText.plainText "<p title=\"a>b\">hello</p>" == "hello")
+  assert "comments and numeric Unicode" (ChatText.plainText "<!--ignore--><p>&#39; &#x1F600; &unknown;</p>" == "' 😀 &unknown;")
+  assert "encoded tags are literal" (ChatText.plainText "&lt;script&gt;hello&lt;/script&gt;" == "<script>hello</script>")
+  assert "invalid numeric entity retained" (ChatText.plainText "&#xD800; &#x110000;" == "&#xD800; &#x110000;")
   let chatDispatch = Chat.dispatch config (EventDispatch (WaitId "c") (Question "Hello"))
       chatCursor = ConversationCursor initialCursor Nothing
       chatPolling = Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just chatCursor))
@@ -120,6 +124,20 @@ main = do
   assert "earliest reply across page budget" (chatResumed == ordinary)
   (chatRestarted,_,_) <- run [ok 410 A.Null,ok 200 (page [first] Nothing)] (Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just pending)))
   assert "conversation expired continuation resets candidate" (chatRestarted == ordinary)
+  (cached,_,cacheWrites) <- run [ok 200 (page [] Nothing),ok 200 (page [] Nothing)] (chatPolling >> chatPolling)
+  assert "poll invocations share cached token" (cached == Right (EventBatch [] chatCursor) && cacheWrites == ["rotated","token"])
+  (refreshed,_,refreshWrites) <- run [ok 401 A.Null,ok 200 (page [first] Nothing)] chatPolling
+  assert "401 refreshes GET once" (refreshed == ordinary && refreshWrites == ["rotated","token","rotated","token"])
+  (refusedAgain,repeatedGets,_) <- run [ok 401 A.Null,ok 401 A.Null] chatPolling
+  assert "second 401 does not loop" (isLeft refusedAgain && length repeatedGets == 2)
+  let secondCursor = ConversationCursor (Cursor "bot2" "2026-11-24T10:03:00Z" Nothing) Nothing
+      secondPolling = Chat.poll config (EventPoll (WaitId "c2") (Question "Response") (Just secondCursor))
+      bot2 = message "bot2" "person" [] "2026-11-24T10:03:00Z" "Response"
+      third = message "third" "person" [] "2026-11-24T10:04:00Z" "next"
+  (secondTurn,_,_) <- run [ok 200 (page [first,second,bot2,third] Nothing)] secondPolling
+  assert "next turn excludes old answers and new self echo" (case secondTurn of
+    Right (EventBatch [EventArrival _ (ChatReply (Reply key _ _ _ _) _)] _) -> key == "third"
+    _ -> False)
   forM_ [Text.replicate 24001 "a",Text.replicate 12001 "é"] $ \oversized -> do
     (tooLarge,noSend,_) <- run [] (Chat.dispatch config (EventDispatch (WaitId "c") (Question oversized)))
     assert "oversized message refused before effects" (isLeft tooLarge && null noSend)
@@ -155,6 +173,7 @@ run responses program = do
   remaining <- newIORef responses
   trace <- newIORef []
   rotated <- newIORef []
+  secrets <- newIORef [("secret","synthetic-refresh")]
   let handle :: (Http :+: (Secrets :+: Waiting)) a -> IO a
       handle (InLeft (SendHttp request@(HttpRequest _ url _ _)))
         | "https://login.microsoftonline.com/" `Text.isPrefixOf` url = pure (ok 200 (A.object ["access_token" .= ("token" :: Text),"refresh_token" .= ("rotated" :: Text)]))
@@ -164,8 +183,10 @@ run responses program = do
           case queued of
             [] -> fail "Unexpected HTTP request or retry"
             response:rest -> writeIORef remaining rest >> pure response
-      handle (InRight (InLeft (GetSecret _))) = pure (Right "synthetic-refresh")
-      handle (InRight (InLeft (PutSecret _ token))) = modifyIORef' rotated (<> [token])
+      handle (InRight (InLeft (GetSecret key))) = maybe (Left (SecretNotFound key)) Right . lookup key <$> readIORef secrets
+      handle (InRight (InLeft (PutSecret key token))) = do
+        modifyIORef' rotated (<> [token])
+        modifyIORef' secrets (\values -> (key,token) : filter ((/= key) . fst) values)
       handle (InRight (InRight (WaitSeconds _))) = fail "Teams adapter unexpectedly slept"
   result <- interpretProgram handle program
   assert "unused synthetic responses" . null =<< readIORef remaining

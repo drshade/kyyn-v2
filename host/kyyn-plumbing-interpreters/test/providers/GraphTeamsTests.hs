@@ -30,6 +30,18 @@ main = do
   entry <- case arrivals of [entry] -> pure entry; _ -> fail "Expected one answer"
   reply <- get "value" entry :: IO Value
   assert "answer" . (== ("Answer" :: Text.Text)) =<< get "content" reply
+  chatDispatch <- nativeEvent "microsoft-graph" "Teams" "conversation" True
+  chatPoll <- nativeEvent "microsoft-graph" "Teams" "conversation" False
+  (chatSent,_,chatExit) <- brokerWith Normal respond chatDispatch (envelope ["waitIdentity" .= text "chat","request" .= request])
+  assert "chat dispatch exit" (chatExit == ExitSuccess)
+  chatCursor <- maybe (fail "Missing conversation cursor") (get "value") chatSent :: IO Value
+  (chatReceived,_,chatPollExit) <- brokerWith Normal respondOrdinary chatPoll (envelope ["waitIdentity" .= text "chat","request" .= request,"cursor" .= tagged "Some" chatCursor])
+  assert "chat poll exit" (chatPollExit == ExitSuccess)
+  chatBatch <- maybe (fail "Missing conversation batch") (get "value") chatReceived :: IO Value
+  chatArrivals <- get "arrivals" chatBatch :: IO [Value]
+  chatEntry <- case chatArrivals of [one] -> pure one; _ -> fail "Expected ordinary reply"
+  chatReply <- get "value" chatEntry :: IO Value
+  assert "ordinary HTML exit text" . (== ("exit" :: Text.Text)) =<< get "text" chatReply
   putStrLn "Teams real guest: discovery, delegated dispatch and quoted reply passed."
 
 config :: Value
@@ -50,6 +62,18 @@ respond _ "http" "send" args = do
           ,"attachments" .= [object ["id" .= text "question","contentType" .= text "messageReference"]]
           ,"body" .= object ["contentType" .= text "text","content" .= text "Answer"]]]])
 respond _ _ _ _ = fail "Unexpected Teams capability"
+respondOrdinary :: Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString)
+respondOrdinary raw "http" "send" args = do
+  url <- get "url" args :: IO Text.Text
+  if "https://graph.microsoft.com/" `Text.isPrefixOf` url then
+    pure (http 200 (object ["value" .= [object
+      ["id" .= text "ordinary","chatId" .= text "chat","messageType" .= text "message","createdDateTime" .= text "2026-11-24T10:01:00Z"
+      ,"from" .= object ["user" .= object ["id" .= text "person"]]
+      ,"attachments" .= ([] :: [Value])
+      ,"body" .= object ["contentType" .= text "html","content" .= text "<p>exit&nbsp;</p>"]]]]))
+  else respond raw "http" "send" args
+respondOrdinary raw capability method args = respond raw capability method args
+
 http :: Int -> Value -> (Value,Bytes.ByteString)
 http status body = (tagged "Right" (object ["status" .= show status,"headers" .= ([] :: [Value])]),Lazy.toStrict (encode body))
 text :: Text.Text -> Value
