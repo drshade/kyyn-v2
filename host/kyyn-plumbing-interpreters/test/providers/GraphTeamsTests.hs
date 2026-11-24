@@ -1,5 +1,5 @@
 -- Actual Nix-built plugin event entry points with synthetic HTTP and secrets.
--- Verifies discovery, dispatch cursor and resumed quote polling wire contracts.
+-- Verifies discovery, dispatch cursor, quoted and ordinary reply wire contracts.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 import ProviderBroker

@@ -1,5 +1,6 @@
--- Teams questions against a synthetic HTTP interpreter. Exercises filtering,
--- pagination, initialCursor replay and failures without network or real credentials.
+-- Teams questions and conversations against a synthetic HTTP interpreter.
+-- Covers filtering, paginated earliest replies, token caching, text extraction,
+-- outgoing size limits and failures without network or real credentials.
 {-# LANGUAGE GADTs, TypeOperators, OverloadedStrings #-}
 module Main where
 
