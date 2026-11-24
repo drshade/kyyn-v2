@@ -1,4 +1,4 @@
-module MicrosoftGraph.Teams.Api (send, messagesUrl, checkedPage, field, nonempty, encode, reply) where
+module MicrosoftGraph.Teams.Api (send, messagesUrl, checkedPage, field, nonempty, encode, reply, ordinaryReply) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -63,17 +63,20 @@ encode = Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode
 -- Graph documents messageReference attachments for chat quotes. replyToId is
 -- channel-only. Never infer correlation from quoted HTML or preview text.
 reply :: TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
-reply config cursor value = Right (either (const Nothing) id (candidate config cursor value))
+reply config cursor value = Right (either (const Nothing) id (candidate True config cursor value))
 
-candidate :: TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
-candidate (TeamsConfig _ chat respondent) (Cursor question created _) value = do
+ordinaryReply :: TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
+ordinaryReply config cursor value = Right (either (const Nothing) id (candidate False config cursor value))
+
+candidate :: Bool -> TeamsConfig -> Cursor -> Aeson.Value -> Either Text (Maybe Reply)
+candidate quoted (TeamsConfig _ chat respondent) (Cursor question created _) value = do
   kind <- field "messageType" value
   deleted <- Json.optionalText "deletedDateTime" value
   if kind /= "message" || deleted /= Nothing then pure Nothing else do
     sender <- case Json.member "from" value >>= Json.member "user" >>= Json.optionalText "id" of
       Right result -> pure result
       Left _ -> pure Nothing
-    if sender /= Just respondent then pure Nothing else do
+    if sender /= Just respondent then pure Nothing else if not quoted then matched else do
       references <- Json.member "attachments" value >>= Json.array >>= mapM reference
       case nub [key | Just key <- references] of
         [key] | key == question -> matched

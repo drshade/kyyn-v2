@@ -20,3 +20,12 @@ data Reply = Reply
   { messageId :: Text, senderId :: Text, createdAt :: Text
   , contentType :: Text, content :: Text }
   deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
+
+-- The earliest eligible message is retained until all pages have been examined.
+data ConversationCursor = ConversationCursor
+  { sent :: Cursor, earliest :: Maybe Reply }
+  deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
+
+data ChatReply = ChatReply
+  { message :: Reply, text :: Text }
+  deriving stock (Eq, Show, Generic) deriving anyclass (Contract)

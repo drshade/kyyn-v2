@@ -37,5 +37,7 @@ connectors = [SourceConnector
   { name = "Teams", validateConfig = "MicrosoftGraph.Teams.Config.validate"
   , login = Just "MicrosoftGraph.Teams.Config.login"
   , events = [EventMethod "question" "Send a Teams question and await a quoted reply from the configured respondent."
-      "MicrosoftGraph.Teams.Event.poll" (Just ("MicrosoftGraph.Teams.Event.dispatch", RequireExplicitRetry)) (Seconds 30)]
+      "MicrosoftGraph.Teams.Event.poll" (Just ("MicrosoftGraph.Teams.Event.dispatch", RequireExplicitRetry)) (Seconds 30)
+      , EventMethod "conversation" "Send a message and await the next ordinary respondent message; one turn-taking conversation per chat."
+          "MicrosoftGraph.Teams.Conversation.poll" (Just ("MicrosoftGraph.Teams.Conversation.dispatch", RequireExplicitRetry)) (Seconds 5)]
   }]

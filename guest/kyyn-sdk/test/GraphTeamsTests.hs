@@ -19,6 +19,8 @@ import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Teams.Types
 import qualified MicrosoftGraph.Teams.Event as Event
 import qualified MicrosoftGraph.Teams.Config as Config
+import qualified MicrosoftGraph.Teams.Conversation as Chat
+import qualified MicrosoftGraph.Teams.Text as ChatText
 import qualified MicrosoftGraph.Teams.Api as Api
 
 main :: IO ()
@@ -96,6 +98,31 @@ main = do
   assert "long retry-after reported promptly" (case throttled of Left (FetchError problem) -> "Retry-After: 120" `Text.isInfixOf` problem; _ -> False)
   (missing,rs,_) <- run [] (Event.poll config (EventPoll (WaitId "w") (Question "Q") Nothing))
   assert "no poll before dispatch" (isLeft missing && null rs)
+  assert "HTML exit extraction" (ChatText.plainText "<p> EXIT&nbsp; </p>" == "EXIT")
+  assert "HTML entities and paragraphs" (ChatText.plainText "<p>A &amp; B</p><p>&lt;ok&gt; &#65;</p>" == "A & B <ok> A")
+  assert "script/style ignored" (ChatText.plainText "<style>bad</style><p>Hello</p><script>bad</script>" == "Hello")
+  let chatDispatch = Chat.dispatch config (EventDispatch (WaitId "c") (Question "Hello"))
+      chatCursor = ConversationCursor initialCursor Nothing
+      chatPolling = Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just chatCursor))
+      first = message "first" "person" [] "2026-11-24T10:01:00Z" "<p>Hello &amp; hi</p>"
+      second = message "second" "person" [] "2026-11-24T10:02:00Z" "second"
+      expectedChat = ChatReply (Reply "first" "person" "2026-11-24T10:01:00Z" "html" "<p>Hello &amp; hi</p>") "Hello & hi"
+      expectedArrival = EventArrival (EventIdentity (Api.encode (A.toJSON (["chat","first"] :: [Text])))) expectedChat
+  (chatSent,_,_) <- run [ok 201 sentMessage] chatDispatch
+  assert "conversation dispatch" (chatSent == Right chatCursor)
+  (ordinary,_,_) <- run [ok 200 (page [second,first,message "question" "person" [] created "Hello"] Nothing)] chatPolling
+  assert "ordinary replies earliest and no self echo" (ordinary == Right (EventBatch [expectedArrival] chatCursor))
+  (chatPartial,_,_) <- run [ok 200 (page [second] (Just (link n))) | n <- [1..4]] chatPolling
+  pending <- case chatPartial of
+    Right (EventBatch [] next) -> pure next
+    _ -> fail "Conversation emitted before complete scan"
+  (chatResumed,_,_) <- run [ok 200 (page [first] Nothing)] (Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just pending)))
+  assert "earliest reply across page budget" (chatResumed == ordinary)
+  (chatRestarted,_,_) <- run [ok 410 A.Null,ok 200 (page [first] Nothing)] (Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just pending)))
+  assert "conversation expired continuation resets candidate" (chatRestarted == ordinary)
+  forM_ [Text.replicate 24001 "a",Text.replicate 12001 "é"] $ \oversized -> do
+    (tooLarge,noSend,_) <- run [] (Chat.dispatch config (EventDispatch (WaitId "c") (Question oversized)))
+    assert "oversized message refused before effects" (isLeft tooLarge && null noSend)
   putStrLn "Teams: dispatch, auth, quotes, self-chat, duplicate/edit identity, paging and failures passed."
 
 config :: TeamsConfig
