@@ -4,6 +4,9 @@ module Kyyn.Composition.Flows (dispatchFlows) where
 import Control.Concurrent (threadDelay)
 import Control.Monad (forM, when)
 import Data.List (nub)
+import Data.Time (diffUTCTime)
+import Kyyn.Plumbing.Capability.Clock (Clock, currentTime)
+import Kyyn.Plumbing.Interpreter.Clock (runClockIO)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -46,7 +49,7 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.Flow (runFlow)
 import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
-import Kyyn.Porcelain.Capability.FlowEvents (FlowEvents, dispatchEvents)
+import Kyyn.Porcelain.Capability.FlowEvents (FlowEvents, EventVisit(..), serviceEvents)
 import Kyyn.Porcelain.Capability.PluginEvent (PluginEvent)
 import Kyyn.Porcelain.Interpreter.FlowEvents (runFlowEvents)
 import Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent)
@@ -64,12 +67,12 @@ import qualified Kyyn.Surfaces.Result as Result
 import Kyyn.Surfaces.Result (Response, success, refusal, operationalFailure)
 
 type Pinned = FlowEvents ': PluginEvent ': FlowWorker ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
-  ': DocumentPersistence ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
+  ': DocumentPersistence ': Clock ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
 
 -- Resumption and inspection do not resolve Nix, inspect current source, or rebuild.
 runPinned :: Host -> KnowledgeBase -> DirectoryScope -> Eff Pinned a -> IO (Either OperationalFailure a)
 runPinned host kb scope = runBase host . runGuestExecution host.runtimeEnvironment
-  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runDocumentPersistenceIO
+  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runClockIO . runDocumentPersistenceIO
   . runBlobStorageIO scope . runEvidenceStore scope . runPluginRead . runFlowStore kb
   . runAppendJournalIO . runRecipeRunStore announce . runFlowWorker kb . runPluginEvent . runFlowEvents kb
   where announce header = liftIO (hPutStrLn stderr ("Attempt " ++ runIdText header.runId ++ ": /runs/" ++ runIdText header.runId))
@@ -140,15 +143,25 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
     worker scope once previous = do
       result <- runPinned host kb scope $ do
         items <- listInstances
-        forM (filter eligible items) $ \item -> do
+        visits <- forM (filter eligible items) $ \item -> do
           visited <- catchError @OperationalFailure (Right <$> (do
             guest <- visitInstance item.instanceId
-            events <- dispatchEvents item.instanceId
-            pure (if events == NoWork then guest else events))) (\_ problem -> pure (Left problem))
+            events <- serviceEvents item.instanceId
+            resumed <- if events.received then visitInstance item.instanceId else pure NoWork
+            pure (if Blocked `elem` [guest,events.activity,resumed] then Blocked
+              else if Advanced `elem` [guest,events.activity,resumed] then Advanced
+              else if WriterBusy `elem` [guest,events.activity,resumed] then WriterBusy else NoWork))) (\_ problem -> pure (Left problem))
           pure (item.instanceId,visited)
+        now <- currentTime
+        latest <- listInstances
+        let delays = [max 1000 (ceiling (diffUTCTime due now * 1000000)) |
+              item <- latest, eligible item, wait <- item.waits, wait.waitStatus == Open,
+              Just adapter <- [wait.adapter], null adapter.dispatchProblems,
+              Just due <- [adapter.polling.nextAttempt], due > now]
+        pure (visits,minimum (1000000 : delays))
       case result of
         Left problem -> pure (operationalFailure problem)
-        Right visits -> do
+        Right (visits,idleDelay) -> do
           let messages = [Text.unpack (flowInstanceIdText identity) ++ "  " ++ either
                 (Text.unpack . (.message) . operationalDiagnostic) (Text.unpack . visitText) visited | (identity,visited) <- visits]
               value = object ["visits" .= [object ["id" .= flowInstanceIdText identity,
@@ -156,7 +169,7 @@ dispatchFlows host command (SelectedKb kb revision _) = case knowledgeBaseScope 
           if once then pure (success value (if null messages then ["No interactive flows to visit."] else messages))
           else do
             when (previous /= Just messages) (mapM_ (hPutStrLn stderr) messages)
-            threadDelay 1000000
+            threadDelay idleDelay
             worker scope once (Just messages)
 
 present :: (FlowStore :> es, DhallHandling :> es, Failure :> es) => Bool -> FlowInstance -> Eff es Response
@@ -206,7 +219,7 @@ eligible item = case item.launch.owner of
   Hosted{} -> not item.retryRequired && case item.status of
     Runnable -> True
     Running -> True
-    Waiting -> any ((== Nothing) . (.outcome)) item.deliveries
+    Waiting -> True
     Finished{} -> False
 
 subtree :: [FlowInstanceId] -> [FlowInstance] -> [FlowInstanceId]

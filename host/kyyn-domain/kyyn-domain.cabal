@@ -7,7 +7,8 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Domain.Inspection
+  exposed-modules: Kyyn.Domain.FlowPolling
+    Kyyn.Domain.Inspection
     Kyyn.Domain.DataType Kyyn.Domain.Failure Kyyn.Domain.Path Kyyn.Domain.Diagnostic
     Kyyn.Domain.Contract Kyyn.Domain.Root Kyyn.Domain.Value Kyyn.Domain.Query Kyyn.Domain.Example
     Kyyn.Domain.FileTree Kyyn.Domain.Git Kyyn.Domain.Workspace
@@ -34,7 +35,7 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.22 && <4.23, deepseq, filepath, kyyn-types, bytestring, text,
+  build-depends: time, base >=4.22 && <4.23, deepseq, filepath, kyyn-types, bytestring, text,
     aeson >=2.2.4 && <2.3, cryptohash-sha256 ==0.11.102.1, containers
 
 test-suite contract-roles

@@ -29,6 +29,7 @@ import Kyyn.Porcelain.Protocol.FlowBundle (bundleValue, parseBundle)
 import Kyyn.Domain.FlowInstance
 import qualified Kyyn.Domain.FlowLifecycle as Lifecycle
 import qualified Kyyn.Domain.FlowDispatch as Dispatch
+import qualified Kyyn.Domain.FlowPolling as Polling
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope)
 import Kyyn.Domain.Path (scopePath, directoryScope, relativePath, relativeName)
 import qualified Kyyn.Domain.Failure as Failure
@@ -135,6 +136,21 @@ runFlowStore kb = interpret $ \_ operation -> do
             Nothing -> pure (Right ())
             Just current -> commit $ do
               updated <- Dispatch.blockDispatch key problems current
+              pure ((),replace updated catalog)
+          BeginPoll identity key now interval -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right False)
+            Just current -> commit $ do
+              (started,updated) <- Polling.beginPoll now interval key current
+              pure (started,replace updated catalog)
+          CompletePoll identity key arrivals cursor -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right False)
+            Just current -> commit $ do
+              (queued,updated) <- Polling.completePoll key arrivals cursor current
+              pure (queued,replace updated catalog)
+          FailPoll identity key problems -> case find ((== identity) . (.instanceId)) catalog of
+            Nothing -> pure (Right ())
+            Just current -> commit $ do
+              updated <- Polling.failPoll key problems current
               pure ((),replace updated catalog)
           ListInstances -> pure catalog
           ReadDescendant caller target -> pure (Lifecycle.requireDescendant caller target catalog)

@@ -323,7 +323,7 @@ main = withSystemTempDirectory "kyyn-flow-store" $ \directory -> do
   let eventReference = EventReference "plugin" "connector" "instance" "event"
       pendingEvent = orphan { status = Waiting, retryRequired = False, blocked = [],
         waits = [FlowWait "event" Null (EventWait eventReference) Open
-          (Just (EventAdapter Pending Nothing []))] }
+          (Just (EventAdapter Pending Nothing [] initialPollState))] }
       eventState item = case item.waits of
         [event] -> maybe (error "Missing event adapter") id event.adapter
         _ -> error "Missing event wait"

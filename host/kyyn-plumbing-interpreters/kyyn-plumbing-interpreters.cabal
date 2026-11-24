@@ -7,7 +7,8 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Plumbing.Interpreter.AppendJournal
+  exposed-modules: Kyyn.Plumbing.Interpreter.Clock
+    Kyyn.Plumbing.Interpreter.AppendJournal
     Kyyn.Plumbing.Interpreter.Failure Kyyn.Plumbing.Interpreter.ProcessExecution
     Kyyn.Plumbing.Interpreter.GuestExecution
     Kyyn.Plumbing.Interpreter.ApiInspection

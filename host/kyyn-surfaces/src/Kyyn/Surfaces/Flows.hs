@@ -45,6 +45,9 @@ instanceValue item interrupted descriptors input result problems = object
       "descriptor" .= (case wait.kind of ChildWait{} -> Nothing; _ -> lookup wait.waitId descriptors),
       "dispatch" .= fmap (dispatchText . (.dispatch)) wait.adapter,
       "dispatchBlocked" .= [object ["code" .= problem.code,"message" .= problem.message] | adapter <- maybe [] pure wait.adapter, problem <- adapter.dispatchProblems],
+      "polling" .= fmap (\adapter -> object ["lastAttempt" .= adapter.polling.lastAttempt,
+        "nextAttempt" .= adapter.polling.nextAttempt,"consecutiveFailures" .= adapter.polling.consecutiveFailures,
+        "problems" .= [object ["code" .= problem.code,"message" .= problem.message] | problem <- adapter.polling.problems]]) wait.adapter,
       "adapterCursor" .= (wait.adapter >>= (.cursor)),
       "child" .= (case wait.kind of ChildWait child _ -> Just (flowInstanceIdText child); _ -> Nothing),"reply" .= case wait.waitStatus of
         Answered origin value -> Just (object ["origin" .= originValue origin,"value" .= value]); _ -> Nothing]
@@ -65,6 +68,10 @@ instanceLines item interrupted descriptors input result problems =
   ["Wait description " ++ Text.unpack identity ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | (identity,value) <- descriptors, any (\wait -> wait.waitId == identity && (case wait.kind of ChildWait{} -> False; _ -> True)) item.waits] ++
   ["Dispatch blocked [" ++ Text.unpack wait.waitId ++ "]: " ++ Text.unpack problem.message |
     wait <- item.waits, adapter <- maybe [] pure wait.adapter, problem <- adapter.dispatchProblems] ++
+  ["Poll [" ++ Text.unpack wait.waitId ++ "]: " ++ show adapter.polling.consecutiveFailures ++ " consecutive failures; next " ++ show adapter.polling.nextAttempt |
+    wait <- item.waits, adapter <- maybe [] pure wait.adapter, adapter.polling.lastAttempt /= Nothing] ++
+  ["Poll failed [" ++ Text.unpack wait.waitId ++ "]: " ++ Text.unpack problem.message |
+    wait <- item.waits, adapter <- maybe [] pure wait.adapter, problem <- adapter.polling.problems] ++
   ["Reply " ++ Text.unpack wait.waitId ++ ": " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode value))) | wait <- item.waits, Answered _ value <- [wait.waitStatus]] ++
   ["Attempt " ++ runIdText ident ++ ": /runs/" ++ runIdText ident | ident <- item.attempts]
 

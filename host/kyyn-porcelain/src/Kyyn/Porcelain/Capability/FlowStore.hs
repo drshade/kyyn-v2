@@ -1,11 +1,13 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.FlowStore
-  ( FlowStore(..), beginDispatch, completeDispatch, blockDispatch, readDescendant, cancelDescendant, startInstance, listInstances, readInstance, beginAttempt
+  ( FlowStore(..), beginPoll, completePoll, failPoll, beginDispatch, completeDispatch, blockDispatch, readDescendant, cancelDescendant, startInstance, listInstances, readInstance, beginAttempt
   , reportFrontier, finishInstance, blockInstance, cancelInstance
   , queueDelivery, queueNewDelivery, resolveDelivery, startPreparedInstance, startNewPreparedInstance, readExecutionBundle, readBundleDescription, clearInstances, linkAttempt, blockAttempt, retryInstance
   ) where
 
 import Kyyn.Domain.RecipeRunId (RecipeRunId)
+import Data.Time (UTCTime, NominalDiffTime)
+import Kyyn.Types.EventIdentity (EventIdentity)
 import Data.Aeson (Value)
 import Data.Text (Text)
 import Effectful (Effect, Eff, DispatchOf, Dispatch(..), (:>))
@@ -26,6 +28,9 @@ data FlowStore :: Effect where
   BeginDispatch :: FlowInstanceId -> Text -> FlowStore m (Either FlowStoreProblem Bool)
   CompleteDispatch :: FlowInstanceId -> Text -> Value -> FlowStore m (Either FlowStoreProblem ())
   BlockDispatch :: FlowInstanceId -> Text -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem ())
+  BeginPoll :: FlowInstanceId -> Text -> UTCTime -> NominalDiffTime -> FlowStore m (Either FlowStoreProblem Bool)
+  CompletePoll :: FlowInstanceId -> Text -> [(EventIdentity,Value)] -> Value -> FlowStore m (Either FlowStoreProblem Bool)
+  FailPoll :: FlowInstanceId -> Text -> [Diagnostic] -> FlowStore m (Either FlowStoreProblem ())
   ListInstances :: FlowStore m [FlowInstance]
   ReadDescendant :: FlowInstanceId -> FlowInstanceId -> FlowStore m (Either FlowStoreProblem FlowInstance)
   CancelDescendant :: FlowInstanceId -> FlowInstanceId -> CancelScope -> FlowStore m (Either FlowStoreProblem FlowInstance)
@@ -101,3 +106,10 @@ completeDispatch :: FlowStore :> es => FlowInstanceId -> Text -> Value -> Eff es
 completeDispatch identity wait = send . CompleteDispatch identity wait
 blockDispatch :: FlowStore :> es => FlowInstanceId -> Text -> [Diagnostic] -> Eff es (Either FlowStoreProblem ())
 blockDispatch identity wait = send . BlockDispatch identity wait
+
+beginPoll :: FlowStore :> es => FlowInstanceId -> Text -> UTCTime -> NominalDiffTime -> Eff es (Either FlowStoreProblem Bool)
+beginPoll identity key now = send . BeginPoll identity key now
+completePoll :: FlowStore :> es => FlowInstanceId -> Text -> [(EventIdentity,Value)] -> Value -> Eff es (Either FlowStoreProblem Bool)
+completePoll identity key arrivals = send . CompletePoll identity key arrivals
+failPoll :: FlowStore :> es => FlowInstanceId -> Text -> [Diagnostic] -> Eff es (Either FlowStoreProblem ())
+failPoll identity key = send . FailPoll identity key

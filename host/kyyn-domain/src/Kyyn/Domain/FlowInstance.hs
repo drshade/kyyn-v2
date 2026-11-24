@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields, OverloadedRecordDot #-}
 module Kyyn.Domain.FlowInstance
   ( FlowInstanceId, flowInstanceId, flowInstanceIdText, FlowOwner(..)
-  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), DeliveryOrigin(..), ReplyOrigin(..), DispatchState(..), EventAdapter(..)
+  , FlowProgress(..), FlowOutcome(..), ExecutionStatus(..), CancelScope(..), DeliveryOrigin(..), ReplyOrigin(..), DispatchState(..), EventAdapter(..), PollState(..), initialPollState
   , FlowLaunch(..), FlowInstance(..), FlowWait(..), WaitKind(..), WaitStatus(..)
   , FlowDelivery(..), DeliveryOutcome(..), FlowStoreProblem(..)
   ) where
@@ -11,6 +11,7 @@ import Kyyn.Domain.FlowBundleId (FlowBundleId)
 import Kyyn.Types.KnowledgeBase (RecipeId, EventReference)
 import Kyyn.Types.EventWait (ReplyOrigin(..))
 import Data.Aeson (Value)
+import Data.Time (UTCTime)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -49,8 +50,13 @@ data FlowInstance = FlowInstance
 data WaitKind = ReplyWait | ChildWait FlowInstanceId Description | EventWait EventReference deriving (Eq, Show)
 data DispatchState = NotRequired | Pending | Started | DispatchCompleted deriving (Eq, Show)
 data EventAdapter = EventAdapter
-  { dispatch :: DispatchState, cursor :: Maybe Value, dispatchProblems :: [Diagnostic] }
+  { dispatch :: DispatchState, cursor :: Maybe Value, dispatchProblems :: [Diagnostic], polling :: PollState }
   deriving (Eq, Show)
+data PollState = PollState
+  { lastAttempt :: Maybe UTCTime, nextAttempt :: Maybe UTCTime
+  , consecutiveFailures :: Int, problems :: [Diagnostic] } deriving (Eq, Show)
+initialPollState :: PollState
+initialPollState = PollState Nothing Nothing 0 []
 data FlowWait = FlowWait
   { waitId :: Text, descriptor :: Value, kind :: WaitKind, waitStatus :: WaitStatus, adapter :: Maybe EventAdapter
   } deriving (Eq, Show)
