@@ -14,7 +14,7 @@ import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Plumbing.Protocol.PluginHost (decodePluginHostCall)
-import Kyyn.Porcelain.Protocol.PluginHost (decodeHostFrame, answerNetwork)
+import Kyyn.Porcelain.Protocol.PluginHost (adapterDeadlineMicroseconds, decodeHostFrame, answerNetwork)
 import Kyyn.Porcelain.Protocol.PluginBroker (conversationWithBody)
 import Kyyn.Porcelain.Capability.PluginEvent
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -33,13 +33,9 @@ runPluginEvent = interpret $ \_ -> \case
     pure $ result >>= either (Left . pure . errorDiagnostic "flow.poll-result") Right . parseEither parseEventBatch
   where
     invoke failureCode entry input = do
-      result <- withinMicroseconds eventAdapterDeadlineMicroseconds
+      result <- withinMicroseconds adapterDeadlineMicroseconds
         (conversationWithBody (decodeHostFrame decodePluginHostCall) entry input answerNetwork)
       pure $ case result of
         Nothing -> Left [errorDiagnostic "flow.adapter-timeout" "Event adapter exceeded its 60-second deadline."]
         Just (Left (FetchError message)) -> Left [errorDiagnostic failureCode (Text.unpack message)]
         Just (Right value) -> Right value
-
--- Product policy, shared by dispatch and poll; not per-plugin configuration.
-eventAdapterDeadlineMicroseconds :: Int
-eventAdapterDeadlineMicroseconds = 60 * 1000000

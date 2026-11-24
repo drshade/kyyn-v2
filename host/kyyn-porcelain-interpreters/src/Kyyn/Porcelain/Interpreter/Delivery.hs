@@ -36,7 +36,7 @@ runDelivery base = interpret $ \_ -> \case
   InvokeSink (ConfiguredConnector _ _ PreparedEventConnector{} _) _ _ ->
     pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "An event connector cannot publish an output."))
   InvokeSink (ConfiguredConnector _ _ PreparedLiveConnector{} _) _ _ ->
-    pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "An live connector cannot publish an output."))
+    pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "A live connector cannot publish an output."))
   InvokeSink (ConfiguredConnector _ _ PreparedConnector{} _) _ _ ->
     pure (FailedBeforeDispatch (errorDiagnostic "output.sink-required" "A source connector cannot publish an output."))
   InvokeSink (ConfiguredConnector _ _ PreparedSinkConnector {configContract = configType,

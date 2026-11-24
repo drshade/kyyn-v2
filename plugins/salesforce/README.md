@@ -155,7 +155,10 @@ result; a new occurrence queries again.
 The result is `Records` with rows, `totalSize` and `truncated`, or `Rejected` with
 an error code and message for malformed SOQL, unknown fields or unknown objects.
 Those rejections let a model correct the query. Authentication and operational
-failures stop the attempt. Records have named fields with null, boolean, exact
+failures returned as `FetchError` permanently finish that conversation as failed,
+including a revoked refresh token or an outage beyond the bounded provider retries.
+Fix the problem and start a new instance. A host timeout instead blocks the attempt
+until explicit `flow retry`. Records have named fields with null, boolean, exact
 number text, text or explicit nested JSON values, so aggregate queries need no Id.
 
 One call reads one provider page and returns at most 100 rows and 32 KiB of raw

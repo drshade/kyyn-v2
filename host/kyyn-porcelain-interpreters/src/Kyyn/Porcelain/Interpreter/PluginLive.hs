@@ -16,7 +16,7 @@ import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Plumbing.Protocol.PluginHost (decodePluginHostCall)
-import Kyyn.Porcelain.Protocol.PluginHost (decodeHostFrame, answerNetwork)
+import Kyyn.Porcelain.Protocol.PluginHost (adapterDeadlineMicroseconds, decodeHostFrame, answerNetwork)
 import Kyyn.Porcelain.Protocol.PluginBroker (conversationWithBody)
 import Kyyn.Porcelain.Capability.PluginLive
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedMethod(..))
@@ -27,7 +27,7 @@ runPluginLive :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es,
 runPluginLive = interpret $ \_ -> \case
   ExecuteLiveQuery (CheckedValue _ config) (PreparedMethod _ _ input output entry) value -> runExceptT $ do
     _ <- ExceptT (encodeValue (contractShape input) value)
-    response <- ExceptT $ Right <$> withinMicroseconds (60 * 1000000)
+    response <- ExceptT $ Right <$> withinMicroseconds adapterDeadlineMicroseconds
       (conversationWithBody (decodeHostFrame decodePluginHostCall) entry
         (object ["config" .= config,"input" .= value]) answerNetwork)
     case response of

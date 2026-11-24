@@ -10,7 +10,7 @@ import Kyyn.Contract
 import Kyyn.Plugin.Host (PluginLogin, LoginError)
 import Kyyn.Plugin.Live (LiveQueryProgram)
 import Kyyn.Types.Plugin (FetchError)
-import Kyyn.Runtime.Event (executeEventAction)
+import Kyyn.Runtime.Event (executeNetworkAction)
 import Kyyn.Runtime.Json (fields, field)
 import Kyyn.Plugin.Sink (Sink, SinkError)
 import Kyyn.Types.Diagnostic (ValidationReport)
@@ -35,7 +35,7 @@ liveQueryEntry name sources selected = do
     members <- either fail pure (fields ["config","input"] value)
     configuration <- either fail pure (field "config" (runtimeCodec config.codec) members)
     arguments <- either fail pure (field "input" (runtimeCodec input.codec) members)
-    executeEventAction transport (runtimeCodec output.codec) (selected configuration arguments))
+    executeNetworkAction transport (runtimeCodec output.codec) (selected configuration arguments))
 
 configurationEntry :: forall config. Contract config => Text -> [Text]
   -> (config -> ValidationReport) -> Either ProjectionError (Adapter DescribedContract)

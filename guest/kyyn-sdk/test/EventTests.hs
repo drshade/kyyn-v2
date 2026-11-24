@@ -20,7 +20,7 @@ import Kyyn.Runtime.Transport (withTransport)
 import qualified Kyyn.Plumbing.Protocol.Frame as Frame
 
 guest :: IO ()
-guest = withTransport $ \transport -> executeEventAction transport (batchCodec textCodec integerCodec) $ do
+guest = withTransport $ \transport -> executeNetworkAction transport (batchCodec textCodec integerCodec) $ do
   response <- sendHttp (HttpRequest "GET" "https://synthetic.invalid/events" [] "")
   pure $ case response of
     Left _ -> Left (FetchError "provider unavailable")

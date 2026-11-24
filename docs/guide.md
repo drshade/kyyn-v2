@@ -716,7 +716,7 @@ catalog and visible in CLI/web inspection; plugin authors must never put
 credentials in them. Use named secrets for authentication.
 
 
-#### Starting child flows
+#### Live plugin queries
 
 A live connector queries a provider during an interactive flow. Discover its methods
 with `plugin connector method list PLUGIN INSTANCE` and inspect a method's input
@@ -750,9 +750,13 @@ and model context, so respect the plugin's result bounds and your model's data p
 
 Expected provider answers, including a rejected Salesforce query, are typed output.
 An Agentic tool can return that rejection to the model so it can correct its query.
-Transport, authentication and timeout failures stop the attempt; failure of a tool's
-step monad is not converted into a model-visible tool result. `flow retry` explicitly
-retries an incomplete call. Each call has a 60-second deadline.
+A returned `FetchError`, including authentication failure, finishes the instance as
+failed; it cannot be retried. Correct the problem and start a new instance. Failure
+of a tool's step monad is not converted into a model-visible tool result. A host
+diagnostic, including the 60-second timeout or invalid result contract, blocks the
+attempt until an explicit `flow retry`. The worker never retries it automatically.
+
+#### Starting child flows
 
 An interactive parent starts only children declared by its accepted recipe. In
 flow source, `flowRef` takes the actual child flow as its type witness; it does

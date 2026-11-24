@@ -1,11 +1,17 @@
 -- Provider-free response tests for bounded live SOQL; replay is an installed journey.
+{-# LANGUAGE GADTs, TypeOperators #-}
 module Main where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM_)
+import Data.IORef
+import Kyyn.Types.Program
+import Kyyn.Types.PluginHost
+import Kyyn.Types.Plugin (FetchError(..))
+import qualified Salesforce.Live as Live
+import qualified Salesforce.Types as Auth
 import qualified Data.Text as Text
 import Salesforce.Live (decodeResponse)
 import Salesforce.Live.Types
-import Kyyn.Plugin.Host (HttpResponse(..))
 
 main :: IO ()
 main = do
@@ -23,4 +29,18 @@ main = do
   ok (decode ("{\"totalSize\":101,\"done\":true,\"records\":[" <> rows <> "]}")) $ \value -> case value of Right (Records values 101 True) -> length values == 100; _ -> False
   ok (decode ("{\"totalSize\":1,\"done\":true,\"records\":[{\"x\":\"" <> Text.replicate 32769 "a" <> "\"}]}")) $ \value -> value == Right (Records [] 1 True)
   ok (decode "{\"totalSize\":2,\"done\":true,\"records\":[]}") $ \value -> case value of Left _ -> True; _ -> False
+  forM_ [400,401] $ \status -> do
+    requests <- newIORef (0 :: Int)
+    let handle :: (Http :+: (Secrets :+: Waiting)) a -> IO a
+        handle (InLeft (SendHttp (HttpRequest _ url _ _))) = do
+          modifyIORef requests (+1)
+          pure (Right (if "/token" `Text.isSuffixOf` url then HttpResponse 200 [] "{\"access_token\":\"test-token\"}"
+            else HttpResponse status [] "[{\"errorCode\":\"MALFORMED_QUERY\",\"message\":\"bad query\"}]"))
+        handle (InRight (InLeft (GetSecret _))) = pure (Right "stored-but-revoked")
+        handle _ = fail "Unexpected retry, wait or secret write"
+    result <- interpretProgram handle (Live.query (LiveConfig "https://fixture.example" (Auth.ClientSecret "client" "key") "v62.0") (Soql "SELECT bad FROM Account"))
+    total <- readIORef requests
+    unless (total == 2) (fail "Query refusal was retried")
+    unless (case (status,result) of (400,Right Rejected{}) -> True; (401,Left (FetchError _)) -> True; _ -> False)
+      (fail ("Wrong query failure classification: " ++ show result))
   putStrLn "Live Salesforce response checks passed"

@@ -68,18 +68,18 @@ executeInteractiveProgram :: (PluginLive :> es, FlowJournal :> es, EvidenceStore
 executeInteractiveProgram identity observe control program plugins model arguments = fmap (fmap fst)
   (executeProgramResult (Just observe) (Just answerJournal) (Just control) (Just answerQuery) program plugins model [] arguments)
   where
-    answerQuery (ToolLiveQuery plugin kind instanceName methodName inputContract outputContract value) = do
-      (_,ConfiguredConnector _ _ selected config) <- either (protocolFailure . show) pure (selectedInstance plugin instanceName plugins)
+    answerQuery (ToolLiveQuery plugin kind instanceName methodName inputContract outputContract value) = runExceptT $ do
+      (_,ConfiguredConnector _ _ selected config) <- ExceptT (pure (selectedInstance plugin instanceName plugins))
       method <- case selected of
         PreparedLiveConnector {connectorType = actual,queries = methods} | actual == kind ->
           case [m | m@(PreparedMethod name _ _ _ _) <- methods, name == methodName] of
             [m] -> pure m
-            _ -> protocolFailure "Unknown live query method"
-        _ -> protocolFailure "Live query reference does not select its configured connector type"
+            _ -> throwE [errorDiagnostic "plugin.method-unknown" "Unknown live query method"]
+        _ -> throwE [errorDiagnostic "plugin.query-binding" "Live query reference does not select its configured connector type"]
       let PreparedMethod _ _ input output _ = method
       if descriptionOf input /= inputContract || descriptionOf output /= outputContract
-        then protocolFailure "Live query contracts differ from the captured binding" else pure ()
-      response <- executeLiveQuery config method value >>= either (protocolFailure . show) pure
+        then throwE [errorDiagnostic "plugin.query-contract" "Live query contracts differ from the captured binding"] else pure ()
+      response <- ExceptT (executeLiveQuery config method value)
       pure (either (\(FetchError message) -> failure (Text.unpack message)) (\(CheckedValue _ result) -> success result) response)
     answerQuery _ = protocolFailure "Expected a live query request"
     answerJournal (InitialiseJournal namespace revision)
@@ -89,20 +89,20 @@ executeInteractiveProgram identity observe control program plugins model argumen
     answerJournal (SaveJournal key value) = saveCompletion key value >> pure (object [])
 
 executeProgram :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> Maybe (ToolCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> Maybe (ToolCall -> Eff es (Either [Diagnostic] Value)) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either [Diagnostic] (Value, [EvidenceIndex]))
 executeProgram observe journal control query program plugins model captured arguments =
   first programDiagnostics <$> executeProgramResult observe journal control query program plugins model captured arguments
 
 executeProgramResult :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
-  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> Maybe (ToolCall -> Eff es Value) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
+  => Maybe (FlowObservation -> Eff es ()) -> Maybe (JournalCall -> Eff es Value) -> Maybe (FlowControlCall -> Eff es Value) -> Maybe (ToolCall -> Eff es (Either [Diagnostic] Value)) -> CompiledEntry -> [PreparedPlugin] -> Maybe ModelConfiguration -> [EvidenceIndex]
   -> Value -> Eff es (Either ProgramFailure (Value, [EvidenceIndex]))
 executeProgramResult observe journal control query program plugins model captured arguments = runExceptT $ do
   (result,contexts) <- ExceptT $ fmap (first InvocationFailure) $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,EvidenceIndex)] [] $
     conversation decodeToolFrame program arguments $ \case
       call@ToolLiveQuery{} -> case query of
         Nothing -> protocolFailure "Live queries are only available during hosted interactive recipe execution"
-        Just respond -> raise (raise (respond call))
+        Just respond -> raise (raise (respond call)) >>= either throwError pure
       ToolFlowControl call -> case control of
         Nothing -> protocolFailure "flow-control is only available during hosted interactive recipe execution"
         Just respond -> raise (raise (respond call))

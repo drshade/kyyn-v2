@@ -144,14 +144,15 @@ operation. Expected provider answers which callers can act on, such as a rejecte
 query, belong in the plugin’s output contract and are journalled normally. Failure
 to obtain an answer is a `FetchError` in the flow's existing
 failure channel, not a successful journalled `Either` value. Host execution failures
-retain their diagnostic boundary. The existing failed-attempt and explicit retry
-rules apply; no query-specific automatic recovery loop is introduced.
+retain their diagnostic boundary. A returned `FetchError` finishes the instance
+as failed; start a new instance after correcting the problem. Host diagnostics
+block the attempt and preserve their structured codes until explicit `flow retry`;
+worker visits do not reissue the query while blocked.
 
 On a journal hit, the output is restored without executing the provider adapter,
 authentication or callbacks. A different occurrence, such as the next repeat
 iteration or a later model tool call, is a new query and may see newer provider
-data. A failed/incomplete operation can execute again under the existing retry
-rules. Live queries must tolerate repeated reads; this does not promise a consistent
+data. An interrupted operation can execute again after explicit retry. Live queries must tolerate repeated reads; this does not promise a consistent
 provider snapshot across separate calls or exactly-once execution.
 
 The query can be a direct step or an authored Agentic tool body supplied to a draft.

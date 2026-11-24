@@ -669,11 +669,18 @@ exposed as Agentic tools or called directly as steps.
 
 ```haskell
 -- Host application boundary; metadata preparation is separate from execution.
-executeLiveQuery
-  :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es,
-      Waiting :> es, Deadline :> es, Failure :> es)
+data PluginLive :: Effect where
+  ExecuteLiveQuery :: CheckedValue -> PreparedMethod -> Value
+    -> PluginLive m (Either [Diagnostic] (Either FetchError CheckedValue))
+
+executeLiveQuery :: PluginLive :> es
   => CheckedValue -> PreparedMethod -> Value
   -> Eff es (Either [Diagnostic] (Either FetchError CheckedValue))
+
+runPluginLive
+  :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es,
+      Waiting :> es, Deadline :> es, DhallHandling :> es, Failure :> es)
+  => Eff (PluginLive : es) a -> Eff es a
 ```
 
 Each invocation runs under the existing fixed 60-second adapter deadline, including
