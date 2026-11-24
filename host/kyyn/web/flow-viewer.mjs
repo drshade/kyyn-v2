@@ -205,7 +205,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     } catch (error) {message.textContent = `${error.message}${stopped ? '' : ' Retrying;'} showing the last received state.`;}
     finally {pending = false; schedule();}
   }
-  follow.onchange = () => {message.textContent = follow.checked ? 'Following conversation' : 'Inspection paused; the worker continues.'; if (follow.checked) poll(); else clearTimeout(timer);};
+  follow.onchange = () => {message.textContent = follow.checked ? 'Following conversation' : 'Inspection paused; the worker continues.'; if (follow.checked) poll(); else {clearTimeout(timer); diagram.classList.remove('motion-running');}};
   $('flow-live').hidden = false;
   poll();
   doc.addEventListener('visibilitychange',schedule);

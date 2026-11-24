@@ -2,6 +2,7 @@
 // authored flows. No providers, secrets or user KB. Proves pinned resumption with
 // current source deliberately broken and Nix unavailable to runtime operations.
 import assert from 'node:assert/strict';
+import {newFlowProjection, addAttempt, reduceAttempt, finishAttempt} from '../host/kyyn/web/flow-projection.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -205,6 +206,19 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  assert.equal(waiter.child.exitCode,0,waiter.errors());
  assert.equal(JSON.parse(waiter.output()).result.status,'completed');
  const completed=show(started.id);assert.equal(completed.result.trim(),'+9');assert.equal(completed.revision,accepted);
+ const projection=newFlowProjection(started.id);
+ for(const id of completed.attempts){
+  const directory=path.join(kb,'.kyyn/runs',id);
+  addAttempt(projection,id,JSON.parse(fs.readFileSync(path.join(directory,'header.json'),'utf8')));
+  const events=fs.readFileSync(path.join(directory,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  events.forEach((event,index)=>reduceAttempt(projection,id,{sequence:String(index),event}));
+  finishAttempt(projection,id,{summary:{status:'returned'},more:false,incompleteTail:false});
+ }
+ assert.equal(projection.episodes.length,1,'Durable action executes once across real resumptions');
+ assert.equal(projection.operations.size,2,'Action and reply have distinct upstream keys');
+ assert.equal([...projection.operations.values()].filter(operation=>operation.completed).length,2);
+ assert.equal([...projection.operations.values()].reduce((n,operation)=>n+operation.restorations.length,0),2);
+ console.log('Real captured guest recordings project one action and one fulfilled reply across resumptions.');
  assert.deepEqual(completed.deliveries.slice(1).map(x=>x.outcome),['accepted','duplicate','conflicting']);
  assert.equal(completed.waits[0].reply.origin.surface,'cli');
  assert.notEqual(delivery.id,completed.deliveries[2].id);

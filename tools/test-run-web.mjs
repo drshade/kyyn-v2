@@ -91,7 +91,7 @@ try{
  assert(flowList.includes('reviewOpportunity'));assert(flowList.includes('interrupted'));assert(flowList.includes('running'));
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
- assert(flowPage.includes('id="flow-snapshot" data-finished="false"'));assert(flowPage.includes('id="flow-live" hidden'));
+ assert.match(flowPage, /id="flow-snapshot"[^>]*data-finished="false"/);assert(flowPage.includes('id="flow-live" hidden'));
  assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture/demo/question · event-1'));assert(flowPage.includes('conflicting'));
  assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(flowPage.includes('class="context">Ask for update</span>'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
  const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
@@ -140,6 +140,7 @@ try{
   await detail.locator('summary').click();
   const updateCatalog = () => write(catalogPath, JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]}));
   await page.locator('#flow-follow').uncheck();
+  assert(!(await page.locator('#flow-diagram').getAttribute('class')).includes('motion-running'));
   save('next-turn',interactiveGraph,interactive(true),interactiveMetadata);
   coordinator.attempts.push('next-turn'); updateCatalog();
   await page.waitForTimeout(2300);
@@ -168,6 +169,7 @@ try{
   const countClosed=request=>{if(new URL(request.url()).pathname==='/runs/suspended/events')closedReads++;};
   page.on('request',countClosed);await page.waitForTimeout(2300);page.off('request',countClosed);
   assert.equal(closedReads,0,'Closed recordings are not polled again');
+  await page.screenshot({path:path.join(screenshots,'continuous-conversation.png'),fullPage:true});
   // Text being selected is not replaced by a background refresh.
   await detail.locator('summary').evaluate(node => {const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
   coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();
