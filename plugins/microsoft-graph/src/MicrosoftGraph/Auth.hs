@@ -1,9 +1,12 @@
+{-# LANGUAGE FlexibleContexts #-}
 module MicrosoftGraph.Auth (accessToken, login) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.Trans.Class (lift)
+import Kyyn.Types.Program (Program, Member)
+import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Config (graphRoot)
@@ -14,7 +17,7 @@ import qualified Data.Aeson as Aeson
 endpoint :: Text -> Text -> Text
 endpoint tenant operation = "https://login.microsoftonline.com/" <> Json.escape tenant <> "/oauth2/v2.0/" <> operation
 
-accessToken :: GraphAuth -> NetworkHost rest (Either Text Text)
+accessToken :: (Member Http row, Member Secrets row, Member Waiting row) => GraphAuth -> Program row (Either Text Text)
 accessToken auth = runExceptT $ case auth of
   ClientSecret tenant client key -> do
     secret <- readKey key

@@ -38,7 +38,7 @@ for pair in Model:guest-model PluginPreparation:guest-plugins ToolPreparation:gu
     "host/kyyn-porcelain-interpreters/test/Native${pair%%:*}Tests.hs" "$guest_stage/${pair#*:}/bin/kyyn-guest"
 done
 KYYN_TEST_FIRST_PARTY="$guest_stage/guest-first-party/bin/kyyn-guest" \
-  cabal test graph-directory graph-files graph-calendar graph-mail graph-meetings salesforce-query github --test-show-details=direct
+  cabal test graph-teams graph-directory graph-files graph-calendar graph-mail graph-meetings salesforce-query github --test-show-details=direct
 
 # Independently locked KB: the actual host capture/build interpreter must preserve
 # this lock and refuse an incomplete one. Fixture builds above do not prove that.

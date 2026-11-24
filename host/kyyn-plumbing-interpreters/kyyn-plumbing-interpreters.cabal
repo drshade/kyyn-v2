@@ -211,6 +211,16 @@ test-suite graph-directory
   build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
     aeson, bytestring, text, process, effectful-core ==2.6.1.0
 
+test-suite graph-teams
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphTeamsTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.22 && <4.23, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, effectful-core ==2.6.1.0
+
 test-suite graph-files
   type: exitcode-stdio-1.0
   hs-source-dirs: test/providers

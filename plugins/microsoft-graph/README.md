@@ -1,6 +1,6 @@
 # Microsoft Graph
 
-This plugin provides `Calendar`, `Mail`, `Meetings`, `Files` and `Directory` source connectors, with shared Graph
+This plugin provides `Calendar`, `Mail`, `Meetings`, `Files` and `Directory` source connectors and a `Teams` event connector, with shared Graph
 authentication. Use `plugin guide microsoft-graph` to read this guide from an
 installed package.
 
@@ -535,3 +535,48 @@ Directory names and email addresses are personal data stored in local evidence.
 For the BEE pilot, the local redactor may read this roster, but neither the roster
 nor its token map is sent to Jev. Dispatch restrictions belong to that workflow;
 the connector itself does not enforce a destination policy.
+
+## Teams questions
+
+`Teams` is an event connector for interactive flows. Its `question` event sends
+text to one configured existing chat and waits for the permitted respondent to
+use Teams **Reply** on that question. Ordinary messages, forwarded messages,
+quotes of other questions, and replies quoting multiple distinct messages do not
+fulfil the wait. A self-chat works: the sent question cannot answer itself.
+
+Use delegated `DeviceCode` authentication with `Chat.Read`, `ChatMessage.Send`
+and `offline_access`. The signed-in user is the visible sender; application
+`ClientSecret` credentials are rejected. Choose a separate token key for this
+connector. The account owner runs `connector login` themselves. The configuration
+also contains `chatId` (the existing chat ID) and `respondentId` (the respondent's
+Graph user ID). Discover the exact configuration using `plugin connector schema
+show microsoft-graph`; no chat is created or selected automatically.
+
+The request is `Question { text :: Text }`. Tell the recipient to use Reply.
+The returned `Reply` includes message ID, sender ID, creation time, body content
+and its `text`/`html` content type. HTML is retained as provider data, including
+quoted-message attachment placeholders; consumers must escape or sanitize it
+before display. Quoted previews and unrelated messages are not copied into the
+reply payload. Message bodies can contain personal data; apply the recipe's
+redaction policy before sending them to a model that requires redaction.
+
+Polling runs at most once per wait per 30 seconds and reads at most four pages
+of 50 messages per invocation. It saves a continuation for the next poll, then
+rescans from the question timestamp after a completed scan. This is a deliberate
+first implementation for small chats: rescanning catches delayed visibility,
+but work grows with chat activity and the age of an unanswered question. Matching
+replies within each batch are ordered by creation time then ID; the first accepted
+answer wins. Edits do not replace accepted answers, and closed waits stop polling.
+Reaction changes do not create a different reply.
+
+A failed send may have reached Teams. Dispatch requires an explicit retry; check
+the chat before retrying. Poll failures retain the cursor and retry on a later
+worker visit. Throttling returns the provider's `Retry-After` in the diagnostic
+without sleeping; the worker's fixed interval does not yet schedule that delay.
+A reply observed and then deleted before the next poll cannot be recovered.
+
+Correlation uses the documented `messageReference` attachment ID, together with
+chat, respondent and a creation time later than the question. It does not use
+`replyToId`, which applies to channels. See Microsoft's
+[message attachment schema](https://learn.microsoft.com/en-us/graph/teams-messaging-overview#message-attachment)
+and [quoted reply response](https://learn.microsoft.com/en-us/graph/api/chatmessage-replywithquote?view=graph-rest-1.0).
