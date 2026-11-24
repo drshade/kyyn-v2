@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs, TypeOperators, OverloadedStrings #-}
 module Kyyn.Runtime.Event
-  ( executeEventAction, dispatchCodec, pollCodec, batchCodec ) where
+  ( executeNetworkAction, dispatchCodec, pollCodec, batchCodec ) where
 
 import Kyyn.Plugin.Event
 import Kyyn.Types.Plugin (FetchError)
@@ -11,8 +11,8 @@ import Kyyn.Runtime.Plugin (execute, eitherCodec)
 import Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest)
 import Kyyn.Runtime.Transport (Transport)
 
-executeEventAction :: Transport -> Codec result -> LiveEvent (Either FetchError result) -> IO ()
-executeEventAction channel result = execute channel (eitherCodec result) (handler channel)
+executeNetworkAction :: Transport -> Codec result -> LiveEvent (Either FetchError result) -> IO ()
+executeNetworkAction channel result = execute channel (eitherCodec result) (handler channel)
   where
     handler :: Transport -> Integer -> (Http :+: (Secrets :+: Waiting)) a -> IO a
     handler transport identity (InLeft call) = httpRequest transport identity call

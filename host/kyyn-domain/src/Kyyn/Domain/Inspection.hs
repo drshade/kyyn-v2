@@ -68,7 +68,7 @@ data LocalInspection = LocalInspection
 data ConfigurationInspection = ConfigurationInspection [(PluginName, PluginOrigin)]
 data CatalogueInspection = CatalogueInspection
   (Either [Diagnostic] ConfigurationInspection)
-data ConnectorKind = SourceKind | SinkKind | EventKind deriving (Eq, Show)
+data ConnectorKind = SourceKind | SinkKind | EventKind | LiveKind deriving (Eq, Show)
 data ConnectorDeclarationInspection = ConnectorDeclarationInspection
   ConnectorTypeName ConnectorKind [(String, CheckedContract)] [(MethodName, String)]
   [(ConnectorName, BindingName, CheckedValue)]

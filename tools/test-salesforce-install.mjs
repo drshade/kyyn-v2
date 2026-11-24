@@ -36,11 +36,11 @@ try {
   const draft = cli(['evolution', 'new', 'salesforce']).result;
   cli(['plugin', 'install', '--evolution', draft.id, '--from', source]);
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'salesforce', '--evolution', draft.id]).result.schema;
-  for (const field of ['Query', 'DeviceCode', 'ClientSecret', 'apiVersion', 'idField']) assert(schema.includes(field));
+  for (const field of ['Live', 'Query', 'DeviceCode', 'ClientSecret', 'apiVersion', 'idField']) assert(schema.includes(field));
   const configPath = path.join(draft.path, 'target/plugins/config/salesforce.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   const config = `let Auth = < ClientSecret : { clientId : Text, secretKey : Text } | DeviceCode : { clientId : Text, tokenKey : Text } >
-    let Connector = < Query : { instanceUrl : Text, auth : Auth, apiVersion : Text, query : Text, idField : Text } >
+    let Connector = < Live : { instanceUrl : Text, auth : Auth, apiVersion : Text } | Query : { instanceUrl : Text, auth : Auth, apiVersion : Text, query : Text, idField : Text } >
     in [ { name = "pipeline", binding = "pipeline", connector = Connector.Query
       { instanceUrl = "https://example.my.salesforce.com"
       , auth = Auth.ClientSecret { clientId = "client", secretKey = "missing-salesforce-secret" }

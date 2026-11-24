@@ -28,6 +28,7 @@ data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName V
   | ToolModel Agentic.Conversation
   | ToolFlowObserved FlowObservation
   | ToolJournal JournalCall
+  | ToolLiveQuery PluginName ConnectorTypeName ConnectorName MethodName Description Description Value
   | ToolFlowControl FlowControlCall
 
 data FlowControlCall = StartChildCall Text Text RecipeId Description Description Value
@@ -65,6 +66,10 @@ decodePlugin capability operation = withObject "tool call" $ \fields -> do
   kind <- fields .: "connectorType" >>= checked . connectorTypeName
   instanceName <- fields .: "instance" >>= checked . connectorName
   case (capability,operation) of
+    ("plugin","query") -> do
+      exact ["connectorType","input","inputContract","instance","method","outputContract","plugin"]
+      ToolLiveQuery plugin kind instanceName <$> (fields .: "method" >>= checked . methodName)
+        <*> fields .: "inputContract" <*> fields .: "outputContract" <*> fields .: "input"
     ("plugin","read") -> do
       exact ["connectorType","input","instance","method","plugin"]
       ToolCall plugin kind instanceName <$> (fields .: "method" >>= checked . methodName) <*> fields .: "input"

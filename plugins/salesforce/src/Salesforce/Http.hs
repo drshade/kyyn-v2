@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Salesforce.Http (send, postForm, requireSuccess) where
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -6,7 +7,7 @@ import qualified Salesforce.Json as Json
 
 -- Bounded retries keep a failed query from waiting forever. No raw provider
 -- body enters diagnostics: token responses can contain credentials.
-send :: HttpRequest -> NetworkHost rest (Either Text HttpResponse)
+send :: (Member Http row, Member Waiting row) => HttpRequest -> Program row (Either Text HttpResponse)
 send = attempt (3 :: Int)
   where
     attempt remaining request = do
@@ -23,7 +24,7 @@ send = attempt (3 :: Int)
         [(n,"")] | n >= 0 && n <= 300 -> Just (max 1 n)
         _ -> Nothing
 
-postForm :: Text -> [(Text,Text)] -> NetworkHost rest (Either Text HttpResponse)
+postForm :: (Member Http row, Member Waiting row) => Text -> [(Text,Text)] -> Program row (Either Text HttpResponse)
 postForm url fields = send (HttpRequest "POST" url [("Content-Type","application/x-www-form-urlencoded")] (Json.form fields))
 
 requireSuccess :: HttpResponse -> Either Text Text

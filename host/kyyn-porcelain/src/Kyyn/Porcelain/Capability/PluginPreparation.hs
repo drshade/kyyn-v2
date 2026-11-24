@@ -39,6 +39,9 @@ data PreparedConnector = PreparedConnector
   , sinkEntry :: CompiledEntry
   , sinkDefaultOptions :: CheckedValue
   }
+  | PreparedLiveConnector
+  { connectorType :: ConnectorTypeName, configContract :: CheckedContract
+  , validationEntry :: CompiledEntry, loginEntry :: Maybe CompiledEntry, queries :: [PreparedMethod] }
   | PreparedEventConnector
   { connectorType :: ConnectorTypeName, configContract :: CheckedContract
   , validationEntry :: CompiledEntry, loginEntry :: Maybe CompiledEntry, events :: [PreparedEvent] }
@@ -54,6 +57,7 @@ sourceDetails :: PreparedConnector -> Either [Diagnostic]
   (ConnectorTypeName,CheckedContract,CompiledEntry,[PreparedMethod],Maybe CheckedContract,Maybe CompiledEntry,Maybe CheckedContract,Maybe CheckedContract)
 sourceDetails PreparedConnector {connectorType = kind,payloadContract = payload,fetchEntry = entry,methods = ms,
   fetchOptionsContract = options,loginEntry = login,syncPositionContract = position,reportContract = report} = Right (kind,payload,entry,ms,options,login,position,report)
+sourceDetails PreparedLiveConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not a live connector."]
 sourceDetails PreparedEventConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not an event connector."]
 sourceDetails PreparedSinkConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not a sink."]
 

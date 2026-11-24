@@ -12,7 +12,7 @@ main :: IO ()
 main = do
   libdir <- takeWhile (/= '\n') <$> readProcess "ghc" ["--print-libdir"] ""
   packages <- packageOptions libdir
-  forM_ ["PluginContractTests.hs", "GraphRetryTests.hs", "GraphTeamsTests.hs", "PluginDataTests.hs"] $ \test ->
+  forM_ ["PluginContractTests.hs", "GraphRetryTests.hs", "GraphTeamsTests.hs", "PluginDataTests.hs", "SalesforceLiveTests.hs"] $ \test ->
     callProcess "runghc" (map ("--ghc-arg=" ++) (guestLanguageFlags ++ packages ++
       [ "-Wall", "-Werror"
       , "-iplugins/local-file/src", "-iplugins/github/src"

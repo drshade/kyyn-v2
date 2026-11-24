@@ -99,6 +99,8 @@ main = do
     let handles = concatMap (\connector -> getField @"validationEntry" connector : case connector of
           PreparedConnector {fetchEntry = fetch,loginEntry = login,methods = methods} ->
             fetch : maybe [] pure login ++ [entry | PreparedMethod _ _ _ _ entry <- methods]
+          PreparedLiveConnector {loginEntry = login,queries = queries} -> maybe [] pure login ++
+            [entry | PreparedMethod _ _ _ _ entry <- queries]
           PreparedEventConnector {loginEntry = login,events = events} -> maybe [] pure login ++
               concat [poll : maybe [] (pure . fst) dispatch | PreparedEvent _ _ _ _ _ _ poll dispatch <- events]
           PreparedSinkConnector {sinkEntry = publish} -> [publish]) connectors

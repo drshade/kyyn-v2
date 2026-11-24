@@ -56,6 +56,21 @@ writeToolBindings generated roots plugins = do
        [Text.unpack method.eventName ++ " _kyynInstance = Bindings.eventRef " ++ unwords (map show
           [plugin.pluginName,connector.name,method.eventName]) ++ " " ++ Text.unpack method.poll ++ " (_kyynInstance :: Instance)" |
           method <- events]))
+  let liveConnectors = [(plugin,connector,queries) | RegisteredPlugin plugin declarations <- plugins,
+        connector@(P.LiveConnector _ _ _ queries) <- declarations]
+      typedConnectors = [(plugin,connector) | (plugin,connector,_) <- eventConnectors] ++
+        [(plugin,connector) | (plugin,connector,_) <- liveConnectors]
+  forM_ liveConnectors $ \(plugin,connector,queries) -> do
+    queryModules <- traverse (fmap (Text.unpack . referenceModule) . either fail pure . qualifiedReference False . (.implementation)) queries
+    let name = proxyModule plugin.pluginName connector.name
+    write name (unlines
+      (["{-# LANGUAGE NoMonomorphismRestriction #-}","module " ++ name ++ " (" ++
+          intercalate "," ("Instance" : [Text.unpack method.queryName | method <- queries]) ++ ") where",
+        "import Kyyn.Types.Plugin (ConnectorInstance)","import qualified Kyyn.Runtime.Bindings as Bindings"] ++ map ("import qualified " ++) (nub queryModules) ++
+       ["data Tag", "type Instance = ConnectorInstance Tag"] ++
+       [Text.unpack method.queryName ++ " _kyynInstance = Bindings.liveQueryRef " ++ unwords (map show
+          [plugin.pluginName,connector.name,method.queryName]) ++ " " ++ Text.unpack method.implementation ++ " (_kyynInstance :: Instance)" |
+          method <- queries]))
   configured <- fmap concat $ forM plugins $ \(RegisteredPlugin plugin declarations) -> do
     let path = "plugins/config/" ++ Text.unpack plugin.pluginName ++ ".dhall"
     exists <- doesFileExist path
@@ -72,11 +87,11 @@ writeToolBindings generated roots plugins = do
       "import Kyyn.Types.Program (Program)","import Kyyn.Types.Plugin (ConnectorInstance(..))",
       "import qualified KyynToolCalls as Calls"] ++
      ["import qualified " ++ proxyModule plugin.pluginName connector.name ++ " as E" ++ show index |
-       (index,(plugin,connector,_)) <- zip [0 :: Int ..] eventConnectors] ++ ["type Tool = Program Calls.Calls"] ++
+       (index,(plugin,connector)) <- zip [0 :: Int ..] typedConnectors] ++ ["type Tool = Program Calls.Calls"] ++
      concat [[Text.unpack selected.instanceBinding ++ " :: E" ++ show index ++ ".Instance",
        Text.unpack selected.instanceBinding ++ " = ConnectorInstance " ++ show selected.instanceName] |
        (plugin,selected,False) <- configured,
-       (index,(actual,connector,_)) <- zip [0 :: Int ..] eventConnectors,
+       (index,(actual,connector)) <- zip [0 :: Int ..] typedConnectors,
        actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector] ++
      concat [[Text.unpack selected.instanceBinding ++ " :: ConnectorInstance Calls." ++ tag index,
        Text.unpack selected.instanceBinding ++ " = ConnectorInstance " ++ show selected.instanceName] |
@@ -94,6 +109,7 @@ writeToolBindings generated roots plugins = do
       "import Kyyn.Runtime.ToolEntry", "import Kyyn.Runtime.Transport (Transport)",
       "import Kyyn.Runtime.Flow (exchangeObservation)",
       "import Kyyn.Runtime.FlowJournal (exchangeJournal)",
+      "import Kyyn.Runtime.LiveQuery (exchangeLiveQuery)",
       "import Kyyn.Runtime.FlowControl (exchangeFlowControl)",
       "import Kyyn.Runtime.Judgement (exchangeJudgement)", "import Kyyn.Runtime.Model (exchangeModel)",
       "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
@@ -101,6 +117,7 @@ writeToolBindings generated roots plugins = do
       "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request",
       "dispatch transport requestId (Calls.ObserveFlow summary) = exchangeObservation transport requestId summary",
       "dispatch transport requestId (Calls.JournalCall call) = exchangeJournal transport requestId call",
+      "dispatch transport requestId (Calls.LiveQueryCall call) = exchangeLiveQuery transport requestId call",
       "dispatch transport requestId (Calls.FlowControlCall call) = exchangeFlowControl transport requestId call"] ++
      concat [["dispatch transport requestId (Calls.ListEvidence_" ++ tag index ++ " (ConnectorInstance name)) =",
        "  exchangeEvidenceList transport requestId " ++ identity plugin connector ++ " name",

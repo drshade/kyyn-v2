@@ -26,7 +26,7 @@ eventPollEntry name sources selected = do
     members <- either fail pure (fields ["config","input"] value)
     configuration <- either fail pure (field "config" (runtimeCodec config.codec) members)
     input <- either fail pure (field "input" (pollCodec (runtimeCodec request.codec) (runtimeCodec cursor.codec)) members)
-    executeEventAction transport (batchCodec (runtimeCodec reply.codec) (runtimeCodec cursor.codec)) (selected configuration input))
+    executeNetworkAction transport (batchCodec (runtimeCodec reply.codec) (runtimeCodec cursor.codec)) (selected configuration input))
 
 eventDispatchEntry :: forall config request cursor.
   (Contract config, Contract request, Contract cursor)
@@ -41,7 +41,7 @@ eventDispatchEntry name sources selected = do
     members <- either fail pure (fields ["config","input"] value)
     configuration <- either fail pure (field "config" (runtimeCodec config.codec) members)
     input <- either fail pure (field "input" (dispatchCodec (runtimeCodec request.codec)) members)
-    executeEventAction transport (runtimeCodec cursor.codec) (selected configuration input))
+    executeNetworkAction transport (runtimeCodec cursor.codec) (selected configuration input))
 
 describe :: [Text] -> CompiledContract a -> DescribedContract
 describe sources compiled = describeContract compiled.description (SchemaMetadata [] [] []) sources

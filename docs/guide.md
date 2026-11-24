@@ -716,6 +716,46 @@ catalog and visible in CLI/web inspection; plugin authors must never put
 credentials in them. Use named secrets for authentication.
 
 
+#### Live plugin queries
+
+A live connector queries a provider during an interactive flow. Discover its methods
+with `plugin connector method list PLUGIN INSTANCE` and inspect a method's input
+and result using `plugin connector method show PLUGIN INSTANCE METHOD`. To make
+one fresh call from the CLI:
+
+```sh
+kyyn-v2 plugin connector query salesforce sales query --input '{ query = "SELECT Id, Name FROM Opportunity LIMIT 10" }'
+```
+
+Use the generated typed reference in an interactive flow:
+
+```haskell
+import Kyyn.Interactive (liveQuery)
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_salesforce.Live as Salesforce
+
+lookupSales = liveQuery (Salesforce.query Connectors.sales)
+```
+
+The configured binding `sales` selects the account. The flow author can use this
+step directly or put it in an Agentic tool supplied to a draft. Installing a plugin
+does not automatically offer its methods to a model. Ordinary KB tools and closed
+recipes cannot invoke live queries.
+
+A resumed occurrence restores its completed result; a new occurrence makes a fresh
+query. Configuration and plugin code are captured with the flow, while named
+secrets are read when a new call executes. Results stay with the caller unless the
+authored flow uses them in an evolution. They can appear in the durable journal
+and model context, so respect the plugin's result bounds and your model's data policy.
+
+Expected provider answers, including a rejected Salesforce query, are typed output.
+An Agentic tool can return that rejection to the model so it can correct its query.
+A returned `FetchError`, including authentication failure, finishes the instance as
+failed; it cannot be retried. Correct the problem and start a new instance. Failure
+of a tool's step monad is not converted into a model-visible tool result. A host
+diagnostic, including the 60-second timeout or invalid result contract, blocks the
+attempt until an explicit `flow retry`. The worker never retries it automatically.
+
 #### Starting child flows
 
 An interactive parent starts only children declared by its accepted recipe. In

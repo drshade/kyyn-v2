@@ -2,13 +2,14 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector, loginConfiguredConnector
   , connectorCurrentEvidence, clearConnectorEvidence
-  , connectorFetchOptions, listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
+  , connectorFetchOptions, listConnectorMethods, selectLiveQuery, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
 import GHC.Records (getField)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
+import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
 import Kyyn.Domain.DataType (Shape)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceCapture, SyncMode(..))
@@ -43,6 +44,7 @@ loginConfiguredConnector kb revision plugin name = runExceptT $ do
   let entry = case connector of
         PreparedConnector {loginEntry = login} -> login
         PreparedEventConnector {loginEntry = login} -> login
+        PreparedLiveConnector {loginEntry = login} -> login
         PreparedSinkConnector{} -> Nothing
   selected <- maybe (throwE [errorDiagnostic "plugin.login-unsupported" "This connector does not provide a login operation."]) pure entry
   report <- ExceptT (validatePlugins [PreparedPlugin package [instanceValue]])
@@ -75,8 +77,11 @@ listConnectorMethods kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
-  (_,_,_,methods,_,_,_,_) <- checked (sourceDetails connector)
-  pure methods
+  case connector of
+    PreparedLiveConnector {queries = methods} -> pure methods
+    _ -> do
+      (_,_,_,methods,_,_,_,_) <- checked (sourceDetails connector)
+      pure methods
 
 connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName
@@ -85,8 +90,25 @@ connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
-  (_,_,_,_,options,_,_,report) <- checked (sourceDetails connector)
-  pure (options,report)
+  case connector of
+    PreparedLiveConnector{} -> pure (Nothing,Nothing)
+    _ -> do
+      (_,_,_,_,options,_,_,report) <- checked (sourceDetails connector)
+      pure (options,report)
+
+selectLiveQuery :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> MethodName
+  -> Eff es (Either [Diagnostic] (CheckedValue,PreparedMethod))
+selectLiveQuery kb revision plugin name method = runExceptT $ do
+  code <- sourceAt kb revision Nothing
+  plugins <- ExceptT (preparePlugins code)
+  (_,ConfiguredConnector _ _ connector config) <- checked (selectedInstance plugin name plugins)
+  methods <- case connector of
+    PreparedLiveConnector {queries = queries} -> pure queries
+    _ -> throwE [errorDiagnostic "plugin.live-required" "Query requires a live connector."]
+  case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
+    [selected] -> pure (config,selected)
+    _ -> throwE [errorDiagnostic "plugin.method-unknown" ("No live query named " ++ coerce method)]
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> MethodName

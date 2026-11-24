@@ -82,6 +82,12 @@ validate connectors = do
         forM_ methods $ \method -> do
           unless (identifier isAsciiLower method.methodName) (Left "Invalid captured method name")
           reference method.implementation
+      P.LiveConnector _ _ login queries -> do
+        mapM_ reference login
+        unique "query" [query.queryName | query <- queries]
+        forM_ queries $ \query -> do
+          unless (identifier isAsciiLower query.queryName) (Left "Invalid live query name")
+          reference query.implementation
       P.SinkConnector _ _ publish defaults -> reference publish >> reference defaults
       P.EventConnector _ _ login events -> do
         mapM_ reference login

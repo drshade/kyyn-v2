@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs, NoFieldSelectors #-}
+{-# LANGUAGE DuplicateRecordFields, GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
-  ( Connector(..), EventMethod(..), Seconds(..), RepeatSafety(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
+  ( Connector(..), LiveQuery(..), EventMethod(..), Seconds(..), RepeatSafety(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -50,7 +50,20 @@ data Connector = SourceConnector
   }
   | EventConnector
   { name :: Text, validateConfig :: Text, login :: Maybe Text, events :: [EventMethod] }
+  | LiveConnector
+  { name :: Text, validateConfig :: Text, login :: Maybe Text, queries :: [LiveQuery] }
   deriving (Eq, Show)
+
+data LiveQuery = LiveQuery
+  { queryName :: Text, queryDescription :: Text, implementation :: Text }
+  deriving (Eq, Show)
+
+instance ToJSON LiveQuery where
+  toJSON (LiveQuery name description implementation) = object
+    ["name" .= name,"description" .= description,"implementation" .= implementation]
+instance FromJSON LiveQuery where
+  parseJSON = exactObject "live query" ["name","description","implementation"] $ \fields ->
+    LiveQuery <$> fields .: "name" <*> fields .: "description" <*> fields .: "implementation"
 
 data EventMethod = EventMethod
   { eventName :: Text, eventDescription :: Text, poll :: Text
@@ -121,6 +134,8 @@ instance ToJSON Connector where
     ["name" .= name,"validateConfig" .= validate,"publish" .= publish,"defaultOptions" .= defaults]
   toJSON (EventConnector name validate login events) = object
     ["name" .= name,"validateConfig" .= validate,"login" .= optionalValue login,"events" .= events]
+  toJSON (LiveConnector name validate login queries) = object
+    ["name" .= name,"validateConfig" .= validate,"login" .= optionalValue login,"queries" .= queries]
 instance FromJSON Connector where
   parseJSON value = withObject "connector" (\fields ->
     if Keys.member "fetch" fields then
@@ -128,6 +143,10 @@ instance FromJSON Connector where
         (\selected -> SourceConnector <$> selected .: "name" <*> selected .: "fetch"
           <*> selected .: "validateConfig" <*> selected .: "methods"
           <*> (selected .: "login" >>= parseOptionalValue)) value
+    else if Keys.member "queries" fields then
+      exactObject "live connector" ["name","validateConfig","login","queries"]
+        (\selected -> LiveConnector <$> selected .: "name" <*> selected .: "validateConfig"
+          <*> (selected .: "login" >>= parseOptionalValue) <*> selected .: "queries") value
     else if Keys.member "events" fields then
       exactObject "event connector" ["name","validateConfig","login","events"]
         (\selected -> EventConnector <$> selected .: "name" <*> selected .: "validateConfig"

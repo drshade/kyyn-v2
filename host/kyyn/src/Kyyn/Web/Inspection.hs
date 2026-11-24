@@ -431,12 +431,12 @@ declarationBody selected (SnapshotInspection _ _ (Root root _ _ _) _ _) declarat
     dl_ $ do dt_ "Package identity"; dd_ (toHtml hash)
     forM_ connectors $ \(ConnectorDeclarationInspection (ConnectorTypeName kind) connectorKind contracts methods instances) -> do
       h2_ (toHtml kind)
-      p_ (case connectorKind of SourceKind -> "Source connector"; SinkKind -> "Sink connector"; EventKind -> "Event connector")
+      p_ (case connectorKind of SourceKind -> "Source connector"; SinkKind -> "Sink connector"; EventKind -> "Event connector"; LiveKind -> "Live query connector")
       dl_ $ forM_ contracts $ \(role,contract) -> do
         dt_ (toHtml (Text.replace ":" " · " (Text.pack role)))
         dd_ (typeReference (pluginTypeLink selected (Text.pack (pluginNameText plugin)) (Text.pack kind) (Text.pack role)) (rootType contract))
       unless (null methods) $ do
-        h3_ (if connectorKind == EventKind then "Events" else "Captured methods")
+        h3_ (case connectorKind of EventKind -> "Events"; LiveKind -> "Live queries"; _ -> "Captured methods")
         dl_ $ forM_ methods $ \(MethodName method,description) -> dt_ (toHtml method) >> dd_ (toHtml description)
       unless (null instances) $ do
         h3_ "Configured instances"

@@ -15,6 +15,7 @@ import qualified MicrosoftGraph.Meetings.Types as P6
 import qualified MicrosoftGraph.Types as P7
 import qualified Salesforce.Query.Types as P8
 import qualified Salesforce.Types as P9
+import qualified Salesforce.Live.Types as P11
 import qualified LocalFile.Write as P10
 
 check :: forall a. Contract a => IO ()
@@ -22,6 +23,9 @@ check = either (fail . show) (const (pure ())) (compileContract (contract @a))
 
 main :: IO ()
 main = do
+  check @P11.LiveConfig
+  check @P11.Soql
+  check @P11.QueryResult
   check @P0.RepositoryConfig
   check @P0.Account
   check @P0.Comment

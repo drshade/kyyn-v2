@@ -53,6 +53,8 @@ import Kyyn.Porcelain.Interpreter.Flow (runFlow)
 import Kyyn.Porcelain.Interpreter.FlowPreparation (runFlowPreparation)
 import Kyyn.Porcelain.Interpreter.FlowStore (runFlowStore)
 import Kyyn.Porcelain.Capability.FlowEvents (FlowEvents, EventVisit(..), serviceEvents)
+import Kyyn.Porcelain.Capability.PluginLive (PluginLive)
+import Kyyn.Porcelain.Interpreter.PluginLive (runPluginLive)
 import Kyyn.Porcelain.Capability.PluginEvent (PluginEvent)
 import Kyyn.Porcelain.Interpreter.FlowEvents (runFlowEvents)
 import Kyyn.Porcelain.Interpreter.PluginEvent (runPluginEvent)
@@ -69,7 +71,7 @@ import qualified Kyyn.Surfaces.Flows as View
 import qualified Kyyn.Surfaces.Result as Result
 import Kyyn.Surfaces.Result (Response, success, refusal, operationalFailure)
 
-type Pinned = FlowEvents ': PluginEvent ': FlowWorker ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
+type Pinned = FlowEvents ': PluginEvent ': FlowWorker ': PluginLive ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
   ': DocumentPersistence ': Deadline ': Clock ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
 
 -- Resumption and inspection do not resolve Nix, inspect current source, or rebuild.
@@ -77,7 +79,7 @@ runPinned :: Host -> KnowledgeBase -> DirectoryScope -> Eff Pinned a -> IO (Eith
 runPinned host kb scope = runBase host . runGuestExecution host.runtimeEnvironment
   . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runClockIO . runDeadlineIO . runDocumentPersistenceIO
   . runBlobStorageIO scope . runEvidenceStore scope . runPluginRead . runFlowStore kb
-  . runAppendJournalIO . runRecipeRunStore announce . runFlowWorker kb . runPluginEvent . runFlowEvents kb
+  . runAppendJournalIO . runRecipeRunStore announce . runPluginLive . runFlowWorker kb . runPluginEvent . runFlowEvents kb
   where announce header = liftIO (hPutStrLn stderr ("Attempt " ++ runIdText header.runId ++ ": /runs/" ++ runIdText header.runId))
 
 dispatchFlows :: Host -> Cli.FlowCommand -> SelectedKb -> IO Response

@@ -38,6 +38,15 @@ connectorDescription selected defaults = case selected of
     value <- maybe (bad ("Missing captured defaults for " ++ Text.unpack identity.connectorType)) Right defaults
     pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract publication
       (CheckedValue (contractId options.contract) value))
+  CompiledLive identity config validator login queries -> do
+    kind <- checked (connectorTypeName (Text.unpack identity.connectorType))
+    selectedQueries <- traverse (\(query,entry) -> do
+      name <- checked (methodName (Text.unpack query.liveQueryName))
+      let G.LiveQueryContracts _ input output = query.liveQueryInvocation.invocationContract
+      pure (PreparedMethod name (Text.unpack query.liveQueryDescription) input.contract output.contract entry)) queries
+    case defaults of
+      Just _ -> bad "Live connector cannot have sink defaults"
+      Nothing -> pure (PreparedLiveConnector kind config.contract validator login selectedQueries)
   CompiledEvent identity config validator login events -> do
     kind <- checked (connectorTypeName (Text.unpack identity.connectorType))
     selectedEvents <- traverse (\(event,poll,dispatch) -> do

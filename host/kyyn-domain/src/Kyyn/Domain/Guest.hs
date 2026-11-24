@@ -102,6 +102,14 @@ checkConnectorContracts selected = case selected of
     let G.SinkContracts configuration options _ _ = publication.invocationContract
     compatible "configuration" configuration config.invocationContract
     compatible "sink options" options defaults.invocationContract
+  G.LiveEntries config login queries -> do
+    forM_ login $ \entry -> compatible "configuration" config.invocationContract entry.invocationContract
+    unique "query" (map G.liveQueryName queries)
+    forM_ queries $ \query -> do
+      either (Left . pure . errorDiagnostic "guest.query") (const (Right ()))
+        (Plugin.methodName (Text.unpack query.liveQueryName))
+      let G.LiveQueryContracts configuration _ _ = query.liveQueryInvocation.invocationContract
+      compatible "configuration" config.invocationContract configuration
   G.EventEntries config login events -> do
     forM_ login $ \entry -> compatible "configuration" config.invocationContract entry.invocationContract
     unique "event" (map G.eventName events)

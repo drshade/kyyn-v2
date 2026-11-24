@@ -1,4 +1,4 @@
-module Salesforce.Config (origin, authentication, tokenEndpoint) where
+module Salesforce.Config (origin, authentication, tokenEndpoint, apiVersion) where
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -25,3 +25,12 @@ authentication url auth =
     Text.null key || Text.any (\c -> not (isAsciiLower c || isAsciiUpper c || isDigit c && c <= '9' || c `elem` ("-_" :: String))) key]
   where
     (client,key) = case auth of ClientSecret c k -> (c,k); DeviceCode c k -> (c,k)
+
+apiVersion :: Text -> [Diagnostic]
+apiVersion version = [errorDiagnostic "salesforce.version" "apiVersion must have the form v62.0 (choose a version enabled by your org)." | not valid]
+  where
+    valid = case Text.stripPrefix "v" version of
+      Just suffix -> case Text.splitOn "." suffix of
+        [major,minor] -> all (\x -> not (Text.null x) && Text.all (\c -> c >= '0' && c <= '9') x) [major,minor]
+        _ -> False
+      Nothing -> False

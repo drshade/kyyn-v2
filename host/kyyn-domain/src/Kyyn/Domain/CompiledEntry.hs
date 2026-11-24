@@ -35,6 +35,8 @@ data CompiledConnector
       CompiledEntry CompiledEntry (Maybe CompiledEntry) [(G.CapturedEntry InspectedSchema,CompiledEntry)]
   | CompiledSink G.ConnectorIdentity (G.SinkContracts InspectedSchema)
       CompiledEntry CompiledEntry CompiledEntry
+  | CompiledLive G.ConnectorIdentity InspectedSchema CompiledEntry (Maybe CompiledEntry)
+      [(G.LiveQueryEntry InspectedSchema,CompiledEntry)]
   | CompiledEvent G.ConnectorIdentity InspectedSchema CompiledEntry (Maybe CompiledEntry)
       [(G.EventEntry InspectedSchema,CompiledEntry,Maybe CompiledEntry)]
   deriving (Eq, Show)
@@ -51,6 +53,9 @@ compiledConnectors program guest = [attach entry identity selected |
             (handle <$> login) [(method,handle method.capturedInvocation) | method <- methods]
         G.SinkEntries config publication defaults ->
           CompiledSink identity publication.invocationContract (handle publication) (handle config) (handle defaults)
+        G.LiveEntries config login queries ->
+          CompiledLive identity config.invocationContract (handle config) (handle <$> login)
+            [(query,handle query.liveQueryInvocation) | query <- queries]
         G.EventEntries config login events ->
           CompiledEvent identity config.invocationContract (handle config) (handle <$> login)
             [(event,handle event.eventPoll,handle . fst <$> event.eventDispatch) | event <- events]

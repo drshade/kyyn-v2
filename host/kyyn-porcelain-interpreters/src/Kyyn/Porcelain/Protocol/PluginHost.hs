@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginHost (decodeHostFrame, answerNetwork, answerLogin, executeAcquisition, executeLogin) where
+module Kyyn.Porcelain.Protocol.PluginHost (adapterDeadlineMicroseconds, decodeHostFrame, answerNetwork, answerLogin, executeAcquisition, executeLogin) where
 
 import Data.Aeson (Value, toJSON, parseJSON)
 import Data.Aeson.Types (Parser)
@@ -28,6 +28,10 @@ import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import qualified Kyyn.Plumbing.Capability.ContentDigest as Digest
 import Kyyn.Plumbing.Protocol.Blob (decodeDownload, downloadResult)
 import Kyyn.Types.Plugin (FetchError(..))
+
+-- Shared deadline for one interactive provider adapter invocation.
+adapterDeadlineMicroseconds :: Int
+adapterDeadlineMicroseconds = 60 * 1000000
 
 executeAcquisition :: (ConcurrentExecution :> es, EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)

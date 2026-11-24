@@ -111,6 +111,63 @@ undone or even interrupted. Late replies are retained as unmatched/closed-wait
 outcomes and never restart a cancelled instance. Existing draft evolutions remain
 available; cancellation neither accepts nor deletes them.
 
+### Live query invocation and replay
+
+[ADR 0015](0015-plugins.md#live-query-connector-contract) owns live-query registration,
+provider execution and explicit CLI invocation. Interactive flows receive generated
+typed references to those methods. A reference identifies the plugin, connector
+type, configured instance and method, with generated input/output codecs and
+contracts. It is captured with the flow's executable and configuration; resumption
+does not select a new account, method implementation or current working tree.
+Instance configuration is captured; named secrets are read at execution time, so
+a subsequent login supplies refreshed credentials for a new invocation.
+
+```haskell
+-- Generated bindings construct these; authors do not assemble wire requests.
+data LiveQueryRef input output
+
+liveQuery :: LiveQueryRef input output -> InteractiveFlow input output
+
+-- Shape of a generated binding for an installed connector method.
+queryMethod :: ConnectorInstance ConnectorTag -> LiveQueryRef Input Output
+```
+
+`liveQuery` uses upstream `durablyWith` with explicit generated request/result
+codecs. The request contains the checked binding and typed input; the result is
+the typed output. The upstream operation/occurrence key in the instance namespace
+is the identity. Upstream validates the recorded input on restoration; Kyyn does
+not invent an input-based cache or a second deduplication mechanism.
+
+On a journal miss, the generated request invokes the captured live-query binding
+through the host broker. Only a checked successful output completes that durable
+operation. Expected provider answers which callers can act on, such as a rejected
+query, belong in the plugin’s output contract and are journalled normally. Failure
+to obtain an answer is a `FetchError` in the flow's existing
+failure channel, not a successful journalled `Either` value. Host execution failures
+retain their diagnostic boundary. A returned `FetchError` finishes the instance
+as failed; start a new instance after correcting the problem. Host diagnostics
+block the attempt and preserve their structured codes until explicit `flow retry`;
+worker visits do not reissue the query while blocked.
+
+On a journal hit, the output is restored without executing the provider adapter,
+authentication or callbacks. A different occurrence, such as the next repeat
+iteration or a later model tool call, is a new query and may see newer provider
+data. An interrupted operation can execute again after explicit retry. Live queries
+must tolerate repeated reads; this does not promise a consistent
+provider snapshot across separate calls or exactly-once execution.
+
+The query can be a direct step or an authored Agentic tool body supplied to a draft.
+A tool body that fails the step monad fails the attempt: upstream does not convert
+that failure into a model-visible tool result. A rejected query returned as typed
+output lets the model correct its query in a subsequent tool call.
+Provider results are returned only to that caller unless the authored workflow
+explicitly uses them in a later proposal. They do not automatically become evidence
+or accepted facts. Query output can be retained in the completion journal and sent
+to the selected model, so the integration's bounded-result contract remains visible
+to authors. Observation summaries remain payload-free; the existing Executing and
+Restored signals describe operation selection and restoration without copying rows,
+credentials or raw provider payloads into recordings.
+
 ### Live plugin capabilities and waiting
 
 Plugins expose typed live queries, actions and incoming event contracts alongside

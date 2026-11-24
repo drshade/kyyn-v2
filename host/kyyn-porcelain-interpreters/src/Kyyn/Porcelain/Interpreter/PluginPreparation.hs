@@ -71,6 +71,7 @@ prepareFromGuest code program description = do
       names = nub [takeWhile (/= '/') rest | (path,_) <- entries, Just rest <- [stripPrefix "plugins/packages/" path]]
       connectors = compiledConnectors program description
       owner (CompiledSource identity _ _ _ _ _) = identity
+      owner (CompiledLive identity _ _ _ _) = identity
       owner (CompiledEvent identity _ _ _ _) = identity
       owner (CompiledSink identity _ _ _ _) = identity
   unless (all ((`elem` names) . Text.unpack . G.connectorPlugin . owner) connectors)
@@ -88,6 +89,7 @@ prepareFromGuest code program description = do
           connectorLabel = label ++ "/" ++ Text.unpack identity.connectorType
       defaults <- case connector of
         CompiledSource{} -> pure Nothing
+        CompiledLive{} -> pure Nothing
         CompiledEvent{} -> pure Nothing
         CompiledSink _ (G.SinkContracts _ options _ _) _ _ defaultEntry -> do
           bytes <- ExceptT (Right <$> executeEntry defaultEntry (toJSON G.SinkDefaultsInvocation))

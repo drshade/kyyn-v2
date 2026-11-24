@@ -411,8 +411,8 @@ connectors = [SourceConnector
   }]
 ```
 
-`Connector` and its `SourceConnector` / `SinkConnector` / `LiveConnector` constructors are exported
-through `Kyyn.Plugin`. The connector name must match
+`Connector` and its `SourceConnector`, `SinkConnector`, `EventConnector` and
+`LiveConnector` constructors are exported through `Kyyn.Plugin`. The connector name must match
 `[A-Z][A-Za-z0-9_]*` and be unique within the plugin; it becomes an alternative in
 the derived Dhall configuration union. Qualified names refer to Haskell declarations,
 not duplicated structural schemas. A fixed adapter evaluates the registration;
@@ -613,6 +613,107 @@ Captured source methods retain their existing evidence-only context. Live method
 are explicit operations, not a hidden acquisition inside a captured read. Config,
 login and pure provider helpers can be shared across connector kinds without
 introducing another package or authentication framework.
+
+### Live query connector contract
+
+A `LiveConnector` registers provider queries without a fetch entry, evidence
+payload or event poller. Its configured instance selects the account and provider
+settings exactly as for other connector kinds. Methods share that instance's
+configuration type, pure validation and optional explicit login.
+
+```haskell
+-- A case of Connector, alongside SourceConnector, SinkConnector and EventConnector.
+data LiveConnector = LiveConnector
+  { name :: ConnectorTypeName
+  , validateConfig :: QualifiedExport
+  , login :: Maybe QualifiedExport
+  , queries :: [LiveQuery]
+  }
+
+data LiveQuery = LiveQuery
+  { queryName :: MethodName
+  , queryDescription :: Text
+  , implementation :: QualifiedExport
+  }
+
+type LiveQueryProgram = Program (Http :+: (Secrets :+: Waiting))
+
+-- Qualified exports checked against one Config type for the connector.
+validateConfig :: Config -> ValidationReport
+login :: Config -> PluginLogin (Either LoginError ())
+query :: Config -> Input -> LiveQueryProgram (Either FetchError Output)
+```
+
+The registration constructor `LiveQuery` names a method; `LiveQueryProgram` is
+its execution context. The compiler derives `Input` and `Output` from the checked
+export, and derives `Config` consistently across methods, validation and login.
+Query names are unique within the connector and follow the existing method-name
+rules. Discovery returns the registered description, contracts and query kind
+without authenticating or contacting the provider.
+
+A query reads provider data at invocation time. This is the integration author's
+contract, not an inference from a GET request: authentication can issue POSTs and
+rotate a named secret. The query row contains HTTP, secret access and cancellable
+waiting; it has no evidence snapshot, evidence publication, interactive login or
+KB publication capability. Shared provider helpers state the individual capabilities
+they require, so acquisition, query and login functions can reuse them without
+sharing broader execution rows.
+
+The selected snapshot owns the package, method and instance configuration. Generated
+proxies and the explicit CLI operation use the same prepared method, checked input
+and output contracts, and host callback broker. The caller selects the configured
+instance explicitly; the host checks that the method belongs to its connector and
+that the generated reference matches the prepared contracts. An installed package
+is not automatically offered to a model. The workflow author chooses the methods
+exposed as Agentic tools or called directly as steps.
+
+```haskell
+-- Host application boundary; metadata preparation is separate from execution.
+data PluginLive :: Effect where
+  ExecuteLiveQuery :: CheckedValue -> PreparedMethod -> Value
+    -> PluginLive m (Either [Diagnostic] (Either FetchError CheckedValue))
+
+executeLiveQuery :: PluginLive :> es
+  => CheckedValue -> PreparedMethod -> Value
+  -> Eff es (Either [Diagnostic] (Either FetchError CheckedValue))
+
+runPluginLive
+  :: (GuestExecution :> es, HttpTransport :> es, SecretStore :> es,
+      Waiting :> es, Deadline :> es, DhallHandling :> es, Failure :> es)
+  => Eff (PluginLive : es) a -> Eff es a
+```
+
+Each invocation runs under the existing fixed 60-second adapter deadline, including
+provider callbacks. Process cleanup and cancellation use the event adapter's
+existing execution boundary. Expiry produces one live-query timeout diagnostic;
+it does not introduce a new timeout setting or a background retry process.
+Failure to obtain a provider answer, including authentication failure, returns
+`FetchError`; the plugin constructs its message without secrets and the host adds
+no provider payload. Expected provider answers which callers can act on, including
+query rejection, belong in the plugin’s successful output contract. Host transport,
+contract and process failures retain their existing diagnostic boundary. The host
+does not automatically restart a failed query. A plugin may retain its bounded
+provider-specific retry policy within the invocation deadline.
+
+The provider integration defines bounded output and makes incomplete results
+explicit in its output contract. A successful bounded response is an ordinary
+result, not an error or a claim that all provider records were returned. Credentials
+remain in named secrets and must not appear in query results or diagnostics.
+
+`plugin connector query PLUGIN INSTANCE METHOD --input VALUE` performs one fresh
+query against the accepted configuration, using the same checked invocation as
+interactive flows. Discover methods with `plugin connector method list PLUGIN INSTANCE`
+and inspect their types with `plugin connector method show PLUGIN INSTANCE METHOD`.
+CLI execution does not create an interactive instance, invoke
+a model or populate an evidence capture. Query failures produce the ordinary
+non-success CLI response and exit status. No query is performed by listing or
+inspecting methods.
+
+[ADR 0030](0030-interactive-agentic-workflows.md#live-query-invocation-and-replay)
+owns the generated interactive reference and completion replay. Ordinary KB tools,
+closed recipes, validators, snapshot queries and output renderers do not receive
+live-query execution through this registration. Mutating actions keep the separate
+boundary described above; they are not registered as queries.
 
 ### Event connector contract
 
