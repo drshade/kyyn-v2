@@ -138,10 +138,13 @@ try{
   const detail = page.locator('[data-wait="manual-wait"] details').first();
   await detail.locator('summary').click();
   const updateCatalog = () => write(catalogPath, JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]}));
+  await page.evaluate(() => window.scrollTo(0, 350));
+  const scrollBefore=await page.evaluate(() => window.scrollY);
   coordinator.attempts.push('active'); updateCatalog();
   await page.locator('[data-attempt="active"]').waitFor();
   assert.equal(await page.locator('#flow-run').getAttribute('src'), '/runs/suspended?embedded=1');
   assert.equal(await detail.getAttribute('open'), '');
+  assert.equal(await page.evaluate(() => window.scrollY),scrollBefore,'Refresh preserves scroll');
   assert(await detail.locator('summary').evaluate(node => node === document.activeElement), 'Refresh preserves disclosure focus');
   await page.locator('#flow-follow').check();
   await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/active?embedded=1');
@@ -157,6 +160,17 @@ try{
   assert.match(await page.locator('#flow-message').textContent(), /text is selected/);
   await page.evaluate(() => getSelection().removeAllRanges());
   await page.locator('[data-wait="new-wait"]').waitFor();
+  // A slow response never overlaps another poll.
+  let inFlight=0,peakInFlight=0,finishSlow;
+  const slowFinished=new Promise(resolve=>finishSlow=resolve);
+  await page.route('**/flows/instance-demo', async route => {
+    inFlight++;peakInFlight=Math.max(peakInFlight,inFlight);
+    await new Promise(resolve=>setTimeout(resolve,2600));
+    await route.continue();inFlight--;finishSlow();
+  });
+  await slowFinished;
+  assert.equal(peakInFlight,1);assert.equal(inFlight,0);
+  await page.unroute('**/flows/instance-demo');
   // A transient read failure retains the snapshot and recovers.
   await page.route('**/flows/instance-demo', route => route.fulfill({status:503,body:'Unavailable'}));
   await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('Retrying'));
