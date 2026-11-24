@@ -44,8 +44,8 @@ integer = C.primitive S.SInteger V.Integer $ \case
   _ -> Left "Expected integer"
 
 flow :: A.Agentic Step [Integer] [Integer]
-flow = A.each (A.durably integer integer (\_ n -> lift (request Effect) >> pure n)
-  A.>>> A.await integer integer)
+flow = A.each (A.durablyWith integer integer (\_ n -> lift (request Effect) >> pure n)
+  A.>>> A.awaitWith integer integer)
 
 -- Round-trip every persisted value through the actual host/guest value codec.
 wire :: V.Value -> IO V.Value
@@ -109,11 +109,11 @@ check = do
         Right (Left _) -> conflictStore == complete
         _ -> False)
     _ -> fail "Unexpected waiting frontier"
-  let failed = A.await integer integer A.&&& A.act (\_ -> throwE (FetchError "fixture failure"))
+  let failed = A.awaitWith integer integer A.&&& A.act (\_ -> throwE (FetchError "fixture failure"))
         :: A.Agentic Step Integer (Integer,Integer)
   (failure,_,_,failureEvents) <- run [] (A.resumable runtime failed 1)
   assert "short-circuit failure is not a waiting outcome" (failure == Left (FetchError "fixture failure") &&
     any ((== A.Failed) . (.happened)) failureEvents)
-  (plain,_,_,_) <- run [] (A.interpret runtime (A.await integer integer) 1)
+  (plain,_,_,_) <- run [] (A.interpret runtime (A.awaitWith integer integer) 1)
   assert "plain interpret uses FetchError for an unexpected wait" (case plain of Left _ -> True; _ -> False)
   putStrLn "Kyyn Program/ExceptT waiting, typed fulfilment, replay and wire observations passed."

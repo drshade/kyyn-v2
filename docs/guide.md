@@ -573,7 +573,7 @@ import qualified Agentic.Value as V
 import Kyyn.Agentic (Flow)
 
 conversation :: Flow Integer Integer
-conversation = A.await integer integer
+conversation = A.awaitWith integer integer
   where
     integer = C.primitive S.SInteger V.Integer $ \value -> case value of
       V.Integer number -> Right number

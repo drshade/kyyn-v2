@@ -34,6 +34,6 @@ awaitReply :: EventRef request reply
   -> A.Agentic (ExceptT FetchError (Program calls)) request (ReceivedReply reply)
 awaitReply (EventRef reference contracts) = case contracts of
   Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
-  Right (input,output) -> A.await
+  Right (input,output) -> A.awaitWith
     (eventRequestCodec reference input.description output.description input.codec)
     (receivedReplyCodec output.codec)

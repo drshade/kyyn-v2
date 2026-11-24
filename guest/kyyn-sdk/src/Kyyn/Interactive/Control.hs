@@ -45,7 +45,7 @@ startFlow :: Member FlowControl calls => FlowRef input output
   -> A.Agentic (ExceptT FetchError (Program calls)) input (FlowHandle output)
 startFlow (FlowRef reference contracts) = case contracts of
   Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
-  Right (input,output) -> A.durably input.codec handleCodec $ \key value -> case key of
+  Right (input,output) -> A.durablyWith input.codec handleCodec $ \key value -> case key of
     Nothing -> throwE (FetchError "startFlow requires hosted interactive execution")
     Just durable -> FlowHandle <$> ExceptT (request (inject
       (StartChild durable reference input.description output.description (input.codec.encode value))))
@@ -55,7 +55,7 @@ inspectFlow :: forall output calls. (Contract.Contract output, Member FlowContro
   => A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) (FlowStatus output)
 inspectFlow = case compileContract (Contract.contract @output) of
   Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
-  Right output -> A.durably handleCodec (statusCodec output.codec) $ \key (FlowHandle identity) -> do
+  Right output -> A.durablyWith handleCodec (statusCodec output.codec) $ \key (FlowHandle identity) -> do
     requireHosted key
     status <- ExceptT (request (inject (InspectChild identity output.description)))
     either (throwE . FetchError) pure (traverse output.codec.decode status)
@@ -68,13 +68,13 @@ awaitFlow = case compileContract (Contract.contract @output) of
   Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
   Right output -> (inspectFlow A.&&& A.arr id) A.>>> A.arr snd
     A.>>> A.arr (\(FlowHandle identity) -> ChildWaitRequest identity output.description)
-    A.>>> A.await childWaitCodec (outcomeCodec output.codec)
+    A.>>> A.awaitWith childWaitCodec (outcomeCodec output.codec)
 
 cancelFlow :: forall output calls. (Contract.Contract output, Member FlowControl calls)
   => CancelScope -> A.Agentic (ExceptT FetchError (Program calls)) (FlowHandle output) ()
 cancelFlow scope = case compileContract (Contract.contract @output) of
   Left problem -> A.act (\_ -> throwE (FetchError (Text.pack (show problem))))
-  Right output -> A.durably handleCodec unitCodec $ \key (FlowHandle identity) -> do
+  Right output -> A.durablyWith handleCodec unitCodec $ \key (FlowHandle identity) -> do
     requireHosted key
     ExceptT (request (inject (CancelChild identity output.description scope)))
   where

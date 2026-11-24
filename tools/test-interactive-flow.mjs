@@ -39,7 +39,7 @@ awaitParent = startFlow (flowRef (RecipeId "child") Child.review) A.>>> I.awaitF
 observeParent :: Flow Integer Integer
 observeParent = startFlow (flowRef (RecipeId "child") Child.review)
   A.>>> (inspectFlow A.&&& A.arr id)
-  A.>>> A.first (A.arr statusName A.>>> A.await text integer)
+  A.>>> A.first (A.arr statusName A.>>> A.awaitWith text integer)
   A.>>> A.arr snd A.>>> inspectFlow
   A.>>> A.arr (\\status -> case status.execution of I.Finished (I.Completed result) -> result; _ -> -1)
   where
@@ -58,9 +58,9 @@ self :: Flow Integer Integer
 self = A.arr (\\n -> if n > 0 then Left (n-1) else Right 0)
   A.>>> ((startFlow (flowRef (RecipeId "self") self) A.>>> A.arr (const 0)) A.||| A.arr id)
 conversation :: Flow Integer Integer
-conversation = A.durably integer integer (\\_ n -> pure (n + 1)) A.>>> A.await integer integer
+conversation = A.durablyWith integer integer (\\_ n -> pure (n + 1)) A.>>> A.awaitWith integer integer
 multiple :: Flow Integer Integer
-multiple = (A.await integer integer A.&&& A.await integer integer) A.>>> A.arr (uncurry (+))
+multiple = (A.awaitWith integer integer A.&&& A.awaitWith integer integer) A.>>> A.arr (uncurry (+))
 refuse :: Flow Integer Integer
 refuse = A.act (\\_ -> throwE (FetchError "Authored fixture refusal"))
 integer :: C.Codec Integer
@@ -73,7 +73,7 @@ import qualified Agentic.Schema as S
 import qualified Agentic.Value as V
 import Kyyn.Agentic (Flow)
 review :: Flow Integer Integer
-review = A.await integer integer
+review = A.awaitWith integer integer
 integer :: C.Codec Integer
 integer = C.primitive S.SInteger V.Integer (\\value -> case value of V.Integer n -> Right n; _ -> Left "Expected an integer")
 `);
