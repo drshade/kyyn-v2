@@ -33,7 +33,7 @@ flowPage item interrupted values children descriptions = document (recipe item) 
       " Follow latest attempt"
     p_ [id_ "flow-message", role_ "status"] "Following this conversation."
     iframe_ [id_ "flow-run", title_ "Conversation execution", style_ "width:100%;height:75vh;border:1px solid #ddd", makeAttribute "hidden" ""] mempty
-  div_ [id_ "flow-snapshot"] (snapshot item interrupted values children descriptions)
+  div_ [id_ "flow-snapshot", makeAttribute "data-finished" (case item.status of Finished _ -> "true"; _ -> "false")] (snapshot item interrupted values children descriptions)
   script_ [src_ "/_inspection/flow-viewer.mjs", type_ "module"] ("" :: Text.Text)
 
 snapshot :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()

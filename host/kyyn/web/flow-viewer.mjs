@@ -7,20 +7,26 @@ function disclosureKey(node) {
   return JSON.stringify([owner?.dataset.wait ?? '', node.querySelector('summary')?.textContent]);
 }
 export function refreshSnapshot(current, incoming) {
+  const selection = document.getSelection();
+  if (selection && !selection.isCollapsed && current.contains(selection.anchorNode)) return false;
+  const scroll = window.scrollY;
   const opened = new Set([...current.querySelectorAll('details[open]')].map(disclosureKey));
   const focused = current.contains(document.activeElement) && document.activeElement.closest('details');
   const focusKey = focused && disclosureKey(focused);
+  current.dataset.finished = incoming.dataset.finished;
   current.replaceChildren(...incoming.childNodes);
   for (const detail of current.querySelectorAll('details')) {
     if (opened.has(disclosureKey(detail))) detail.open = true;
     if (focusKey === disclosureKey(detail)) detail.querySelector('summary')?.focus({preventScroll: true});
   }
+  window.scrollTo({top: scroll, behavior: "instant"});
+  return true;
 }
 export function mountFlowViewer(doc = document, fetchPage = fetch) {
   const snapshot = doc.querySelector('#flow-snapshot');
   if (!snapshot) return;
   const follow = doc.querySelector('#flow-follow'), frame = doc.querySelector('#flow-run'), message = doc.querySelector('#flow-message');
-  let selected = null, stopped = false, timer;
+  let selected = null, stopped = false, pending = false, timer;
   function show(path) {
     if (!path || path === selected) return;
     selected = path;
@@ -39,7 +45,13 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault(); follow.checked = false; show(link.getAttribute('href')); update();
   });
+  function schedule() {
+    clearTimeout(timer);
+    if (!stopped && !doc.hidden && snapshot.dataset.finished !== 'true') timer = setTimeout(poll, 2000);
+  }
   async function poll() {
+    if (stopped || doc.hidden || pending) return;
+    pending = true;
     try {
       const response = await fetchPage(location.pathname, {cache: 'no-store'});
       if (!response.ok) throw new Error(response.status === 404 ? 'This flow was cleared or is no longer available.' : `Could not refresh this flow (HTTP ${response.status}).`);
@@ -51,11 +63,12 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     } catch (error) {
       if (!stopped) message.textContent = `${error.message} Retrying; showing the last received state.`;
     } finally {
-      if (!stopped) timer = setTimeout(poll, 2000);
+      pending = false; schedule();
     }
   }
-  update(); timer = setTimeout(poll, 2000);
-  const stop = () => { stopped = true; clearTimeout(timer); };
+  update(); schedule();
+  doc.addEventListener("visibilitychange", schedule);
+  const stop = () => { stopped = true; clearTimeout(timer); doc.removeEventListener("visibilitychange", schedule); };
   window.addEventListener('pagehide', stop, {once:true});
   return stop;
 }
