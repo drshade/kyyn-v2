@@ -10,7 +10,6 @@ import Data.Aeson.Types (parseEither, withObject, FromJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Encoding
 import System.Exit (ExitCode(..))
 
 main :: IO ()
@@ -19,11 +18,11 @@ main = do
   poll <- nativeEvent "microsoft-graph" "Teams" "question" False
   let request = object ["text" .= text "Please reply to this question"]
       envelope fields = object ["config" .= config,"input" .= object fields]
-  (sent,_,exit) <- brokerWith Normal respond dispatch (envelope ["waitId" .= text "w","request" .= request])
+  (sent,_,exit) <- brokerWith Normal respond dispatch (envelope ["waitIdentity" .= text "w","request" .= request])
   assert "dispatch exit" (exit == ExitSuccess)
   cursor <- maybe (fail "Missing dispatch result") (get "value") sent :: IO Value
   assert "question id" . (== ("question" :: Text.Text)) =<< get "questionId" cursor
-  (received,_,pollExit) <- brokerWith Normal respond poll (envelope ["waitId" .= text "w","request" .= request,"cursor" .= tagged "Some" cursor])
+  (received,_,pollExit) <- brokerWith Normal respond poll (envelope ["waitIdentity" .= text "w","request" .= request,"cursor" .= tagged "Some" cursor])
   assert "poll exit" (pollExit == ExitSuccess)
   batch <- maybe (fail "Missing poll result") (get "value") received :: IO Value
   arrivals <- get "arrivals" batch :: IO [Value]
@@ -51,7 +50,7 @@ respond _ "http" "send" args = do
           ,"body" .= object ["contentType" .= text "text","content" .= text "Answer"]]]])
 respond _ _ _ _ = fail "Unexpected Teams capability"
 http :: Int -> Value -> (Value,Bytes.ByteString)
-http status body = (tagged "Right" (object ["status" .= show status,"headers" .= ([] :: [Value]),"body" .= Encoding.decodeUtf8 (Lazy.toStrict (encode body))]),Bytes.empty)
+http status body = (tagged "Right" (object ["status" .= show status,"headers" .= ([] :: [Value])]),Lazy.toStrict (encode body))
 text :: Text.Text -> Value
 text = String
 tagged :: Text.Text -> Value -> Value

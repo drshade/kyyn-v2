@@ -1,5 +1,5 @@
 -- Teams questions against a synthetic HTTP interpreter. Exercises filtering,
--- pagination, cursor replay and failures without network or real credentials.
+-- pagination, initialCursor replay and failures without network or real credentials.
 {-# LANGUAGE GADTs, TypeOperators, OverloadedStrings #-}
 module Main where
 
@@ -10,7 +10,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Aeson as A
 import Data.Aeson ((.=))
-import Kyyn.Types.Program
+import Kyyn.Types.Program hiding (request)
 import Kyyn.Types.PluginHost
 import Kyyn.Plugin (FetchError(..))
 import Kyyn.Plugin.Event
@@ -24,7 +24,7 @@ main :: IO ()
 main = do
   let dispatch = Event.dispatch config (EventDispatch (WaitId "w") (Question "Question"))
   (sent,trace,rotated) <- run [ok 201 sentMessage] dispatch
-  assert "dispatch cursor" (sent == Right cursor)
+  assert "dispatch initialCursor" (sent == Right initialCursor)
   assert "refresh rotation" (rotated == ["rotated"])
   assert "single POST" (length trace == 1 && all (\(HttpRequest method _ _ _) -> method == "POST") trace)
   forM_ [Left HttpTimedOut,Left HttpConnectionFailed,ok 500 A.Null,ok 429 A.Null,ok 200 sentMessage] $ \response -> do
@@ -42,9 +42,9 @@ main = do
         message "ambiguous" "person" ["question","different"] later "No",
         message "unquoted" "person" [] later "No"]
       expected = Reply "reply" "person" "2026-11-24T10:01:00Z" "html" "Answer"
-      polling = Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just cursor))
+      polling = Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just initialCursor))
   (batch,_,_) <- run [ok 200 (page (unrelated <> [good]) Nothing)] polling
-  assert "only quoted respondent answer including self chat" (batch == Right (EventBatch [arrival expected] cursor))
+  assert "only quoted respondent answer including self chat" (batch == Right (EventBatch [arrival expected] initialCursor))
   (repeated,_,_) <- run [ok 200 (page [good] Nothing)] polling
   assert "repeated poll stable" (repeated == batch)
   let reaction = add "lastModifiedDateTime" (A.String "2026-11-24T12:00:00Z") (add "etag" (A.String "changed") good)
@@ -52,7 +52,7 @@ main = do
   assert "reaction churn excluded" (reacted == batch)
   let edited = message "reply" "person" ["question"] "2026-11-24T10:01:00Z" "Edited"
   (changed,_,_) <- run [ok 200 (page [edited] Nothing)] polling
-  assert "edit preserves event identity but changes reply" (changed == Right (EventBatch [arrival (expected { content = "Edited" })] cursor))
+  assert "edit preserves event identity but changes reply" (changed == Right (EventBatch [arrival (expected { content = "Edited" })] initialCursor))
   (other,_,_) <- run [ok 200 (page [good] Nothing)] (Event.poll config (EventPoll (WaitId "other") (Question "Q") (Just (Cursor "different" created Nothing))))
   assert "concurrent question isolation" (other == Right (EventBatch [] (Cursor "different" created Nothing)))
   let link n = Api.messagesUrl config <> "?page=" <> Text.pack (show (n :: Int))
@@ -60,12 +60,12 @@ main = do
   assert "page budget" (length requests == 4 && partial == Right (EventBatch [] (Cursor "question" created (Just (link 4)))))
   (continued,continuedTrace,_) <- run [ok 200 (page [good] Nothing)] (Event.poll config (EventPoll (WaitId "w") (Question "Q") (Just (Cursor "question" created (Just (link 4))))))
   assert "continuation publishes and resets scan" (continued == batch && case continuedTrace of [HttpRequest _ url _ _] -> url == link 4; _ -> False)
-  forM_ ["https://evil.invalid/messages?page=2", Api.messagesUrl config <> "/wrong?page=2"] $ \link -> do
-    (bad,rs,_) <- run [ok 200 (page [] (Just link))] polling
+  forM_ ["https://evil.invalid/messages?page=2", Api.messagesUrl config <> "/wrong?page=2"] $ \foreignLink -> do
+    (bad,rs,_) <- run [ok 200 (page [] (Just foreignLink))] polling
     assert "foreign continuation refused" (isLeft bad && length rs == 1)
   forM_ [ok 401 A.Null,ok 403 A.Null,ok 500 A.Null,ok 200 A.Null,Right (HttpResponse 200 [] "invalid")] $ \response -> do
     (bad,_,_) <- run [response] polling
-    assert "failed poll has no batch or cursor" (isLeft bad)
+    assert "failed poll has no batch or initialCursor" (isLeft bad)
   (lateFailure,_,_) <- run [ok 200 (page [good] (Just (link 1))),ok 500 A.Null] polling
   assert "late page error publishes no partial result" (isLeft lateFailure)
   (throttled,_,_) <- run [Right (HttpResponse 429 [("Retry-After","120")] "")] polling
@@ -79,8 +79,8 @@ config = TeamsConfig (DeviceCode "tenant" "app" "secret" ["Chat.Read","ChatMessa
 created, later :: Text
 created = "2026-11-24T10:00:00Z"
 later = "2026-11-24T10:02:00Z"
-cursor :: Cursor
-cursor = Cursor "question" created Nothing
+initialCursor :: Cursor
+initialCursor = Cursor "question" created Nothing
 sentMessage :: A.Value
 sentMessage = A.object ["id" .= ("question" :: Text),"chatId" .= ("chat" :: Text),"createdDateTime" .= created]
 message :: Text -> Text -> [Text] -> Text -> Text -> A.Value

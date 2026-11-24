@@ -40,6 +40,8 @@ try {
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'microsoft-graph', '--evolution', draft.id]).result.schema;
   assert.match(schema, /ClientSecret/);
   assert.match(schema, /DeviceCode/);
+  assert.match(schema, /Teams/);
+  assert.match(schema, /respondentId/);
   assert(!schema.includes("userId"), "Meetings must derive its user scope from the credential");
   const configPath = path.join(draft.path, 'target/plugins/config/microsoft-graph.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
@@ -50,6 +52,7 @@ try {
       | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
       | Meetings : { auth : Auth, retentionDays : Integer }
       | Directory : { auth : Auth }
+      | Teams : { auth : Auth, chatId : Text, respondentId : Text }
       | Files : { auth : Auth, scope : Scope, itemPath : Text, includeGlobs : List Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
