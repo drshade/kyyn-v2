@@ -109,7 +109,8 @@ checkObservationTransport executable = do
       unless (Keys.lookup "capability" fields == Just (String "flow") && Keys.lookup "method" fields == Just (String "observe"))
         (fail "Wrong observation capability")
       case Keys.lookup "arguments" fields of
-        Just encoded -> do
+        Just (Object envelope) | Just encoded <- Keys.lookup "summary" envelope -> do
+          unless (Keys.member "operation" envelope) (fail "Missing operation identity")
           decoded <- decodeFlowValue encoded
           case decoded of
             Object summary -> unless (Keys.member "occurrence" summary && Keys.member "parent" summary && not (Keys.member "payload" summary))

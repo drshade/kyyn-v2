@@ -106,5 +106,5 @@ observeConversation = interpret $ \env operation -> case operation of
     _ <- unlift (respond (Wire.jsonFrame (Lazy.toStrict (encode (object
       ["tag" .= ("HostRequest" :: String), "id" .= ("1" :: String),
        "capability" .= ("flow" :: String), "method" .= ("observe" :: String),
-       "arguments" .= object ["tag" .= ("Null" :: String)]])))))
+       "arguments" .= object ["summary" .= object ["tag" .= ("Null" :: String)], "operation" .= object ["tag" .= ("None" :: String)]]])))))
     error "Unrecorded observation was acknowledged"

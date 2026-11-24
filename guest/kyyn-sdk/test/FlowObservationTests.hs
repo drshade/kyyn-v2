@@ -1,14 +1,16 @@
-{-# LANGUAGE GADTs, OverloadedRecordDot #-}
+{-# LANGUAGE GADTs, OverloadedRecordDot, DuplicateRecordFields #-}
 -- Exercise the actual Program/ExceptT stack and observation transport without
 -- providers. IO exceptions during Program interpretation remain unobservable.
 module FlowObservationTests (check, guest) where
 
 import qualified Agentic as A
+import qualified Agentic.Journal as Journal
+import Kyyn.Types.FlowObservation (FlowObservation(..), FlowSummary(..), OperationIdentity(..))
 import Control.Monad (unless, when)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
 import Data.IORef
-import Kyyn.Runtime.Flow (programScope, exchangeObservation)
+import Kyyn.Runtime.Flow (programScope, flowObservation, exchangeObservation)
 import Kyyn.Runtime.Transport (withTransport)
 import Kyyn.Types.Program (Program, request, interpretProgram)
 import Kyyn.Types.Plugin (FetchError(..))
@@ -42,6 +44,17 @@ check = do
   case success of Right _ -> pure (); Left _ -> fail "Successful flow failed"
   unless (map (.happened) events == [A.Entered Nothing,A.Entered Nothing,A.Executing A.PlainAction,A.Returned A.Completed,A.Returned A.Completed])
     (fail "Incorrect successful scope trace")
+  case events of
+    first:_ -> do
+      let changed happened = A.Summary first.occurrence first.parent first.nodeType first.path happened
+          live = changed (A.Executing (A.KeyedOperation Journal.DurableEffect))
+          restored = changed (A.Restored Journal.DurableEffect)
+          expected = Just (OperationIdentity (Journal.journalKeyValue (A.journalKey Journal.DurableEffect first.occurrence)))
+      unless ((flowObservation live).operation == expected && (flowObservation restored).operation == expected)
+        (fail "Observation identity differs from upstream canonical journal key")
+      unless ((flowObservation first).operation == Nothing && (flowObservation first).summary == FlowSummary (A.summaryValue first))
+        (fail "Non-keyed observation changed its summary or invented an identity")
+    [] -> fail "Missing observation"
   let primary = FetchError "body failed"
       failed :: A.Agentic Step () ()
       failed = A.act (const (throwE primary)) `A.named` "failing step"
@@ -77,5 +90,5 @@ guest :: IO ()
 guest = do
   (_,events) <- record runtime (A.arr id :: A.Agentic Step () ())
   case events of
-    first:_ -> withTransport $ \transport -> exchangeObservation transport 1 first
+    first:_ -> withTransport $ \transport -> exchangeObservation transport 1 (flowObservation first)
     [] -> fail "Missing root observation"

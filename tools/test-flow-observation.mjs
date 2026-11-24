@@ -67,14 +67,15 @@ const addresses = new Set(graph.addressItems.map(x => x.address));
 const selections = new Set(graph.edges.flatMap(x => x.selections));
 const key = occurrence => JSON.stringify(occurrence);
 for (const failModel of [false, true]) {
-  const summaries = [];
+  const summaries = [], operations = [];
   let modelCalls = 0;
   const result = await invoke('$recipe.Flows.trace', {
     operation: 'run', root: {items: []}, input: false, state: {runs: '0'},
   }, request => {
     if (request.capability === 'flow') {
       assert.equal(request.method, 'observe');
-      summaries.push(decode(request.arguments));
+      summaries.push(decode(request.arguments.summary));
+      operations.push(request.arguments.operation.tag === "Some" ? decode(request.arguments.operation.value) : null);
       return {};
     }
     assert.equal(request.capability, 'model');
@@ -86,7 +87,7 @@ for (const failModel of [false, true]) {
     else action = tagged('Respond', value('private output'));
     return tagged('Right', {raw: value(null), action});
   });
-  const records = summaries.map((summary, i) => ({sequence: String(i), event: {elapsedNanos: String(BigInt(i) * 200000000n), body: {kind:'flow', summary}}}));
+  const records = summaries.map((summary, i) => ({sequence: String(i), event: {elapsedNanos: String(BigInt(i) * 200000000n), body: {kind:'flow', summary, operation: operations[i]}}}));
   const recording = records.reduce(reduceEvent, newRecording(graph));
   assert.deepEqual(recording, replay(graph, records, BigInt(records.at(-1).event.elapsedNanos)));
   const each = [...recording.occurrences.values()].find(x => x.node === 'each');
@@ -99,6 +100,9 @@ for (const failModel of [false, true]) {
   const entered = new Map(), terminals = new Set();
   for (const summary of summaries) {
     assert(!('payload' in summary));
+    const index = summaries.indexOf(summary);
+    const keyed = summary.event.kind === 'restored' || (summary.event.kind === 'executing' && summary.event.operation.kind === 'keyed');
+    assert.equal(operations[index] !== null, keyed, 'Operation identity must accompany exactly keyed observations');
     assert(addresses.has(summary.occurrence.address), 'Occurrence missing from captured graph');
     const id = key(summary.occurrence);
     if (summary.event.kind === 'entered') {
@@ -147,7 +151,7 @@ const reviewed = await invoke('$recipe.Flows.review', {
   operation: 'run', root: {items: []}, input: {}, state: {runs: '4'},
 }, request => {
   if (request.capability === 'flow') {
-    reviewEvents.push(decode(request.arguments));
+    reviewEvents.push(decode(request.arguments.summary));
     return {};
   }
   assert.equal(request.capability, 'plugin');

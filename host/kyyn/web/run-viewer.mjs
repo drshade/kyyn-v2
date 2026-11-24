@@ -32,6 +32,7 @@ export function reduceEvent(state, record) {
   if (!scope) throw new Error('Event without an observed entry in recording.');
   scope.events.push({at: state.elapsed, ...summary.event});
   if (summary.event.kind === 'restored') scope.restored = summary.event.operation;
+  if (summary.event.kind === 'executing') scope.liveSelections = (scope.liveSelections ?? 0) + 1;
   if (summary.event.kind === 'selected') state.selections.add(summary.event.edge);
   if (['returned', 'failed', 'cancelled', 'suspended'].includes(summary.event.kind)) {
     scope.terminal = summary.event.kind;
@@ -83,6 +84,7 @@ export function eventText(event, graph) {
     case 'drafting': return 'Drafting';
     case 'judged': return 'Judged';
     case 'suspended': return 'Suspended';
+    case 'executing': return 'Selected for live execution';
     case 'restored': return `Restored · ${typeof event.operation === 'string' ? event.operation : 'model turn ' + (event.operation.turn + 1)} · not re-executed`;
     case 'failed': return 'Failed';
     case 'cancelled': return 'Cancelled';
@@ -96,7 +98,7 @@ export function nodeState(state, item, stopped) {
   if (scopes.some(x => x.terminal === null)) return stopped ? 'unknown' : 'open';
   if (scopes.some(x => x.terminal === 'cancelled')) return 'cancelled';
   if (scopes.some(x => x.terminal === 'suspended')) return 'suspended';
-  return scopes.every(x => x.restored !== undefined) ? 'restored' : 'returned';
+  return scopes.every(x => x.restored !== undefined && !x.liveSelections) ? 'restored' : 'returned';
 }
 // Animate only direct hand-offs backed by a returned occurrence in the same
 // context, or the exact branch edge reported upstream. No guessed routes.
@@ -106,7 +108,8 @@ export function observedMotion(state, record) {
   const event = summary.event, item = state.graph.addresses.get(summary.occurrence.address);
   if (event.kind === 'selected') return {item, edges: state.graph.edges.flatMap((edge, index) =>
     edge.selections.includes(event.edge) ? [index] : []), kind: event.kind, context: summary.occurrence.context};
-  if (event.kind === 'returned' && state.occurrences.get(occurrenceKey(summary.occurrence))?.restored !== undefined) return null;
+  const scope = state.occurrences.get(occurrenceKey(summary.occurrence));
+  if (event.kind === 'returned' && scope?.restored !== undefined && !scope.liveSelections) return null;
   if (!['entered', 'returned'].includes(event.kind) || state.graph.items.get(item)?.kind !== 'node') return null;
   const edges = event.kind === 'entered' ? state.graph.edges.flatMap((edge, index) =>
     edge.style === 'flow' && edge.to === item && edge.selections.length === 0 &&
@@ -206,7 +209,7 @@ async function startViewer(initial) {
       detail.append(el('p', `Entered at ${seconds(scope.entered)}${scope.ended === undefined ? '' : ` · observed duration ${seconds(scope.ended - scope.entered)}`}`));
       if (scope.node === 'each') detail.append(el('p', `Element bodies returned: ${scope.completedBodies} / ${scope.total}`, 'progress-count'));
       if (scope.node === 'repeat') detail.append(el('p', `Iteration bodies returned: ${scope.completedBodies} · total unknown`, 'progress-count'));
-      if (scope.restored !== undefined) detail.append(el('p', 'Restored, not re-executed.'));
+      if (scope.restored !== undefined) detail.append(el('p', scope.liveSelections ? 'Contains restored and live operations.' : 'Contains restored operations.'));
       if (scope.outcome) detail.append(el('p', `Return outcome: ${scope.outcome}`));
       const events = el('ul');
       for (const event of scope.events) {

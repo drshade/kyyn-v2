@@ -44,10 +44,11 @@ try{
  const occurrence=address=>({address,context:[]}), rootOccurrence=occurrence('flow');
  function interactive(restored){
   const events=[];
-  const observed=(address,node,event)=>events.push({kind:'flow',summary:{occurrence:occurrence(address),parent:address==='flow'?null:rootOccurrence,node,notes:[],event}});
+  const observed=(address,node,event)=>events.push({kind:'flow',operation:(event.kind==='restored'||event.kind==='executing')?{address,context:[],operation:[address.endsWith('/1')?'wait':'effect']}:null,summary:{occurrence:occurrence(address),parent:address==='flow'?null:rootOccurrence,node,notes:[],event}});
   observed('flow','run',{kind:'entered',total:null});
   observed('flow/seq/0','effect',{kind:'entered',total:null});
   if(restored)observed('flow/seq/0','effect',{kind:'restored',operation:'effect'});
+  else observed('flow/seq/0','effect',{kind:'executing',operation:{kind:'keyed',operation:'effect'}});
   observed('flow/seq/0','effect',{kind:'returned',outcome:'completed'});
   observed('flow/seq/1','await',{kind:'entered',total:null});
   if(restored)observed('flow/seq/1','await',{kind:'restored',operation:'wait'});
@@ -131,27 +132,42 @@ try{
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
   await page.goto(base+'/flows');await page.screenshot({path:path.join(screenshots,'flows.png'),fullPage:true});
   await page.goto(base+'/flows/instance-demo');await page.screenshot({path:path.join(screenshots,'instance.png'),fullPage:true});
-  // Follow across attempts without resetting the selected run or open disclosures.
-  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/restored?embedded=1');
-  await page.locator('[data-attempt="suspended"]').click();
-  assert.equal(await page.locator('#flow-follow').isChecked(), false);
+  // One retained diagram and logical history, with raw attempts as ordinary links.
+  await page.locator('#flow-diagram svg').waitFor();
+  await page.waitForFunction(() => document.querySelector('#flow-progress').textContent.includes('2 completed keyed operations'));
+  await page.locator('#flow-diagram svg').evaluate(svg => svg.dataset.preserved = 'yes');
   const detail = page.locator('[data-wait="manual-wait"] details').first();
   await detail.locator('summary').click();
   const updateCatalog = () => write(catalogPath, JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]}));
-  await page.evaluate(() => window.scrollTo(0, 350));
-  const scrollBefore=await page.evaluate(() => window.scrollY);
-  coordinator.attempts.push('active'); updateCatalog();
-  await page.locator('[data-attempt="active"]').waitFor();
-  assert.equal(await page.locator('#flow-run').getAttribute('src'), '/runs/suspended?embedded=1');
-  assert.equal(await detail.getAttribute('open'), '');
-  assert.equal(await page.evaluate(() => window.scrollY),scrollBefore,'Refresh preserves scroll');
-  assert(await detail.locator('summary').evaluate(node => node === document.activeElement), 'Refresh preserves disclosure focus');
-  await page.locator('#flow-follow').check();
-  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/active?embedded=1');
-  await page.frameLocator('#flow-run').locator('#run-diagram svg').waitFor();
-  await page.frameLocator('#flow-run').locator('body').evaluate(body => body.dataset.preserved = 'yes');
+  await page.locator('#flow-follow').uncheck();
+  save('next-turn',interactiveGraph,interactive(true),interactiveMetadata);
+  coordinator.attempts.push('next-turn'); updateCatalog();
   await page.waitForTimeout(2300);
-  assert.equal(await page.frameLocator('#flow-run').locator('body').getAttribute('data-preserved'), 'yes');
+  assert.equal(await page.locator('[data-attempt="next-turn"]').count(),0,'Pausing freezes inspection');
+  await page.locator('#flow-follow').check();
+  await page.locator('[data-attempt="next-turn"]').waitFor();
+  await page.waitForFunction(() => document.querySelector('#flow-progress').textContent.includes('3 readable attempts'));
+  assert.match(await page.locator('#flow-progress').textContent(), /2 completed keyed operations/,'Restoration does not inflate completion');
+  assert.equal(await page.locator('#flow-diagram svg').getAttribute('data-preserved'), 'yes');
+  assert.equal(await detail.getAttribute('open'), '');
+  assert.equal(await page.locator('iframe').count(),0);
+  await page.locator('#flow-diagram [data-item="effect"]').first().click();
+  assert.match(await page.locator('#flow-inspector').textContent(),/1 live selections/);
+  // Missing/corrupt attempts and graph mismatches remain visible, later history survives.
+  save('graph-mismatch',{...interactiveGraph,edges:[]},interactive(true),interactiveMetadata);
+  save('corrupt-attempt',interactiveGraph,[],interactiveMetadata);
+  write(path.join(kb,'.kyyn/runs/corrupt-attempt/events.jsonl'),'not JSON\n');
+  save('after-gap',interactiveGraph,interactive(true),interactiveMetadata);
+  coordinator.attempts.push('missing-attempt','graph-mismatch','corrupt-attempt','after-gap');updateCatalog();
+  await page.waitForFunction(() => document.querySelector('#flow-progress').textContent.includes('4 readable attempts'));
+  assert.match(await page.locator('#flow-gaps').textContent(),/missing-attempt/);
+  assert.match(await page.locator('#flow-gaps').textContent(),/graph differs/);
+  assert.match(await page.locator('#flow-gaps').textContent(),/corrupt-attempt/);
+  assert.equal(await page.locator('#flow-diagram svg').getAttribute('data-preserved'), 'yes');
+  let closedReads=0;
+  const countClosed=request=>{if(new URL(request.url()).pathname==='/runs/suspended/events')closedReads++;};
+  page.on('request',countClosed);await page.waitForTimeout(2300);page.off('request',countClosed);
+  assert.equal(closedReads,0,'Closed recordings are not polled again');
   // Text being selected is not replaced by a background refresh.
   await detail.locator('summary').evaluate(node => {const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
   coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();
@@ -174,7 +190,7 @@ try{
   // A transient read failure retains the snapshot and recovers.
   await page.route('**/flows/instance-demo', route => route.fulfill({status:503,body:'Unavailable'}));
   await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('Retrying'));
-  assert.equal(await page.locator('[data-attempt="active"]').count(), 1);
+  assert.equal(await page.locator('[data-attempt="next-turn"]').count(), 1);
   await page.unroute('**/flows/instance-demo');
   await page.waitForFunction(() => !document.querySelector('#flow-message').textContent.includes('Retrying'));
   let flowRequests=0;
@@ -187,7 +203,7 @@ try{
   await page.waitForFunction(() => document.querySelector('#flow-snapshot').dataset.finished === 'true');
   flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
   // Loading an already finished instance must not start polling.
-  await page.reload();flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  await page.reload();await page.waitForFunction(() => document.querySelector('#flow-message').textContent === 'Conversation finished.');flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
   page.off('request',countFlow);
   await page.goto(base+'/flows/stopped-instance');
   let missingRequests=0;

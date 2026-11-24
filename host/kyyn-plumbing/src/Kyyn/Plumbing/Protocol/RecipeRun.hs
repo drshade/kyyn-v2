@@ -2,6 +2,7 @@
 module Kyyn.Plumbing.Protocol.RecipeRun
   ( headerValue, parseHeader, eventValue, parseEvent, summaryValue, listValue, pageValue ) where
 
+import Agentic.Aeson (toAeson, fromAeson)
 import Data.Aeson (Value(..), Object, object, (.=), (.:), withObject, withText)
 import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.KeyMap as Keys
@@ -37,7 +38,8 @@ parseHeader identity = exact "run header" ["instance","recipe","flow","before","
 
 eventValue :: RunEvent -> Value
 eventValue (RunEvent elapsed body) = object ["elapsedNanos" .= show elapsed,"body" .= case body of
-  FlowObserved summary -> object ["kind" .= String "flow","summary" .= summary]
+  FlowObserved (FlowObservation (FlowSummary summary) operation) -> object ["kind" .= String "flow","summary" .= toAeson summary,
+    "operation" .= fmap (\(OperationIdentity key) -> toAeson key) operation]
   RunCompleted draft -> object ["kind" .= String "completed","draft" .= evolutionIdName draft]
   RunFailed diagnostics -> object ["kind" .= String "failed","diagnostics" .= map diagnosticValue diagnostics]
   RunCancelled -> object ["kind" .= String "cancelled"]
@@ -48,7 +50,11 @@ parseEvent = exact "run event" ["elapsedNanos","body"] $ \o ->
   RunEvent <$> (o .: "elapsedNanos" >>= natural) <*> (o .: "body" >>= withObject "run event body" (\body -> do
     kind <- body .: "kind"
     case kind :: String of
-      "flow" -> exactFields body ["kind","summary"] >> FlowObserved <$> body .: "summary"
+      "flow" -> do
+        exactFields body ["kind","summary","operation"]
+        summary <- FlowSummary . fromAeson <$> body .: "summary"
+        operation <- fmap (OperationIdentity . fromAeson) <$> body .: "operation"
+        pure (FlowObserved (FlowObservation summary operation))
       "completed" -> exactFields body ["kind","draft"] >> RunCompleted <$> (body .: "draft" >>= checked . evolutionId)
       "failed" -> do
         exactFields body ["kind","diagnostics"]

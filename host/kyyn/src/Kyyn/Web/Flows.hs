@@ -30,10 +30,18 @@ flowPage item interrupted values children descriptions = document (recipe item) 
   section_ [id_ "flow-live", makeAttribute "hidden" ""] $ do
     label_ $ do
       input_ [id_ "flow-follow", type_ "checkbox", checked_]
-      " Follow latest attempt"
+      " Follow conversation"
     p_ [id_ "flow-message", role_ "status"] mempty
-    iframe_ [id_ "flow-run", title_ "Conversation execution", makeAttribute "hidden" ""] mempty
-  div_ [id_ "flow-snapshot", makeAttribute "data-finished" (case item.status of Finished _ -> "true"; _ -> "false")] (snapshot item interrupted values children descriptions)
+    div_ [class_ "toolbar"] $ do
+      button_ [id_ "flow-fit", type_ "button"] "Fit diagram"
+      button_ [id_ "flow-zoom-in", type_ "button"] "+"
+      button_ [id_ "flow-zoom-out", type_ "button"] "−"
+    p_ [id_ "flow-progress", role_ "status"] mempty
+    div_ [id_ "flow-gaps"] mempty
+    div_ [class_ "run-layout"] $ do
+      section_ [class_ "diagram", id_ "flow-diagram", makeAttribute "aria-label" "Conversation flow graph"] mempty
+      aside_ [id_ "flow-inspector", makeAttribute "hidden" ""] mempty
+  div_ [id_ "flow-snapshot", makeAttribute "data-instance" (flowInstanceIdText item.instanceId), makeAttribute "data-finished" (case item.status of Finished _ -> "true"; _ -> "false")] (snapshot item interrupted values children descriptions)
   script_ [src_ "/_inspection/flow-viewer.mjs", type_ "module"] ("" :: Text.Text)
 
 snapshot :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()

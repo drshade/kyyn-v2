@@ -640,11 +640,13 @@ removes finished instances; `--descendants` includes the full subtree and refuse
 unless every selected instance is finished. It does not delete drafts or viewer recordings.
 
 Open `/flows/FLOW_ID` in the web UI to watch a conversation across resumes.
-The page updates replies and status automatically and embeds the latest attempt's
-run viewer. Uncheck **Follow latest attempt**, or select an earlier attempt, to
-inspect it while reply updates continue. Updates pause while text is selected;
-clear the selection to resume. Hidden tabs and finished instances do not poll.
-Without JavaScript the same details remain available by refreshing the page.
+The page keeps one diagram across the conversation and appends observations from
+its execution attempts. Select a node to inspect live selections, restored
+operations and scope events. Completed keyed operations count once across
+resumptions; raw actions remain separate executions. Missing recordings and
+unknown outcomes stay visible. **Follow conversation** pauses inspection only;
+it does not stop the worker. Execution-attempt links open the original recordings
+for diagnostics and playback. Reloading the page reads the recordings again.
 
 Each resume attempt has a run ID and `/runs/RUN_ID` link. Suspended attempts show
 the pending reply count; replayed steps appear as restored. A returned interactive
