@@ -65,10 +65,10 @@ try{
  const instance=(id,status,parent=null)=>({id,parent,startKey:id,launch:{revision:'b'.repeat(40),request:'<script>input</script>',owner:{tag:'hosted',bundle:'c'.repeat(64),recipe:'reviewOpportunity'}},status,retryRequired:false,blocked:[],cancelDescendants:false,attempts:[],waits:[],deliveries:[]});
  const coordinator=instance('instance-demo',tag('waiting'));
  coordinator.attempts=['suspended','restored'];
- coordinator.waits=[{id:'child-wait',kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
-   {id:'manual-wait',kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
+ coordinator.waits=[{id:'child-wait',adapter:null,kind:tag('child',{child:'child-demo',outputContract:{types:[],nodes:[{tag:'Unit'}]}}),descriptor:{fixture:true},status:tag('open')},
+   {id:'manual-wait',adapter:null,kind:tag('reply'),descriptor:wire({path:[{name:'Portfolio review',description:null},{name:'Ask for update',description:null}],request:'<script>prompt</script>'}),status:tag('answered',{origin:tag('manual','cli'),value:'captured reply'})}];
  coordinator.deliveries=[{id:'manual-delivery',wait:'manual-wait',origin:tag('manual','cli'),value:'captured reply',outcome:tag('accepted')},
-   {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:'fixture',event:'event-1'}),value:'changed',outcome:tag('conflict')}];
+   {id:'provider-delivery',wait:'manual-wait',origin:tag('provider',{binding:{plugin:'fixture',connector:'Updates',instance:'demo',event:'question'},event:'event-1'}),value:'changed',outcome:tag('conflict')}];
  const childInstance=instance('child-demo',tag('finished',tag('completed','<script>result</script>')),'instance-demo');
  const runningInstance=instance('running-instance',tag('running'));
  const stoppedInstance=instance('stopped-instance',tag('running'));
@@ -90,7 +90,8 @@ try{
  assert(flowList.includes('reviewOpportunity'));assert(flowList.includes('interrupted'));assert(flowList.includes('running'));
  const flowPage=await get('/flows/instance-demo');
  assert(flowPage.includes('href="/flows/child-demo"'));assert(flowPage.includes('href="/runs/suspended"'));
- assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture · event-1'));assert(flowPage.includes('conflicting'));
+ assert(flowPage.includes('id="flow-snapshot" data-finished="false"'));assert(flowPage.includes('id="flow-live" hidden'));
+ assert(flowPage.includes('Child outcome:'));assert(flowPage.includes('Manual · cli'));assert(flowPage.includes('Provider · fixture/demo/question · event-1'));assert(flowPage.includes('conflicting'));
  assert(!flowPage.includes('<script>input</script>'));assert(flowPage.includes('flow.bundle-missing'));assert(flowPage.includes('Ask for update · Answered'));assert(flowPage.includes('class="context">Ask for update</span>'));assert(!flowPage.includes('<th>Parent</th>'));assert(flowPage.includes('&lt;script&gt;prompt&lt;/script&gt;'));
  const humanFlow=spawnSync(executable,['--kb',kb,'--nix','/absent-nix','flow','show','instance-demo'],{env,encoding:'utf8'});assert.equal(humanFlow.status,0,humanFlow.stderr);assert(humanFlow.stdout.includes('Ask for update [manual-wait]'));
  assert((await get('/flows/child-demo')).includes('href="/flows/instance-demo"'));
@@ -130,6 +131,70 @@ try{
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
   await page.goto(base+'/flows');await page.screenshot({path:path.join(screenshots,'flows.png'),fullPage:true});
   await page.goto(base+'/flows/instance-demo');await page.screenshot({path:path.join(screenshots,'instance.png'),fullPage:true});
+  // Follow across attempts without resetting the selected run or open disclosures.
+  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/restored?embedded=1');
+  await page.locator('[data-attempt="suspended"]').click();
+  assert.equal(await page.locator('#flow-follow').isChecked(), false);
+  const detail = page.locator('[data-wait="manual-wait"] details').first();
+  await detail.locator('summary').click();
+  const updateCatalog = () => write(catalogPath, JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]}));
+  await page.evaluate(() => window.scrollTo(0, 350));
+  const scrollBefore=await page.evaluate(() => window.scrollY);
+  coordinator.attempts.push('active'); updateCatalog();
+  await page.locator('[data-attempt="active"]').waitFor();
+  assert.equal(await page.locator('#flow-run').getAttribute('src'), '/runs/suspended?embedded=1');
+  assert.equal(await detail.getAttribute('open'), '');
+  assert.equal(await page.evaluate(() => window.scrollY),scrollBefore,'Refresh preserves scroll');
+  assert(await detail.locator('summary').evaluate(node => node === document.activeElement), 'Refresh preserves disclosure focus');
+  await page.locator('#flow-follow').check();
+  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/active?embedded=1');
+  await page.frameLocator('#flow-run').locator('#run-diagram svg').waitFor();
+  await page.frameLocator('#flow-run').locator('body').evaluate(body => body.dataset.preserved = 'yes');
+  await page.waitForTimeout(2300);
+  assert.equal(await page.frameLocator('#flow-run').locator('body').getAttribute('data-preserved'), 'yes');
+  // Text being selected is not replaced by a background refresh.
+  await detail.locator('summary').evaluate(node => {const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
+  coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();
+  await page.waitForTimeout(2300);
+  assert.equal(await page.locator('[data-wait="new-wait"]').count(), 0);
+  assert.match(await page.locator('#flow-message').textContent(), /text is selected/);
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await page.locator('[data-wait="new-wait"]').waitFor();
+  // A slow response never overlaps another poll.
+  let inFlight=0,peakInFlight=0,finishSlow;
+  const slowFinished=new Promise(resolve=>finishSlow=resolve);
+  await page.route('**/flows/instance-demo', async route => {
+    inFlight++;peakInFlight=Math.max(peakInFlight,inFlight);
+    await new Promise(resolve=>setTimeout(resolve,2600));
+    await route.continue();inFlight--;finishSlow();
+  });
+  await slowFinished;
+  assert.equal(peakInFlight,1);assert.equal(inFlight,0);
+  await page.unroute('**/flows/instance-demo');
+  // A transient read failure retains the snapshot and recovers.
+  await page.route('**/flows/instance-demo', route => route.fulfill({status:503,body:'Unavailable'}));
+  await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('Retrying'));
+  assert.equal(await page.locator('[data-attempt="active"]').count(), 1);
+  await page.unroute('**/flows/instance-demo');
+  await page.waitForFunction(() => !document.querySelector('#flow-message').textContent.includes('Retrying'));
+  let flowRequests=0;
+  const countFlow=request=>{if(new URL(request.url()).pathname==='/flows/instance-demo')flowRequests++;};
+  page.on('request',countFlow);
+  await page.evaluate(() => {Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+  await page.waitForTimeout(300);flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  await page.evaluate(() => {Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
+  coordinator.status=tag('finished',tag('completed','Done'));updateCatalog();
+  await page.waitForFunction(() => document.querySelector('#flow-snapshot').dataset.finished === 'true');
+  flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  // Loading an already finished instance must not start polling.
+  await page.reload();flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  page.off('request',countFlow);
+  await page.goto(base+'/flows/stopped-instance');
+  let missingRequests=0;
+  await page.route('**/flows/stopped-instance', route => {missingRequests++;return route.fulfill({status:404,body:'Cleared'});});
+  await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('cleared'));
+  await page.waitForTimeout(2300);assert.equal(missingRequests,1);
+  await page.unroute('**/flows/stopped-instance');
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
    await page.locator('#run-inspector .progress-count').waitFor();

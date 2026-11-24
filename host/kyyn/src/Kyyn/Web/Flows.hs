@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Lucid
+import Lucid.Base (makeAttribute)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.FlowInstance
 import Kyyn.Domain.RecipeRunId (runIdText)
@@ -26,6 +27,17 @@ flowIndex items = document "Interactive flows" $ do
 
 flowPage :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()
 flowPage item interrupted values children descriptions = document (recipe item) $ do
+  section_ [id_ "flow-live", makeAttribute "hidden" ""] $ do
+    label_ $ do
+      input_ [id_ "flow-follow", type_ "checkbox", checked_]
+      " Follow latest attempt"
+    p_ [id_ "flow-message", role_ "status"] mempty
+    iframe_ [id_ "flow-run", title_ "Conversation execution", makeAttribute "hidden" ""] mempty
+  div_ [id_ "flow-snapshot", makeAttribute "data-finished" (case item.status of Finished _ -> "true"; _ -> "false")] (snapshot item interrupted values children descriptions)
+  script_ [src_ "/_inspection/flow-viewer.mjs", type_ "module"] ("" :: Text.Text)
+
+snapshot :: FlowInstance -> Bool -> FlowValues -> [(FlowInstance,Bool)] -> [(Text.Text,Value)] -> Html ()
+snapshot item interrupted values children descriptions = do
   p_ [class_ "context"] (toHtml (flowInstanceIdText item.instanceId <> " · " <> statusText item interrupted))
   forM_ item.parent $ \identity -> p_ $ do
     "Parent: "; instanceLink identity
@@ -38,7 +50,7 @@ flowPage item interrupted values children descriptions = document (recipe item) 
   h2_ "Children"
   if null children then p_ "No child instances." else instanceTable False children
   h2_ "Waits"
-  if null item.waits then p_ "No waits recorded." else forM_ (zip [1..] item.waits) $ \(index,wait) -> section_ $ do
+  if null item.waits then p_ "No waits recorded." else forM_ (zip [1..] item.waits) $ \(index,wait) -> section_ [makeAttribute "data-wait" wait.waitId] $ do
     h3_ (toHtml (waitLabel index descriptions wait <> " · " <> waitName wait.waitStatus))
     details_ $ summary_ "Wait identity" >> code_ (toHtml wait.waitId)
     case wait.kind of
@@ -76,7 +88,7 @@ flowPage item interrupted values children descriptions = document (recipe item) 
   h2_ "Execution attempts"
   if null item.attempts then p_ "No execution attempts yet." else ul_ $
     forM_ item.attempts $ \attempt -> li_ $
-      a_ [href_ ("/runs/" <> Text.pack (runIdText attempt))] (toHtml (runIdText attempt))
+      a_ [makeAttribute "data-attempt" (Text.pack (runIdText attempt)), href_ ("/runs/" <> Text.pack (runIdText attempt))] (toHtml (runIdText attempt))
   details_ $ do
     summary_ "Instance context"
     dl_ $ do
@@ -113,4 +125,5 @@ diagnostics :: [Diagnostic] -> Html ()
 diagnostics problems = forM_ problems $ \problem -> p_ [class_ "diagnostic"] $
   toHtml (problem.code <> ": " <> problem.message)
 document :: Text.Text -> Html () -> Html ()
-document title = pageDocument Nothing Nothing title mempty
+document title = pageDocument Nothing Nothing title
+  (link_ [rel_ "stylesheet", href_ "/_inspection/run-viewer.css"])

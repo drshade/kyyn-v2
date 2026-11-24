@@ -13,6 +13,7 @@ import System.FilePath ((</>), takeDirectory)
 inspectionAsset :: [Text] -> Maybe ByteString
 inspectionAsset ("vendor":path) = lookup (Text.unpack (Text.intercalate "/" path)) vendor
 inspectionAsset ["inspection.mjs"] = Just script
+inspectionAsset ["flow-viewer.mjs"] = Just flowScript
 inspectionAsset ["run-viewer.mjs"] = Just runScript
 inspectionAsset ["run-viewer.css"] = Just runStyle
 inspectionAsset _ = Nothing
@@ -33,3 +34,8 @@ runStyle = $(do
 
 vendor :: [(FilePath,ByteString)]
 vendor = $(runIO (getEnv "KYYN_WEB_VENDOR_DIR") >>= embedDir)
+
+flowScript :: ByteString
+flowScript = $(do
+  source <- loc_filename <$> TH.location
+  embedFile (takeDirectory source </> "../../../web/flow-viewer.mjs"))
