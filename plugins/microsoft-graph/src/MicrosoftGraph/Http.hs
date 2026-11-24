@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module MicrosoftGraph.Http (send, download, downloadOptional, postForm, requireSuccess) where
 
 import qualified Data.Text as Text
@@ -6,7 +7,7 @@ import Kyyn.Plugin.Host
 import Kyyn.Plugin (FetchError(..))
 import MicrosoftGraph.Json (form)
 
-send :: HttpRequest -> NetworkHost rest (Either Text HttpResponse)
+send :: (Member Http row, Member Waiting row) => HttpRequest -> Program row (Either Text HttpResponse)
 send request@(HttpRequest method _ _ _) = go (0 :: Int) (0 :: Int)
   where
     go timeouts throttles = do
@@ -50,7 +51,7 @@ retryAfter headers = lookup "retry-after" [(Text.toLower key,value) | (key,value
       [(n,"")] | n >= 0 && n <= toInteger (maxBound :: Int) -> Just (max 1 (fromInteger n))
       _ -> Nothing
 
-postForm :: Text -> [(Text,Text)] -> NetworkHost rest (Either Text HttpResponse)
+postForm :: (Member Http row, Member Waiting row) => Text -> [(Text,Text)] -> Program row (Either Text HttpResponse)
 postForm url fields = send (HttpRequest "POST" url [("Content-Type","application/x-www-form-urlencoded")] (form fields))
 
 requireSuccess :: HttpResponse -> Either Text Text

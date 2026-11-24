@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators, DuplicateRecordFields, FlexibleContexts #-}
 module Kyyn.Plugin.Host
-  ( NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
+  ( Program, Member, Http, Secrets, Waiting, NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions, listFiles, readTextFile
   , BlobRef(..), BlobDownload(..), BlobResponse(..), storeBlob, digestText ) where
 

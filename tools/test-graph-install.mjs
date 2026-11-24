@@ -40,6 +40,8 @@ try {
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'microsoft-graph', '--evolution', draft.id]).result.schema;
   assert.match(schema, /ClientSecret/);
   assert.match(schema, /DeviceCode/);
+  assert.match(schema, /Teams/);
+  assert.match(schema, /respondentId/);
   assert(!schema.includes("userId"), "Meetings must derive its user scope from the credential");
   const configPath = path.join(draft.path, 'target/plugins/config/microsoft-graph.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
@@ -50,6 +52,7 @@ try {
       | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
       | Meetings : { auth : Auth, retentionDays : Integer }
       | Directory : { auth : Auth }
+      | Teams : { auth : Auth, chatId : Text, respondentId : Text }
       | Files : { auth : Auth, scope : Scope, itemPath : Text, includeGlobs : List Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
@@ -65,6 +68,9 @@ try {
           , retentionDays = +90 } }
       , { name = "directory", binding = "directory", connector = Connector.Directory
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" } } }
+      , { name = "teams", binding = "teams", connector = Connector.Teams
+          { auth = Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-teams-secret", scopes = [ "Chat.Read", "ChatMessage.Send" ] }
+          , chatId = "fixture-chat", respondentId = "fixture-person" } }
       , { name = "files", binding = "files", connector = Connector.Files
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , scope = Scope.SiteLibrary { site = "site", library = "Documents" }
@@ -73,6 +79,8 @@ try {
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const head = git(kb, 'rev-parse', 'HEAD');
+  const configured = cli(['plugin', 'connector', 'list', 'microsoft-graph']).result.connectors;
+  assert(configured.some(connector => connector.name === 'teams' && connector.type === 'Teams'));
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
   assert.equal(descriptor.fetchOptionsType, null);
   assert.equal(descriptor.reportType.trim(), "{}");

@@ -1,5 +1,5 @@
 module MicrosoftGraph.Plugin (connectors) where
-import Kyyn.Plugin (Connector(..), CapturedMethod(..))
+import Kyyn.Plugin (Connector(..), CapturedMethod(..), EventMethod(..), RepeatSafety(..), Seconds(..))
 connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Calendar"
@@ -33,4 +33,9 @@ connectors = [SourceConnector
   , fetch = "MicrosoftGraph.Directory.fetch", validateConfig = "MicrosoftGraph.Directory.Config.validate"
   , login = Just "MicrosoftGraph.Directory.Config.login"
   , methods = [CapturedMethod "directory" "Read the captured user directory snapshot." "MicrosoftGraph.Directory.Read.directory"]
+  }, EventConnector
+  { name = "Teams", validateConfig = "MicrosoftGraph.Teams.Config.validate"
+  , login = Just "MicrosoftGraph.Teams.Config.login"
+  , events = [EventMethod "question" "Send a Teams question and await a quoted reply from the configured respondent."
+      "MicrosoftGraph.Teams.Event.poll" (Just ("MicrosoftGraph.Teams.Event.dispatch", RequireExplicitRetry)) (Seconds 30)]
   }]

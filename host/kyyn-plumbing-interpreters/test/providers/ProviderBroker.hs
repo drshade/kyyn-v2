@@ -2,7 +2,7 @@
 -- executable is supplied by the first-party Nix fixture; entries are selected
 -- from its own description, not reconstructed names or compiler adapters.
 {-# LANGUAGE OverloadedStrings #-}
-module ProviderBroker (NativeProgram, nativeSource, nativeRead, nativeLogin, brokerWith, brokerRequest, Scenario(..)) where
+module ProviderBroker (NativeProgram, nativeSource, nativeRead, nativeLogin, nativeEvent, brokerWith, brokerRequest, Scenario(..)) where
 import Control.Monad (unless)
 import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -30,6 +30,13 @@ nativeLogin plugin kind = select plugin kind $ \roles -> case roles of
 nativeRead :: Text.Text -> Text.Text -> Text.Text -> IO NativeProgram
 nativeRead plugin kind method = select plugin kind $ \roles -> case roles of
   G.SourceEntries _ _ _ methods -> [G.invocationName invocation | G.CapturedEntry name _ invocation <- methods, name == method]
+  _ -> []
+
+nativeEvent :: Text.Text -> Text.Text -> Text.Text -> Bool -> IO NativeProgram
+nativeEvent plugin kind method dispatch = select plugin kind $ \roles -> case roles of
+  G.EventEntries _ _ events ->
+    [entry | G.EventEntry name _ _ poll sending <- events, name == method,
+      entry <- if dispatch then maybe [] (pure . G.invocationName . fst) sending else [G.invocationName poll]]
   _ -> []
 
 select :: Text.Text -> Text.Text -> (G.ConnectorEntries G.DescribedContract -> [Text.Text]) -> IO NativeProgram
