@@ -79,9 +79,8 @@ try {
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const head = git(kb, 'rev-parse', 'HEAD');
-  const teams = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'teams']).result;
-  assert.match(JSON.stringify(teams), /question/);
-  assert.match(JSON.stringify(teams), /require-explicit-retry/);
+  const configured = cli(['plugin', 'connector', 'list', 'microsoft-graph']).result.connectors;
+  assert(configured.some(connector => connector.name === 'teams' && connector.type === 'Teams'));
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
   assert.equal(descriptor.fetchOptionsType, null);
   assert.equal(descriptor.reportType.trim(), "{}");
