@@ -84,6 +84,10 @@ check = do
   assert "both independent waits reached" (length waits == 2 && count == 2)
   assert "suspension is observed, not failed" (any ((== A.Suspended) . (.happened)) events &&
     not (any ((== A.Failed) . (.happened)) events))
+  assert "durable operations classify live work before suspension"
+    (length [() | event <- events, event.happened == A.Executing (A.KeyedOperation A.DurableEffect)] == 2)
+  assert "await misses do not execute an action"
+    (not (any ((== A.Executing (A.KeyedOperation A.AwaitedReply)) . (.happened)) events))
   persisted <- traverse (\w -> wire (W.pendingWaitValue w) >>=
     either (fail . Text.unpack) pure . W.pendingWaitFromValue) waits
   case persisted of
@@ -101,6 +105,8 @@ check = do
       (_,complete,_,_) <- run partialStore (A.fulfil runtime flow two (V.Integer 22))
       (finished,_,repeated,restored) <- run complete (A.resumable runtime flow [10,20])
       assert "typed replies reach final result" (finished == Right (A.RunFinished [11,22]) && repeated == 0)
+      assert "completed operations do not classify replay as live"
+        (not (any (\event -> case event.happened of A.Executing _ -> True; _ -> False) restored))
       assert "restoration observations survive wire encoding" (any (\event -> case event.happened of A.Restored _ -> True; _ -> False) restored)
       (duplicate,duplicateStore,_,_) <- run complete (A.fulfil runtime flow one (V.Integer 11))
       assert "duplicate reply is idempotent" (duplicate == Right (Right ()) && duplicateStore == complete)

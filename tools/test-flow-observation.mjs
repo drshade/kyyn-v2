@@ -122,6 +122,7 @@ for (const failModel of [false, true]) {
     }
   }
   assert.equal(terminals.size, entered.size);
+  assert(summaries.some(s => s.node === 'draft' && s.event.kind === 'executing' && s.event.operation.kind === 'keyed' && s.event.operation.operation.turn === 0), 'Live model classification survives guest observation transport');
   const sides = new Set(summaries.filter(s => s.event.kind === 'selected').map(s => s.event.edge));
   assert.equal(sides.size, 2, 'Both choice sides executed');
   assert(summaries.some(s => s.node === 'each' && s.event.total === 2));
