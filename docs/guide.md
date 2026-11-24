@@ -644,7 +644,7 @@ The page keeps one diagram across the conversation and appends observations from
 its execution attempts. Select a node to inspect live selections, restored
 operations and scope events. Completed keyed operations count once across
 resumptions; raw actions remain separate executions. Missing recordings and
-unknown outcomes stay visible. **Follow conversation** pauses inspection only;
+unknown outcomes stay visible. **Follow conversation** pauses the diagram and details;
 it does not stop the worker. Execution-attempt links open the original recordings
 for diagnostics and playback. Reloading the page reads the recordings again.
 

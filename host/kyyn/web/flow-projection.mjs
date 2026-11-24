@@ -46,12 +46,13 @@ export function reduceAttempt(state, id, record) {
     const episode = {id: `${id}:${sequence}`, attempt: id, scope, item: scope.item, logical, operation: event.operation,
       selected: elapsed, terminal: null, ended: null};
     scope.classified = true; scope.episodes.push(episode); state.episodes.push(episode);
-    if (logical) logical.episodes.push(episode);
+    if (logical) {logical.episodes.push(episode); logical.latest = episode;}
   }
   if (event.kind === 'restored') {
     const logical = logicalOperation(state, body.operation, summary);
     logical.completed = true;
-    logical.restorations.push({attempt: id, sequence: record.sequence, elapsed, scope, operation: event.operation});
+    const restoration = {attempt: id, sequence: record.sequence, elapsed, scope, operation: event.operation, terminal: 'restored'};
+    logical.restorations.push(restoration); logical.latest = restoration;
     scope.classified = true;
   }
   // A model can restore earlier turns and execute another within this same scope.
@@ -81,16 +82,18 @@ export function finishAttempt(state, id, page) {
   if (attempt.incomplete) state.gaps.set(id, 'Incomplete final record; only the readable prefix is shown.');
 }
 export function flowNodeState(state, item) {
-  const episodes = state.episodes.filter(episode => episode.item === item);
-  if (episodes.some(x => !x.terminal && !state.attempts.get(x.attempt).closed)) return 'open';
-  if (episodes.some(x => x.terminal === 'failed')) return 'failed';
-  if (episodes.some(x => !x.terminal)) return 'unknown';
-  if (episodes.some(x => x.terminal === 'cancelled')) return 'cancelled';
-  if (episodes.some(x => x.terminal === 'returned')) return 'returned';
-  if ([...state.operations.values()].some(op => op.item === item && op.completed)) return 'restored';
-  const scopes = [...state.attempts.values()].flatMap(attempt => [...attempt.scopes.values()].filter(scope => scope.item === item));
-  if (scopes.some(scope => scope.terminal === 'failed')) return 'failed';
-  if (scopes.some(scope => scope.terminal === 'cancelled')) return 'cancelled';
-  if (scopes.some(scope => scope.terminal === 'suspended')) return 'suspended';
-  return scopes.length ? 'unknown' : 'unseen';
+  const operations = [...state.operations.values()].filter(op => op.item === item).map(op => op.latest);
+  const plain = state.episodes.filter(episode => episode.item === item && !episode.logical).at(-1);
+  const latest = [...operations, ...(plain ? [plain] : [])];
+  if (latest.length) return combine(latest.map(episode => episode.terminal ?? (state.attempts.get(episode.attempt).closed ? 'unknown' : 'open')));
+  // Structural nodes have real terminals too, but an older suspension must not
+  // override a later returned scope. Scope identity is local to an attempt.
+  for (const attempt of [...state.attempts.values()].reverse()) {
+    const scopes = [...attempt.scopes.values()].filter(scope => scope.item === item);
+    if (scopes.length) return combine(scopes.map(scope => scope.terminal ?? 'unknown'));
+  }
+  return 'unseen';
+}
+function combine(states) {
+  return ['open','failed','unknown','cancelled','suspended','returned','restored'].find(status => states.includes(status)) ?? 'unknown';
 }

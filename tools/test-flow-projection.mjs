@@ -44,7 +44,7 @@ assert.equal(state.episodes.at(-1).terminal,null);assert.equal(flowNodeState(sta
 // A failed episode remains visible even if a retry later succeeds.
 emit=attempt('failure');emit(entered);emit(live('effect'),{opaque:'retry'});emit({kind:'failed'});close('failure');
 emit=attempt('retry');emit(entered);emit(live('effect'),{opaque:'retry'});emit(returned);close('retry');
-assert.equal(flowNodeState(state,'node'),'failed');
+assert.equal(flowNodeState(state,'node'),'unknown'); // the separate interrupted operation remains unknown
 assert.deepEqual(state.episodes.slice(-2).map(x=>x.terminal),['failed','returned']);
 assert.equal([...state.operations.values()].find(x=>x.episodes.length===2).completed,true);
 // Opaque canonical identities survive changed Each totals; the browser does not project them.
@@ -71,3 +71,15 @@ observe('a',returned);observe('b',returned);observe('root',returned);
 assert.equal(parallel.operations.size,2);assert.equal(parallel.episodes.length,1);
 assert.equal([...parallel.operations.values()].filter(x=>x.completed).length,2);
 console.log('Parallel restored/live branches retain independent classifications and call identities.');
+
+const scopeState=newFlowProjection('conversation');
+for(const [id,terminal] of [['suspension','suspended'],['completion','returned']]) {
+ addAttempt(scopeState,id,header);
+ for(const [sequence,event] of [entered,{kind:terminal,outcome:'completed'}].entries()) reduceAttempt(scopeState,id,{sequence:String(sequence),event:{elapsedNanos:String(sequence),body:{kind:'flow',operation:null,summary:{occurrence:{address:'flow',context:[]},parent:null,node:'run',notes:[],event}}}});
+ finishAttempt(scopeState,id,{summary:{status:terminal},more:false,incompleteTail:false});
+}
+assert.equal(flowNodeState(scopeState,'node'),'returned','Latest structural scope replaces an earlier suspension');
+const retryOperation=[...state.operations.values()].find(x=>x.episodes.length===2);
+const retryOnly={...state,operations:new Map([[retryOperation.identity,retryOperation]]),episodes:retryOperation.episodes};
+assert.equal(flowNodeState(retryOnly,'node'),'returned','A successful retry changes current status while preserving failure history');
+assert.equal(retryOperation.episodes[0].terminal,'failed');

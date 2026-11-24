@@ -170,6 +170,21 @@ try{
   page.on('request',countClosed);await page.waitForTimeout(2300);page.off('request',countClosed);
   assert.equal(closedReads,0,'Closed recordings are not polled again');
   await page.screenshot({path:path.join(screenshots,'continuous-conversation.png'),fullPage:true});
+  // A transient event-page failure must resume from the existing cursor.
+  const recoveryRecords=interactive(false);
+  recoveryRecords[2].event.body.operation=null;
+  recoveryRecords[2].event.body.summary.event.operation={kind:'action'};
+  const recoveryDir=save('recovering',interactiveGraph,recoveryRecords.slice(0,3),interactiveMetadata);
+  const recoveryLock=spawn('flock',['-x',recoveryDir+'.lock','sh','-c',"printf 'locked\\n'; cat >/dev/null"],{env});children.push(recoveryLock);await once(recoveryLock.stdout,'data');
+  coordinator.attempts.push('recovering');updateCatalog();
+  await page.waitForFunction(() => document.querySelector('#flow-progress').textContent.includes('2 live selections'));
+  await page.route('**/runs/recovering/events?*',route=>route.fulfill({status:503,body:'Temporarily unavailable'}));
+  await page.waitForFunction(() => document.querySelector('#flow-gaps').textContent.includes('Retrying'));
+  fs.appendFileSync(path.join(recoveryDir,'events.jsonl'),recoveryRecords.slice(3).map(record=>JSON.stringify(record.event)+'\n').join(''));
+  await page.unroute('**/runs/recovering/events?*');
+  await page.waitForFunction(() => !document.querySelector('#flow-gaps').textContent.includes('Retrying'));
+  await page.waitForFunction(() => document.querySelector('#flow-diagram svg [data-item="run"]').dataset.state==='suspended');
+  assert.equal(await page.locator('#flow-diagram svg').getAttribute('data-preserved'),'yes');
   // Text being selected is not replaced by a background refresh.
   await detail.locator('summary').evaluate(node => {const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
   coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();

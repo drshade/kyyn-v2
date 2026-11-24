@@ -22,6 +22,7 @@ export function refreshSnapshot(current, incoming) {
   window.scrollTo({top: scroll, behavior: "instant"});
   return true;
 }
+class RetryableRead extends Error {}
 function element(doc, tag, text, css) {
   const node = doc.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -34,7 +35,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
   const $ = id => doc.getElementById(id), el = (tag, text, css) => element(doc, tag, text, css);
   const follow = $('flow-follow'), message = $('flow-message'), projection = newFlowProjection(snapshot.dataset.instance);
   const diagram = $('flow-diagram'), inspector = $('flow-inspector'), nodes = new Map();
-  const attempted = new Set();
+  const attempted = new Set(), retries = new Map();
   let stopped = false, pending = false, complete = false, timer, selected = null, rendered = false;
   const seconds = value => (Number(value) / 1e9).toFixed(2) + ' s';
   function inspect(item) {selected = item; inspector.hidden = false; drawInspector();}
@@ -93,7 +94,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     diagram.classList.toggle('motion-running', follow.checked && !complete);
     const completed = [...projection.operations.values()].filter(op => op.completed).length;
     $('flow-progress').textContent = `${completed} completed keyed operations · ${projection.episodes.length} live selections · ${projection.attempts.size} readable attempts`;
-    $('flow-gaps').replaceChildren(...[...projection.gaps].map(([id, text]) => el('p', `Attempt ${id}: ${text}`, 'diagnostic')));
+    $('flow-gaps').replaceChildren(...[...projection.gaps, ...retries].map(([id, text]) => el('p', `Attempt ${id}: ${text}`, 'diagnostic')));
     if (!doc.getSelection()?.toString()) drawInspector();
   }
   async function render() {
@@ -139,8 +140,14 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     } catch {diagram.prepend(el('p','Diagram unavailable; inspect the recorded nodes below.','muted'));}
     draw();
   }
+  async function recordingResponse(url) {
+    let response;
+    try {response = await fetchPage(url,{cache:'no-store'});} catch (error) {throw new RetryableRead(error.message);}
+    if ([408,429,502,503,504].includes(response.status)) throw new RetryableRead(`Recording temporarily unavailable (HTTP ${response.status}).`);
+    return response;
+  }
   async function jsonPage(url) {
-    const response = await fetchPage(url,{cache:'no-store'});
+    const response = await recordingResponse(url);
     if (!response.ok) {
       const problem = await response.json().catch(() => ({}));
       throw new Error(problem.diagnostics?.map(item => item.message).join('; ') || `Recording unavailable (HTTP ${response.status}).`);
@@ -156,7 +163,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
       try {
         if (!attempt) {
           attempted.add(id);
-          const response = await fetchPage(link.getAttribute('href'),{cache:'no-store'});
+          const response = await recordingResponse(link.getAttribute('href'));
           if (!response.ok) throw new Error(`Recording unavailable (HTTP ${response.status}).`);
           const page = new DOMParser().parseFromString(await response.text(),'text/html');
           const data = page.querySelector('#run-data');
@@ -170,12 +177,19 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
           const params = new URLSearchParams({limit:'200'});
           if (attempt.cursor >= 0n) params.set('after',String(attempt.cursor));
           const page = await jsonPage(`/runs/${encodeURIComponent(id)}/events?${params}`);
+          retries.delete(id);
           for (const record of page.events) reduceAttempt(projection,id,record);
           finishAttempt(projection,id,page);
           if (!page.more) break;
         }
         if (attempt.more) break;
       } catch (error) {
+        if (error instanceof RetryableRead) {
+          retries.set(id, `${error.message} Retrying; the last received state is retained.`);
+          attempted.delete(id);
+          break;
+        }
+        retries.delete(id);
         projection.gaps.set(id,error.message);
         if (attempt) attempt.closed = true;
       }
@@ -205,7 +219,7 @@ export function mountFlowViewer(doc = document, fetchPage = fetch) {
     } catch (error) {message.textContent = `${error.message}${stopped ? '' : ' Retrying;'} showing the last received state.`;}
     finally {pending = false; schedule();}
   }
-  follow.onchange = () => {message.textContent = follow.checked ? 'Following conversation' : 'Inspection paused; the worker continues.'; if (follow.checked) poll(); else {clearTimeout(timer); diagram.classList.remove('motion-running');}};
+  follow.onchange = () => {message.textContent = follow.checked ? 'Following conversation' : 'Diagram and details paused; the worker continues.'; if (follow.checked) poll(); else {clearTimeout(timer); diagram.classList.remove('motion-running');}};
   $('flow-live').hidden = false;
   poll();
   doc.addEventListener('visibilitychange',schedule);

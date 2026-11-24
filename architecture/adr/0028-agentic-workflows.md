@@ -454,7 +454,8 @@ journal restoration from re-execution, and `Suspended` closes the observed scope
 without inventing completion. The per-attempt viewer stops live activity on suspension and
 shows the pending reply count. The interactive instance view instead retains
 one diagram across attempts, as specified by
-[ADR 0030](0030-interactive-agentic-workflows.md#continuous-interactive-observation). Failed recording writes stop further dispatch;
+[ADR 0030](0030-interactive-agentic-workflows.md#continuous-interactive-observation).
+Failed recording writes stop further dispatch;
 they interrupt the attempt without replacing the instance's previous frontier
 with a logical failure. Lock-busy, blocked and cancelled preflight checks create
 no attempt recording.

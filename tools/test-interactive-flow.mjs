@@ -207,7 +207,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  assert.equal(JSON.parse(waiter.output()).result.status,'completed');
  const completed=show(started.id);assert.equal(completed.result.trim(),'+9');assert.equal(completed.revision,accepted);
  const projection=newFlowProjection(started.id);
- for(const id of completed.attempts){
+ for(const {id} of completed.attempts){
   const directory=path.join(kb,'.kyyn/runs',id);
   addAttempt(projection,id,JSON.parse(fs.readFileSync(path.join(directory,'header.json'),'utf8')));
   const events=fs.readFileSync(path.join(directory,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
