@@ -50,6 +50,12 @@ Capability boundaries by program context (not a separate permission-role system)
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
 | Sink connector method | Prepared typed input, separately typed invocation options and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
 
+Live provider queries use [ADR 0015's concrete query row](0015-plugins.md#live-query-connector-contract):
+HTTP, named secrets and cancellable waits under the existing adapter deadline.
+Interactive `liveQuery` and explicit connector CLI invocation share that checked
+execution boundary. Registering a live method does not widen the ordinary KB-tool
+or closed-recipe context, or expose the method to a model without authored wiring.
+
 A plugin can export captured sources, sinks and live connectors, but registration and host
 dispatch use the declared capabilities of the selected method. Provider-read
 intent is declared by the plugin author, not proven by an HTTP verb or method
