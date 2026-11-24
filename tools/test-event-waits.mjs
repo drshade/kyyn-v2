@@ -77,7 +77,7 @@ pollOnly :: Flow () Text
 pollOnly = A.arr (const (Events.makeRequest "Update please")) A.>>> awaitReply (Updates.updates Connectors.updates)
   A.>>> A.arr (\\(ReceivedReply _ reply) -> Events.replyText reply)
 bare :: Flow () Text
-bare = A.arr (const "Other question") A.>>> A.await text text
+bare = A.arr (const "Other question") A.>>> A.awaitWith text text
   where text = C.primitive (S.SString Nothing) V.String (\\v -> case v of V.String t -> Right t; _ -> Left "Expected text")
 mixed :: Flow () Text
 mixed = (bare A.&&& conversation) A.>>> A.arr snd
@@ -86,7 +86,7 @@ badRequest = forged reference (Events.makeRequest "Question") A.>>> A.arr Events
 forged :: forall request reply. (Contract request, Contract reply) => EventRef request reply -> request -> Flow () reply
 forged _ request = case ((,) <$> compileContract (contract @request) <*> compileContract (contract @reply)) of
   Left problem -> A.act (\\_ -> throwE (FetchError (Text.pack (show problem))))
-  Right (input,output) -> A.arr (const request) A.>>> A.await
+  Right (input,output) -> A.arr (const request) A.>>> A.awaitWith
     (eventRequestCodec (EventReference "event-fixture" "Updates" "updates" "question")
       input.description output.description (C.Codec input.codec.schema (const (V.String "wrong request shape")) (const (Right request)))) output.codec
 `);

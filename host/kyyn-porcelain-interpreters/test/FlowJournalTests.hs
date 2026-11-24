@@ -124,8 +124,8 @@ main = withSystemTempDirectory "kyyn-flow-journal" $ \directory -> do
         { A.journal = Just (Journal.Journal (Journal.JournalIdentity "waiting-flow" "fixed-code")
             (pure ()) (fmap (fmap Aeson.fromAeson) . lookupCompletion . Aeson.toAeson)
             (\k v -> saveCompletion (Aeson.toAeson k) (Aeson.toAeson v))) }
-      flow = A.durably codec codec (\_ n -> liftIO (modifyIORef' effectCount (+1)) >> pure n)
-        A.>>> A.await codec codec
+      flow = A.durablyWith codec codec (\_ n -> liftIO (modifyIORef' effectCount (+1)) >> pure n)
+        A.>>> A.awaitWith codec codec
       runWaiting = execute . runFlowJournal kb waitingIdentity
   first <- runWaiting (A.resumable runtime flow 7)
   pending <- case first of
