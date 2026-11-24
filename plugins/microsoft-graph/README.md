@@ -584,3 +584,40 @@ chat, respondent and a creation time later than the question. It does not use
 `replyToId`, which applies to channels. See Microsoft's
 [message attachment schema](https://learn.microsoft.com/en-us/graph/teams-messaging-overview#message-attachment)
 and [quoted reply response](https://learn.microsoft.com/en-us/graph/api/chatmessage-replywithquote?view=graph-rest-1.0).
+
+### Turn-taking conversations
+
+The `conversation` event sends a plain-text message and returns the **earliest**
+ordinary message from the configured respondent created after that send. Quoting
+is not required. The sent message itself, earlier messages, system events and
+deleted messages are excluded. Use exactly one open conversation wait per chat;
+this is especially important in self-chat, where bot and human share an identity.
+Other concurrent flows sending into that chat cannot be distinguished from the
+human. The `question` method retains its quoted-reply rule and 30-second interval.
+
+This method is turn-taking, not a continuous inbox: wait for the bot before
+sending the next user message. If several messages arrive together, only the
+first answers the turn. Messages created before the next outgoing message are
+not queued for that next turn.
+
+Polling has a five-second minimum interval: for one small chat, up to 12 Graph
+list calls per minute while waiting. Polling reuses an access token in the
+secret store (`TOKEN_KEY-access`), refreshing it when Graph returns 401.
+Dispatch refreshes once per outgoing message and never repeats a POST. A paginated
+scan reads up to four pages per invocation, retaining the earliest eligible candidate
+in its cursor until the scan completes. No answer is delivered from a partial
+scan. Restarting an expired saved page also resets that candidate. As with all
+polling, this cannot recover a message deleted before it was observed or guarantee
+ordering against messages not yet visible at the provider.
+
+The result is `ChatReply { message :: Reply, text :: Text }`. `message` retains
+the provider body. `text` is a deliberately lossy convenience view: it decodes
+basic entities (`amp`, `lt`, `gt`, `quot`, `apos`, `nbsp`) and numeric character references, removes recognized tags/comments and script/style
+contents, separates markup boundaries with spaces, and collapses whitespace. It does not transcribe attachments or
+preserve formatting. Compare this field with `exit`, or pass it to a model.
+Whitespace is collapsed for plain-text bodies too. During a multi-page scan,
+the cursor contains a not-yet-delivered candidate message body, visible in flow
+inspection.
+
+Outgoing conversation messages above 24,000 UTF-8 bytes fail before sending;
+text is never silently truncated. Dispatch retains `RequireExplicitRetry`.

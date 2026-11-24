@@ -1,5 +1,6 @@
--- Teams questions against a synthetic HTTP interpreter. Exercises filtering,
--- pagination, initialCursor replay and failures without network or real credentials.
+-- Teams questions and conversations against a synthetic HTTP interpreter.
+-- Covers filtering, paginated earliest replies, token caching, text extraction,
+-- outgoing size limits and failures without network or real credentials.
 {-# LANGUAGE GADTs, TypeOperators, OverloadedStrings #-}
 module Main where
 
@@ -19,6 +20,8 @@ import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Teams.Types
 import qualified MicrosoftGraph.Teams.Event as Event
 import qualified MicrosoftGraph.Teams.Config as Config
+import qualified MicrosoftGraph.Teams.Conversation as Chat
+import qualified MicrosoftGraph.Teams.Text as ChatText
 import qualified MicrosoftGraph.Teams.Api as Api
 
 main :: IO ()
@@ -96,6 +99,49 @@ main = do
   assert "long retry-after reported promptly" (case throttled of Left (FetchError problem) -> "Retry-After: 120" `Text.isInfixOf` problem; _ -> False)
   (missing,rs,_) <- run [] (Event.poll config (EventPoll (WaitId "w") (Question "Q") Nothing))
   assert "no poll before dispatch" (isLeft missing && null rs)
+  assert "HTML exit extraction" (ChatText.plainText "<p> EXIT&nbsp; </p>" == "EXIT")
+  assert "HTML entities and paragraphs" (ChatText.plainText "<p>A &amp; B</p><p>&lt;ok&gt; &#65;</p>" == "A & B <ok> A")
+  assert "script/style ignored" (ChatText.plainText "<style>bad</style><p>Hello</p><script>bad</script>" == "Hello")
+  assert "quoted greater-than in attribute" (ChatText.plainText "<p title=\"a>b\">hello</p>" == "hello")
+  assert "comments and numeric Unicode" (ChatText.plainText "<!--ignore--><p>&#39; &#x1F600; &unknown;</p>" == "' 😀 &unknown;")
+  assert "encoded tags are literal" (ChatText.plainText "&lt;script&gt;hello&lt;/script&gt;" == "<script>hello</script>")
+  assert "invalid numeric entity retained" (ChatText.plainText "&#xD800; &#x110000;" == "&#xD800; &#x110000;")
+  let chatDispatch = Chat.dispatch config (EventDispatch (WaitId "c") (Question "Hello"))
+      chatCursor = ConversationCursor initialCursor Nothing
+      chatPolling = Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just chatCursor))
+      first = message "first" "person" [] "2026-11-24T10:01:00Z" "<p>Hello &amp; hi</p>"
+      second = message "second" "person" [] "2026-11-24T10:02:00Z" "second"
+      expectedChat = ChatReply (Reply "first" "person" "2026-11-24T10:01:00Z" "html" "<p>Hello &amp; hi</p>") "Hello & hi"
+      expectedArrival = EventArrival (EventIdentity (Api.encode (A.toJSON (["chat","first"] :: [Text])))) expectedChat
+  (chatSent,_,_) <- run [ok 201 sentMessage] chatDispatch
+  assert "conversation dispatch" (chatSent == Right chatCursor)
+  (ordinary,_,_) <- run [ok 200 (page [second,first,message "question" "person" [] created "Hello"] Nothing)] chatPolling
+  assert "ordinary replies earliest and no self echo" (ordinary == Right (EventBatch [expectedArrival] chatCursor))
+  (chatPartial,_,_) <- run [ok 200 (page [second] (Just (link n))) | n <- [1..4]] chatPolling
+  pending <- case chatPartial of
+    Right (EventBatch [] next) -> pure next
+    _ -> fail "Conversation emitted before complete scan"
+  (chatResumed,_,_) <- run [ok 200 (page [first] Nothing)] (Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just pending)))
+  assert "earliest reply across page budget" (chatResumed == ordinary)
+  (chatRestarted,_,_) <- run [ok 410 A.Null,ok 200 (page [first] Nothing)] (Chat.poll config (EventPoll (WaitId "c") (Question "Hello") (Just pending)))
+  assert "conversation expired continuation resets candidate" (chatRestarted == ordinary)
+  (cached,_,cacheWrites) <- run [ok 200 (page [] Nothing),ok 200 (page [] Nothing)] (chatPolling >> chatPolling)
+  assert "poll invocations share cached token" (cached == Right (EventBatch [] chatCursor) && cacheWrites == ["rotated","token"])
+  (refreshed,_,refreshWrites) <- run [ok 401 A.Null,ok 200 (page [first] Nothing)] chatPolling
+  assert "401 refreshes GET once" (refreshed == ordinary && refreshWrites == ["rotated","token","rotated","token"])
+  (refusedAgain,repeatedGets,_) <- run [ok 401 A.Null,ok 401 A.Null] chatPolling
+  assert "second 401 does not loop" (isLeft refusedAgain && length repeatedGets == 2)
+  let secondCursor = ConversationCursor (Cursor "bot2" "2026-11-24T10:03:00Z" Nothing) Nothing
+      secondPolling = Chat.poll config (EventPoll (WaitId "c2") (Question "Response") (Just secondCursor))
+      bot2 = message "bot2" "person" [] "2026-11-24T10:03:00Z" "Response"
+      third = message "third" "person" [] "2026-11-24T10:04:00Z" "next"
+  (secondTurn,_,_) <- run [ok 200 (page [first,second,bot2,third] Nothing)] secondPolling
+  assert "next turn excludes old answers and new self echo" (case secondTurn of
+    Right (EventBatch [EventArrival _ (ChatReply (Reply key _ _ _ _) _)] _) -> key == "third"
+    _ -> False)
+  forM_ [Text.replicate 24001 "a",Text.replicate 12001 "é"] $ \oversized -> do
+    (tooLarge,noSend,_) <- run [] (Chat.dispatch config (EventDispatch (WaitId "c") (Question oversized)))
+    assert "oversized message refused before effects" (isLeft tooLarge && null noSend)
   putStrLn "Teams: dispatch, auth, quotes, self-chat, duplicate/edit identity, paging and failures passed."
 
 config :: TeamsConfig
@@ -128,6 +174,7 @@ run responses program = do
   remaining <- newIORef responses
   trace <- newIORef []
   rotated <- newIORef []
+  secrets <- newIORef [("secret","synthetic-refresh")]
   let handle :: (Http :+: (Secrets :+: Waiting)) a -> IO a
       handle (InLeft (SendHttp request@(HttpRequest _ url _ _)))
         | "https://login.microsoftonline.com/" `Text.isPrefixOf` url = pure (ok 200 (A.object ["access_token" .= ("token" :: Text),"refresh_token" .= ("rotated" :: Text)]))
@@ -137,8 +184,10 @@ run responses program = do
           case queued of
             [] -> fail "Unexpected HTTP request or retry"
             response:rest -> writeIORef remaining rest >> pure response
-      handle (InRight (InLeft (GetSecret _))) = pure (Right "synthetic-refresh")
-      handle (InRight (InLeft (PutSecret _ token))) = modifyIORef' rotated (<> [token])
+      handle (InRight (InLeft (GetSecret key))) = maybe (Left (SecretNotFound key)) Right . lookup key <$> readIORef secrets
+      handle (InRight (InLeft (PutSecret key token))) = do
+        modifyIORef' rotated (<> [token])
+        modifyIORef' secrets (\values -> (key,token) : filter ((/= key) . fst) values)
       handle (InRight (InRight (WaitSeconds _))) = fail "Teams adapter unexpectedly slept"
   result <- interpretProgram handle program
   assert "unused synthetic responses" . null =<< readIORef remaining
