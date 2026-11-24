@@ -686,6 +686,8 @@ the uncertainty warning (`RequireExplicitRetry`), requiring another explicit ret
 The worker also polls open event waits after dispatch completes, or immediately
 when dispatch is not required. It records each attempt before calling the plugin
 and respects the plugin's minimum interval, including across worker restarts.
+Each adapter call has a fixed 60-second deadline, including plugin waits;
+`flow.adapter-timeout` follows the same poll-failure or dispatch-block rules.
 Poll errors preserve the cursor and retry at that interval; they do not need
 `flow retry`. CLI and web inspection show the last/next attempt, diagnostic and
 consecutive failure count. One malformed arrival refuses the whole batch and

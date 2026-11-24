@@ -6,6 +6,8 @@ import Control.Monad (forM, when)
 import Data.List (nub)
 import Data.Time (diffUTCTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
+import Kyyn.Plumbing.Capability.Deadline (Deadline)
+import Kyyn.Plumbing.Interpreter.Deadline (runDeadlineIO)
 import Kyyn.Plumbing.Capability.Clock (Clock, currentTime)
 import Kyyn.Plumbing.Interpreter.Clock (runClockIO)
 import Data.Aeson (Value(..), object, (.=), eitherDecodeStrict')
@@ -68,12 +70,12 @@ import qualified Kyyn.Surfaces.Result as Result
 import Kyyn.Surfaces.Result (Response, success, refusal, operationalFailure)
 
 type Pinned = FlowEvents ': PluginEvent ': FlowWorker ': RecipeRunStore ': AppendJournal ': FlowStore ': PluginRead ': EvidenceStore ': BlobStorage
-  ': DocumentPersistence ': Clock ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
+  ': DocumentPersistence ': Deadline ': Clock ': HttpTransport ': Waiting ': ModelTurn ': Judgement ': SecretStore ': GuestExecution ': Base
 
 -- Resumption and inspection do not resolve Nix, inspect current source, or rebuild.
 runPinned :: Host -> KnowledgeBase -> DirectoryScope -> Eff Pinned a -> IO (Either OperationalFailure a)
 runPinned host kb scope = runBase host . runGuestExecution host.runtimeEnvironment
-  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runClockIO . runDocumentPersistenceIO
+  . runSecretStoreIO scope . runJudgementIO . runModelTurnIO . runWaitingIO . runHttpTransportIO . runClockIO . runDeadlineIO . runDocumentPersistenceIO
   . runBlobStorageIO scope . runEvidenceStore scope . runPluginRead . runFlowStore kb
   . runAppendJournalIO . runRecipeRunStore announce . runFlowWorker kb . runPluginEvent . runFlowEvents kb
   where announce header = liftIO (hPutStrLn stderr ("Attempt " ++ runIdText header.runId ++ ": /runs/" ++ runIdText header.runId))

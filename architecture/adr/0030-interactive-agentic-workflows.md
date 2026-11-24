@@ -271,6 +271,12 @@ Adapter entries execute from the instance's pinned program with its captured
 connector configuration. Secret references are resolved by name only during an
 actual invocation. Inspection does not load secret values or call the provider.
 
+Each event-adapter conversation has one fixed host-wide 60-second deadline,
+including HTTP and Waiting callbacks; expiry records `flow.adapter-timeout`,
+handled as a paced poll failure or a post-Started dispatch block with the existing
+repeat-safety warning. The deadline bounds the conversation; cleanup sends
+SIGTERM and waits for the guest to exit before releasing adapter ownership.
+
 Dispatch and polling share one process-held, nonblocking adapter lock per
 instance, separate from its journal lock. A worker unable to acquire it skips
 that instance's event work for the pass. The owner services event waits

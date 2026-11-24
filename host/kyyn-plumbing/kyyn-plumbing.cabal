@@ -8,7 +8,8 @@ build-type: Simple
 library
   hs-source-dirs: src ../../guest/kyyn-runtime/src
   other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire Kyyn.Runtime.JudgementWire
-  exposed-modules: Kyyn.Plumbing.Capability.Clock
+  exposed-modules: Kyyn.Plumbing.Capability.Deadline
+    Kyyn.Plumbing.Capability.Clock
     Kyyn.Plumbing.Capability.AppendJournal
 
     Kyyn.Plumbing.Capability.BlobStorage
