@@ -130,6 +130,46 @@ try{
   const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));fs.mkdirSync(screenshots,{recursive:true});
   await page.goto(base+'/flows');await page.screenshot({path:path.join(screenshots,'flows.png'),fullPage:true});
   await page.goto(base+'/flows/instance-demo');await page.screenshot({path:path.join(screenshots,'instance.png'),fullPage:true});
+  // Follow across attempts without resetting the selected run or open disclosures.
+  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/restored?embedded=1');
+  await page.locator('[data-attempt="suspended"]').click();
+  assert.equal(await page.locator('#flow-follow').isChecked(), false);
+  const detail = page.locator('[data-wait="manual-wait"] details').first();
+  await detail.locator('summary').click();
+  const updateCatalog = () => write(catalogPath, JSON.stringify({instances:[coordinator,childInstance,runningInstance,stoppedInstance,blockedInstance]}));
+  coordinator.attempts.push('active'); updateCatalog();
+  await page.locator('[data-attempt="active"]').waitFor();
+  assert.equal(await page.locator('#flow-run').getAttribute('src'), '/runs/suspended?embedded=1');
+  assert.equal(await detail.getAttribute('open'), '');
+  await page.locator('#flow-follow').check();
+  await page.waitForFunction(() => document.querySelector('#flow-run').getAttribute('src') === '/runs/active?embedded=1');
+  await page.frameLocator('#flow-run').locator('#run-diagram svg').waitFor();
+  await page.frameLocator('#flow-run').locator('body').evaluate(body => body.dataset.preserved = 'yes');
+  await page.waitForTimeout(2300);
+  assert.equal(await page.frameLocator('#flow-run').locator('body').getAttribute('data-preserved'), 'yes');
+  // Text being selected is not replaced by a background refresh.
+  await detail.locator('summary').evaluate(node => {const range=document.createRange();range.selectNodeContents(node);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
+  coordinator.waits.push({...coordinator.waits[1], id:'new-wait'}); updateCatalog();
+  await page.waitForTimeout(2300);
+  assert.equal(await page.locator('[data-wait="new-wait"]').count(), 0);
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await page.locator('[data-wait="new-wait"]').waitFor();
+  // A transient read failure retains the snapshot and recovers.
+  await page.route('**/flows/instance-demo', route => route.fulfill({status:503,body:'Unavailable'}));
+  await page.waitForFunction(() => document.querySelector('#flow-message').textContent.includes('Retrying'));
+  assert.equal(await page.locator('[data-attempt="active"]').count(), 1);
+  await page.unroute('**/flows/instance-demo');
+  await page.waitForFunction(() => !document.querySelector('#flow-message').textContent.includes('Retrying'));
+  let flowRequests=0;
+  const countFlow=request=>{if(new URL(request.url()).pathname==='/flows/instance-demo')flowRequests++;};
+  page.on('request',countFlow);
+  await page.evaluate(() => {Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+  await page.waitForTimeout(300);flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  await page.evaluate(() => {Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
+  coordinator.status=tag('finished',tag('completed','Done'));updateCatalog();
+  await page.waitForFunction(() => document.querySelector('#flow-snapshot').dataset.finished === 'true');
+  flowRequests=0;await page.waitForTimeout(2300);assert.equal(flowRequests,0);
+  page.off('request',countFlow);
   async function show(id){await page.goto(base+'/runs/'+id);await page.locator('#run-diagram svg').waitFor();await page.waitForFunction(()=>!document.querySelector('#run-message').textContent.includes('Loading recorded'));
    await page.locator('#run-diagram [aria-label=each]').focus();await page.keyboard.press('Enter');
    await page.locator('#run-inspector .progress-count').waitFor();
