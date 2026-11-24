@@ -200,7 +200,7 @@ evolution = prepare (pure ()) (edit (Rationale "Declare interactive recipes" [])
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','same','--reply','9']);
  runtime(['flow','fulfil',started.id,'--wait',wait.id,'--key','conflict','--reply','10']);
  const visits=runtime(['flow','worker','--once']).result.visits;
- assert.deepEqual(visits,[{id:started.id,outcome:'advanced'}]);
+ assert.deepEqual(visits,[{id:started.id,outcome:'advanced',retryAt:null}]);
  await until(()=>waiter.child.exitCode!==null);
  assert.equal(waiter.child.exitCode,0,waiter.errors());
  assert.equal(JSON.parse(waiter.output()).result.status,'completed');
