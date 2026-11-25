@@ -28,7 +28,10 @@ main = do
   let rows = Text.intercalate "," (replicate 101 "{\"x\":true}")
   ok (decode ("{\"totalSize\":101,\"done\":true,\"records\":[" <> rows <> "]}")) $ \value -> case value of Right (Records values 101 True) -> length values == 100; _ -> False
   ok (decode ("{\"totalSize\":1,\"done\":true,\"records\":[{\"x\":\"" <> Text.replicate 32769 "a" <> "\"}]}")) $ \value -> value == Right (Records [] 1 True)
-  ok (decode "{\"totalSize\":2,\"done\":true,\"records\":[]}") $ \value -> case value of Left _ -> True; _ -> False
+  ok (decode "{\"totalSize\":42,\"done\":true,\"records\":[]}") $ \value -> value == Right (Records [] 42 False)
+  ok (decode "{\"totalSize\":0,\"done\":true,\"records\":[]}") $ \value -> value == Right (Records [] 0 False)
+  ok (decode "{\"totalSize\":2,\"done\":true,\"records\":[{\"Name\":null}]}") $ \value -> case value of Left _ -> True; _ -> False
+  ok (decode "{\"totalSize\":0,\"done\":true,\"records\":[{\"Name\":null}]}") $ \value -> case value of Left _ -> True; _ -> False
   forM_ [400,401] $ \status -> do
     requests <- newIORef (0 :: Int)
     let handle :: (Http :+: (Secrets :+: Waiting)) a -> IO a

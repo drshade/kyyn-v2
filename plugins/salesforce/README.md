@@ -152,6 +152,9 @@ flow, where `Salesforce` imports `Kyyn.Plugins.P_salesforce.Live`. Wrap that ste
 an Agentic tool when a model should choose the SOQL. A resumed call restores its
 result; a new occurrence queries again.
 
+For `SELECT COUNT()`, the count is in `totalSize`, with empty rows and
+`truncated = False`. `COUNT(Id)` and other aggregate expressions return a row.
+
 The result is `Records` with rows, `totalSize` and `truncated`, or `Rejected` with
 an error code and message for malformed SOQL, unknown fields or unknown objects.
 Those rejections let a model correct the query. Authentication and operational
