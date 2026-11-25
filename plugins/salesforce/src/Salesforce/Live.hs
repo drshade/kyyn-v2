@@ -44,7 +44,8 @@ decodeResponse response@(HttpResponse status _ body)
       total <- Json.member "totalSize" value >>= Json.integer
       done <- Json.member "done" value >>= Json.boolean
       records <- Json.member "records" value >>= Json.array
-      if length records > total || (done && length records /= total)
+      -- COUNT() carries its answer in totalSize, with no record rows.
+      if length records > total || (done && not (null records) && length records /= total)
         then Left "Salesforce query record count differs from totalSize" else pure ()
       let selected = bounded 100 32768 records
       rows <- traverse row selected
