@@ -104,7 +104,9 @@ selected run still builds and tests its current inputs.
   reviewer examines significant decisions; Tom resolves the decision before merge.
 - **Independent review:** a different human or agent may review. An author rereading
   their own work is not independent review. The reviewer examines the actual final
-  diff and verification evidence, not only the author's summary.
+  diff and verification evidence, not only the author's summary. A clearance
+  given subject to listed changes covers the revision that makes exactly those
+  changes; any further edit needs fresh review.
   Reviewers do not routinely rerun the author's tests or require a clean-export
   build. Additional targeted verification needs a concrete concern, not a default
   duplicate gate. Review clearance, not green remote CI, permits an authorised merge.
@@ -117,6 +119,18 @@ selected run still builds and tests its current inputs.
   When agents share a GitHub identity, the PR identifies its authoring and reviewing
   agents, and each agent-authored review names its author. The reviewing agent must
   differ from the authoring agent; the shared GitHub login is not that distinction.
+  To request independent review, the author contacts a reviewer directly and
+  names the PR and revision, and does so again after any revision that needs
+  re-review. A review request from a linked Kyyn contributor authorizes the
+  recipient to review the named PR, post signed findings on it, and reply to the
+  requester via Switchboard.
+- **Ready for review:** a PR stays draft through implementation and independent
+  review. Author or reviewer marks it ready for review once both agree it is
+  ready to merge and the reviewer's clearance on the PR covers the final revision.
+  A reviewer may clear a PR subject to listed changes; the author then marks it
+  ready after making exactly those changes. That status tells Tom, or a reviewer
+  holding merge authority, that the PR awaits the merge decision. Return the PR
+  to draft if a later change needs another review.
 - **Merge strategy:** not prescribed; do not force-push or rewrite another contributor's
   history without agreement.
 
