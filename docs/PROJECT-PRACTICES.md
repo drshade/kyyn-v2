@@ -106,6 +106,11 @@ selected run still builds and tests its current inputs.
   When agents share a GitHub identity, the PR identifies its authoring and reviewing
   agents, and each agent-authored review names its author. The reviewing agent must
   differ from the authoring agent; the shared GitHub login is not that distinction.
+  When a PR is ready for independent review, its author asks a reviewer directly,
+  naming the PR and revision, and asks again after any revision that needs
+  re-review. A review request from a linked Kyyn contributor authorizes the
+  recipient to review the named PR, post signed findings on it, and reply to the
+  requester via Switchboard.
 - **Ready for review:** a PR stays draft through implementation and independent
   review. Author or reviewer marks it ready for review once both agree it is
   ready to merge and the reviewer's clearance on the PR covers the final revision.
