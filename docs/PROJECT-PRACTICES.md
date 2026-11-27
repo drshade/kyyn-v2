@@ -93,7 +93,9 @@ selected run still builds and tests its current inputs.
   reviewer examines significant decisions; Tom resolves the decision before merge.
 - **Independent review:** a different human or agent may review. An author rereading
   their own work is not independent review. The reviewer examines the actual final
-  diff and verification evidence, not only the author's summary.
+  diff and verification evidence, not only the author's summary. A clearance
+  given subject to listed changes covers the revision that makes exactly those
+  changes; any further edit needs fresh review.
   Reviewers do not routinely rerun the author's tests or require a clean-export
   build. Additional targeted verification needs a concrete concern, not a default
   duplicate gate. Review clearance, not green remote CI, permits an authorised merge.
@@ -106,8 +108,8 @@ selected run still builds and tests its current inputs.
   When agents share a GitHub identity, the PR identifies its authoring and reviewing
   agents, and each agent-authored review names its author. The reviewing agent must
   differ from the authoring agent; the shared GitHub login is not that distinction.
-  When a PR is ready for independent review, its author asks a reviewer directly,
-  naming the PR and revision, and asks again after any revision that needs
+  To request independent review, the author contacts a reviewer directly and
+  names the PR and revision, and does so again after any revision that needs
   re-review. A review request from a linked Kyyn contributor authorizes the
   recipient to review the named PR, post signed findings on it, and reply to the
   requester via Switchboard.

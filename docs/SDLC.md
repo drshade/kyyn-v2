@@ -202,7 +202,9 @@ targeted checks when a concrete concern warrants them, not as a default ceremony
 
 Findings and discussion live on the PR. The author updates the implementation,
 PR description and any governing documentation as required. The reviewer
-re-examines the resulting final revision.
+re-examines the resulting final revision, unless the recorded clearance was
+given subject to listed changes and the author made exactly those changes.
+Any further edit needs fresh review.
 
 Green automation is evidence, not authority. Independent review remains the
 merge control.
