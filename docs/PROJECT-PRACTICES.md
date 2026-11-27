@@ -7,8 +7,19 @@ does not become another specification of the product's runtime workflows.
 ## Repository and adoption
 
 - **Repository:** `drshade/kyyn-v2` on GitHub; primary branch `main`.
-- **Workspace:** a dedicated branch; use an isolated checkout/worktree when concurrent
-  work could interfere. Worktrees and particular branch-name prefixes are not required.
+- **Workspace:** use the primary checkout for sequential changes, with a dedicated
+  branch per PR. Before switching branches, check its branch and working tree.
+  Treat local changes, another task's branch, or known active use as signs the
+  checkout is occupied. Wait for it to become available unless the tasks need
+  to run concurrently and the second needs a temporary worktree. When pausing
+  or finishing your task, push the branch and return the clean checkout to
+  `main`. Review from the PR diff without checking out the branch unless a
+  targeted check needs the files.
+- **Temporary worktrees:** when the PR merges or closes, or a one-off check
+  finishes, the creator preserves any local files and commits still needed,
+  then removes the worktree. If the creator is unavailable, another contributor
+  may remove an unused, clean worktree after confirming its commit is in `main`
+  and any local files worth keeping, including ignored files, are preserved.
 - **Adoption:** prospective from the merge of the SDLC adoption PR. The prior
   architecture import is commit `deca3d0`; do not manufacture retrospective Issues,
   design approvals or implementation completion for it.
