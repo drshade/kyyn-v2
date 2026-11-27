@@ -106,6 +106,11 @@ selected run still builds and tests its current inputs.
   When agents share a GitHub identity, the PR identifies its authoring and reviewing
   agents, and each agent-authored review names its author. The reviewing agent must
   differ from the authoring agent; the shared GitHub login is not that distinction.
+- **Ready for review:** a PR stays draft through implementation and independent
+  review. Once the reviewer has recorded clearance of the final revision on the
+  PR, the reviewer marks it ready for review. That status tells Tom, or a reviewer
+  holding merge authority, that the PR awaits the merge decision. Return the PR
+  to draft if a later change needs another review.
 - **Merge strategy:** not prescribed; do not force-push or rewrite another contributor's
   history without agreement.
 
