@@ -15,7 +15,8 @@ does not become another specification of the product's runtime workflows.
   or finishing your task, push the branch and return the clean checkout to
   `main`. Review from the PR diff without checking out the branch unless a
   targeted check needs the files.
-- **Temporary worktrees:** when the PR merges or closes, or a one-off check
+- **Temporary worktrees:** create each temporary worktree at
+  `~/scratch/kyyn-v2/worktrees/<short-task-name>/`. When the PR merges or closes, or a one-off check
   finishes, the creator preserves any local files and commits still needed,
   then removes the worktree. If the creator is unavailable, another contributor
   may remove an unused, clean worktree after confirming its commit is in `main`
