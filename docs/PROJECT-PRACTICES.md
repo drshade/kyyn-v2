@@ -107,8 +107,10 @@ selected run still builds and tests its current inputs.
   agents, and each agent-authored review names its author. The reviewing agent must
   differ from the authoring agent; the shared GitHub login is not that distinction.
 - **Ready for review:** a PR stays draft through implementation and independent
-  review. Once the reviewer has recorded clearance of the final revision on the
-  PR, the reviewer marks it ready for review. That status tells Tom, or a reviewer
+  review. Author or reviewer marks it ready for review once both agree it is
+  ready to merge and the reviewer's clearance on the PR covers the final revision.
+  A reviewer may clear a PR subject to listed changes; the author then marks it
+  ready after making exactly those changes. That status tells Tom, or a reviewer
   holding merge authority, that the PR awaits the merge decision. Return the PR
   to draft if a later change needs another review.
 - **Merge strategy:** not prescribed; do not force-push or rewrite another contributor's
