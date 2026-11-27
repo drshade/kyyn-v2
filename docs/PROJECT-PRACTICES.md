@@ -7,8 +7,10 @@ does not become another specification of the product's runtime workflows.
 ## Repository and adoption
 
 - **Repository:** `drshade/kyyn-v2` on GitHub; primary branch `main`.
-- **Workspace:** a dedicated branch; use an isolated checkout/worktree when concurrent
-  work could interfere. Worktrees and particular branch-name prefixes are not required.
+- **Workspace:** use the primary checkout for sequential changes, switching to a
+  dedicated branch for each PR. Create a temporary worktree only when a second
+  task needs a checkout while the first is still in use. Review the PR diff in
+  place unless a targeted check needs its own checkout.
 - **Adoption:** prospective from the merge of the SDLC adoption PR. The prior
   architecture import is commit `deca3d0`; do not manufacture retrospective Issues,
   design approvals or implementation completion for it.
@@ -88,6 +90,10 @@ optional workflow as a required check. CI uses the locked Nix contributor enviro
 selected run still builds and tests its current inputs.
 
 ## Review and merge
+
+When work in a temporary worktree finishes, its creator checks for local changes
+and commits that still need preserving, then removes the worktree once its
+contents are accounted for.
 
 - **Architectural/process decision authority:** Tom (`drshade`). An independent
   reviewer examines significant decisions; Tom resolves the decision before merge.
